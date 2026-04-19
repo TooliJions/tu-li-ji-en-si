@@ -4,11 +4,17 @@ import { Zap, BookOpen, FileEdit, Brain, BarChart3 } from 'lucide-react';
 import {
   fetchBook,
   fetchChapters,
+  fetchEntityContext,
+  fetchMemoryPreview,
   startFastDraft,
   startWriteNext,
   startWriteDraft,
   getPipelineStatus,
 } from '../lib/api';
+import ContextPopup from '../components/context-popup';
+import EntityHighlight from '../components/entity-highlight';
+import MemoryWordcloud from '../components/memory-wordcloud';
+import { extractFlowEntities } from '../lib/entity-context';
 
 interface Book {
   id: string;
@@ -49,6 +55,30 @@ interface FastDraftResult {
   draftId: string;
 }
 
+interface EntityContext {
+  name: string;
+  type: string;
+  currentLocation: string;
+  emotion: string;
+  inventory: string[];
+  relationships: Array<{ with: string; type: string; affinity?: string }>;
+  activeHooks: Array<{ id: string; description: string; status: string }>;
+}
+
+interface MemoryPreview {
+  summary: {
+    facts: number;
+    hooks: number;
+    characters: number;
+  };
+  memories: Array<{
+    text: string;
+    confidence: number;
+    sourceType?: string;
+    entityType?: string | null;
+  }>;
+}
+
 const STAGE_LABELS: Record<string, string> = {
   planning: '规划中',
   composing: '构图中',
@@ -82,17 +112,68 @@ export default function Writing() {
     number: number;
   } | null>(null);
   const [draftModeLoading, setDraftModeLoading] = useState(false);
+  const [memoryPreview, setMemoryPreview] = useState<MemoryPreview | null>(null);
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupContext, setPopupContext] = useState<EntityContext | null>(null);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+  const [contextCache, setContextCache] = useState<Record<string, EntityContext>>({});
 
   useEffect(() => {
     if (!bookId) return;
-    Promise.all([fetchBook(bookId), fetchChapters(bookId)])
-      .then(([bookData, chaptersData]) => {
+    Promise.all([fetchBook(bookId), fetchChapters(bookId), fetchMemoryPreview(bookId)])
+      .then(([bookData, chaptersData, memoryData]) => {
         setBook(bookData);
         setChapters(chaptersData);
+        setMemoryPreview(memoryData);
       })
       .catch(() => setBook(null))
       .finally(() => setLoading(false));
   }, [bookId]);
+
+  const knownEntityNames = memoryPreview?.memories
+    .filter((memory) => memory.entityType)
+    .map((memory) => memory.text) ?? [];
+  const fastDraftEntities = draftResult
+    ? extractFlowEntities(draftResult.content, knownEntityNames)
+    : [];
+  const draftModeEntities = draftModeResult
+    ? extractFlowEntities(draftModeResult.content, knownEntityNames)
+    : [];
+
+  async function handleEntityEnter(
+    entity: string,
+    event: React.MouseEvent<HTMLElement>,
+    chapterNumber?: number
+  ) {
+    if (!bookId) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+    setPopupVisible(true);
+
+    if (contextCache[entity]) {
+      setPopupContext(contextCache[entity]);
+      return;
+    }
+
+    try {
+      const context =
+        chapterNumber === undefined
+          ? await fetchEntityContext(bookId, entity)
+          : await fetchEntityContext(bookId, entity, chapterNumber);
+      setContextCache((prev) => ({ ...prev, [entity]: context }));
+      setPopupContext(context);
+    } catch {
+      setPopupContext(null);
+      setPopupVisible(false);
+    }
+  }
+
+  function handleEntityLeave() {
+    setPopupVisible(false);
+  }
 
   async function handleFastDraft() {
     if (!bookId) return;
@@ -206,17 +287,28 @@ export default function Writing() {
           <Brain size={18} />
           <h2 className="text-lg font-semibold">记忆提取</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {['林晨', '苏小雨', '教室', '竞赛试卷', '旧档案室'].map((keyword) => (
-            <span
-              key={keyword}
-              className="px-3 py-1 rounded-full text-xs bg-secondary text-secondary-foreground hover:bg-accent cursor-pointer transition-colors"
-            >
-              {keyword}
-            </span>
-          ))}
+        <p className="text-sm text-muted-foreground mb-3">
+          {memoryPreview
+            ? `已抓取 ${memoryPreview.summary.facts} 条事实碎片 + ${memoryPreview.summary.hooks} 条伏笔 + ${memoryPreview.summary.characters} 个角色`
+            : '正在构建记忆透视'}
+        </p>
+        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full bg-sky-50 px-3 py-1 text-sky-700">角色 {memoryPreview?.summary.characters ?? 0}</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">事实 {memoryPreview?.summary.facts ?? 0}</span>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">伏笔 {memoryPreview?.summary.hooks ?? 0}</span>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">点击关键词查看上下文关联</p>
+        <MemoryWordcloud
+          memories={memoryPreview?.memories ?? []}
+          onMemoryEnter={(memory, event) => {
+            if (!memory.entityType) {
+              return;
+            }
+            handleEntityEnter(memory.text, event);
+          }}
+          onMemoryLeave={handleEntityLeave}
+        />
+        <p className="text-xs text-muted-foreground mt-2">来源于 manifest 角色 / facts / hooks 真相文件</p>
+        <p className="text-xs text-muted-foreground mt-2">悬停实体可查看上下文；低置信度记忆会显示为红色污染标记</p>
       </div>
 
       {/* Fast Draft */}
@@ -266,7 +358,17 @@ export default function Writing() {
             <div className="prose prose-sm max-w-none">
               {draftResult.content.split('\n').map((line, i) => (
                 <p key={i} className="text-sm text-foreground">
-                  {line || '\u00A0'}
+                  {line ? (
+                    <EntityHighlight
+                      text={line}
+                      entities={fastDraftEntities}
+                      highlightClass="border-b border-dashed border-amber-400/60 bg-transparent px-0 py-0"
+                      onEntityEnter={(entity, event) => handleEntityEnter(entity, event)}
+                      onEntityLeave={handleEntityLeave}
+                    />
+                  ) : (
+                    '\u00A0'
+                  )}
                 </p>
               ))}
             </div>
@@ -358,13 +460,43 @@ export default function Writing() {
             <div className="prose prose-sm max-w-none">
               {draftModeResult.content.split('\n').map((line, i) => (
                 <p key={i} className="text-sm text-foreground">
-                  {line || '\u00A0'}
+                  {line ? (
+                    <EntityHighlight
+                      text={line}
+                      entities={draftModeEntities}
+                      highlightClass="border-b border-dashed border-amber-400/60 bg-transparent px-0 py-0"
+                      onEntityEnter={(entity, event) =>
+                        handleEntityEnter(entity, event, draftModeResult.number)
+                      }
+                      onEntityLeave={handleEntityLeave}
+                    />
+                  ) : (
+                    '\u00A0'
+                  )}
                 </p>
               ))}
             </div>
           </div>
         )}
       </div>
+
+      <ContextPopup
+        title={popupContext?.name ?? ''}
+        content={
+          popupContext
+            ? `当前位置：${popupContext.currentLocation}；情绪：${popupContext.emotion}。${
+                popupContext.inventory.length > 0 ? `持有：${popupContext.inventory.join('、')}。` : ''
+              }`
+            : ''
+        }
+        visible={popupVisible && popupContext !== null}
+        tags={
+          popupContext
+            ? [popupContext.type, ...popupContext.activeHooks.map((hook) => hook.description)]
+            : []
+        }
+        position={popupPosition}
+      />
     </div>
   );
 }

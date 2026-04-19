@@ -6,6 +6,7 @@ import { OpenAICompatibleProvider, LLMProvider, type LLMConfig } from '../llm/pr
 import type { AgentResult } from '../agents/base';
 import type { ChapterIndexEntry } from '../models/chapter';
 import type { Delta, Manifest } from '../models/state';
+import { TelemetryLogger, type TelemetryChannel } from '../telemetry/logger';
 
 // ─── Configuration ──────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ export interface PipelineConfig {
   provider?: LLMProvider;
   maxRevisionRetries?: number;
   fallbackAction?: 'accept_with_warnings' | 'pause';
+  telemetryLogger?: TelemetryLogger;
 }
 
 // ─── Input / Output Types ───────────────────────────────────────
@@ -99,6 +101,7 @@ export class PipelineRunner {
   private provider: LLMProvider;
   private maxRevisionRetries: number;
   private fallbackAction: 'accept_with_warnings' | 'pause';
+  private telemetryLogger: TelemetryLogger;
 
   constructor(config: PipelineConfig) {
     this.stateManager = new StateManager(config.rootDir);
@@ -109,6 +112,7 @@ export class PipelineRunner {
     this.provider = config.provider ?? new OpenAICompatibleProvider(config.llmConfig!);
     this.maxRevisionRetries = config.maxRevisionRetries ?? 2;
     this.fallbackAction = config.fallbackAction ?? 'accept_with_warnings';
+    this.telemetryLogger = config.telemetryLogger ?? new TelemetryLogger(config.rootDir);
   }
 
   // ── initBook ──────────────────────────────────────────────────
@@ -272,12 +276,17 @@ export class PipelineRunner {
     try {
       // 1. 生成上下文卡片
       const contextCard = await this.#generateContextCard(input.bookId, input.chapterNumber);
+      // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
+      this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
 
       // 2. 意图定向
       const intent = await this.#directIntent(input, meta.genre, contextCard);
+      // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
+      this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
 
       // 3. 场景生成（草稿）
       const draft = await this.#generateDraft(input, meta.genre, contextCard, intent);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', draft.usage);
       if (!draft.success) {
         return {
           success: false,
@@ -289,9 +298,12 @@ export class PipelineRunner {
 
       // 4. 场景润色
       const polished = await this.#polishScene(draft.content!, meta.genre, input.chapterNumber);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'composer', polished.usage);
 
       // 5. 质量审计 + 修订循环
       const audited = await this.#auditAndRevise(polished.content!, input, meta.genre);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'auditor', audited.auditorUsage);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'reviser', audited.reviserUsage);
 
       // 6. 记忆提取
       const manifestAfterMemory = await this.#extractMemory(
@@ -360,6 +372,7 @@ export class PipelineRunner {
       // 生成草稿
       const prompt = this.#buildDraftPrompt(input);
       const result = await this.provider.generate({ prompt });
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', result.usage);
 
       // 持久化
       this.#persistChapter(result.text, input.bookId, input.chapterNumber, input.title, 'draft');
@@ -398,6 +411,7 @@ export class PipelineRunner {
     try {
       const prompt = this.#buildDraftPrompt(input);
       const result = await this.provider.generate({ prompt });
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', result.usage);
 
       return {
         success: true,
@@ -478,6 +492,8 @@ export class PipelineRunner {
     try {
       // 重新生成上下文卡片
       const contextCard = await this.#generateContextCard(input.bookId, input.chapterNumber);
+      // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
+      this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
 
       // 意图定向（如果有用户意图）
       if (input.userIntent) {
@@ -492,10 +508,12 @@ export class PipelineRunner {
           meta.genre,
           contextCard
         );
+        this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
       }
 
       // 使用 ScenePolisher 重新润色草稿
       const polished = await this.#polishScene(draftContent, meta.genre, input.chapterNumber);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'composer', polished.usage);
 
       // 持久化为正式章节
       const title = meta.title || `第 ${input.chapterNumber} 章`;
@@ -539,6 +557,18 @@ export class PipelineRunner {
    */
   async writeNextChapter(input: WriteNextChapterInput): Promise<ChapterResult> {
     return this.composeChapter(input);
+  }
+
+  // ── Internal: Telemetry ───────────────────────────────────────
+
+  #trackUsage(
+    bookId: string,
+    chapterNumber: number,
+    channel: TelemetryChannel,
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined,
+  ): void {
+    if (!usage) return;
+    this.telemetryLogger.record(bookId, chapterNumber, channel, usage);
   }
 
   // ── Internal: Prompts ─────────────────────────────────────────
@@ -723,18 +753,37 @@ ${content}
     genre: string
   ): Promise<{
     content: string;
+    auditorUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    reviserUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     usage?: AgentResult['usage'];
     warning?: string;
     warningCode?: 'accept_with_warnings';
   }> {
     let currentContent = chapterContent;
-    let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    const auditorUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    const reviserUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     for (let attempt = 0; attempt <= this.maxRevisionRetries; attempt++) {
       const auditResult = await this.#auditChapter(currentContent, genre, input.chapterNumber);
+      // auditResult.usage 目前不存在（generateJSON 不返回 usage），guard 会跳过累加
+      const auditUsage = (auditResult as unknown as { usage?: AgentResult['usage'] }).usage;
+      if (auditUsage) {
+        auditorUsage.promptTokens += auditUsage.promptTokens;
+        auditorUsage.completionTokens += auditUsage.completionTokens;
+        auditorUsage.totalTokens += auditUsage.totalTokens;
+      }
 
       if (auditResult.status === 'pass' || auditResult.issues.length === 0) {
-        return { content: currentContent, usage };
+        return {
+          content: currentContent,
+          auditorUsage,
+          reviserUsage,
+          usage: {
+            promptTokens: auditorUsage.promptTokens + reviserUsage.promptTokens,
+            completionTokens: auditorUsage.completionTokens + reviserUsage.completionTokens,
+            totalTokens: auditorUsage.totalTokens + reviserUsage.totalTokens,
+          },
+        };
       }
 
       if (attempt < this.maxRevisionRetries) {
@@ -751,11 +800,9 @@ ${currentContent}
 
         const reviseResult = await this.provider.generate({ prompt: revisePrompt });
         currentContent = reviseResult.text;
-        usage = {
-          promptTokens: usage.promptTokens + reviseResult.usage.promptTokens,
-          completionTokens: usage.completionTokens + reviseResult.usage.completionTokens,
-          totalTokens: usage.totalTokens + reviseResult.usage.totalTokens,
-        };
+        reviserUsage.promptTokens += reviseResult.usage.promptTokens;
+        reviserUsage.completionTokens += reviseResult.usage.completionTokens;
+        reviserUsage.totalTokens += reviseResult.usage.totalTokens;
       }
     }
 
@@ -763,7 +810,13 @@ ${currentContent}
     if (this.fallbackAction === 'accept_with_warnings') {
       return {
         content: currentContent,
-        usage,
+        auditorUsage,
+        reviserUsage,
+        usage: {
+          promptTokens: auditorUsage.promptTokens + reviserUsage.promptTokens,
+          completionTokens: auditorUsage.completionTokens + reviserUsage.completionTokens,
+          totalTokens: auditorUsage.totalTokens + reviserUsage.totalTokens,
+        },
         warning: '修订次数用尽，已按 accept_with_warnings 降级接受结果',
         warningCode: 'accept_with_warnings',
       };

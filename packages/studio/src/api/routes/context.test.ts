@@ -195,4 +195,25 @@ describe('Context Route', () => {
       }
     });
   });
+
+  describe('GET /api/books/:bookId/context/memory-preview', () => {
+    it('returns runtime memory preview derived from manifest facts hooks and characters', async () => {
+      const bookId = await createBook(app);
+      seedRuntimeContext(bookId);
+
+      const res = await app.request(`/api/books/${bookId}/context/memory-preview`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          summary: { facts: number; hooks: number; characters: number };
+          memories: Array<{ text: string; confidence: number; sourceType: string; entityType: string | null }>;
+        };
+      };
+
+      expect(data.data.summary).toEqual({ facts: 2, hooks: 1, characters: 2 });
+      expect(data.data.memories.some((item) => item.text === '林晨' && item.entityType === 'character')).toBe(true);
+      expect(data.data.memories.some((item) => item.text === '竞赛试卷' && item.sourceType === 'fact')).toBe(true);
+      expect(data.data.memories.some((item) => item.text === '档案室谜团' && item.sourceType === 'hook')).toBe(true);
+    });
+  });
 });

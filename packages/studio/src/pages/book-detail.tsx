@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { FileText, Pencil, GitMerge, Scissors, RotateCcw, Eye, MoreHorizontal } from 'lucide-react';
+import {
+  FileText,
+  Pencil,
+  GitMerge,
+  Scissors,
+  RotateCcw,
+  Eye,
+  MoreHorizontal,
+  Sparkles,
+  Palette,
+  Heart,
+} from 'lucide-react';
 import {
   fetchBook,
   fetchChapterSnapshots,
@@ -211,6 +222,27 @@ export default function BookDetail() {
             className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
           >
             伏笔管理
+          </Link>
+          <Link
+            to={`/style-manager?bookId=${bookId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Palette size={14} />
+            文风配置
+          </Link>
+          <Link
+            to={`/fanfic-init?bookId=${bookId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Sparkles size={14} />
+            同人模式
+          </Link>
+          <Link
+            to={`/book/${bookId}/emotional-arcs`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Heart size={14} />
+            情感弧线
           </Link>
         </div>
       </div>

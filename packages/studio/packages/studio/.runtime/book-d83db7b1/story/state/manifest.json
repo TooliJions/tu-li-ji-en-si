@@ -1,0 +1,42 @@
+{
+  "bookId": "book-d83db7b1",
+  "versionToken": 9,
+  "lastChapterWritten": 3,
+  "hooks": [
+    {
+      "id": "hook-a3b6f9e3",
+      "description": "神秘玉佩的来历",
+      "type": "narrative",
+      "status": "open",
+      "priority": "major",
+      "plantedChapter": 1,
+      "relatedCharacters": [],
+      "relatedChapters": [
+        1
+      ],
+      "createdAt": "2026-04-19T07:55:51.665Z",
+      "updatedAt": "2026-04-19T07:55:51.665Z"
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact-2-1",
+      "content": "第 2 章推进了核心剧情并确认新的线索。",
+      "chapterNumber": 2,
+      "confidence": "high",
+      "category": "plot",
+      "createdAt": "2026-04-19T07:55:51.641Z"
+    },
+    {
+      "id": "fact-3-1",
+      "content": "第 3 章推进了核心剧情并确认新的线索。",
+      "chapterNumber": 3,
+      "confidence": "high",
+      "category": "plot",
+      "createdAt": "2026-04-19T07:55:51.705Z"
+    }
+  ],
+  "characters": [],
+  "worldRules": [],
+  "updatedAt": "2026-04-19T07:55:51.828Z"
+}

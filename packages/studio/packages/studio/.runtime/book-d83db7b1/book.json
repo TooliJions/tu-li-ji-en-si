@@ -1,0 +1,16 @@
+{
+  "id": "book-d83db7b1",
+  "title": "E2E 测试小说",
+  "genre": "xianxia",
+  "targetWords": 30000,
+  "targetChapterCount": 10,
+  "currentWords": 0,
+  "chapterCount": 0,
+  "status": "active",
+  "language": "zh-CN",
+  "brief": "这是一个端到端测试用的修仙故事",
+  "createdAt": "2026-04-19T07:55:51.532Z",
+  "updatedAt": "2026-04-19T07:55:51.532Z",
+  "fanficMode": null,
+  "promptVersion": "v2"
+}

@@ -5,17 +5,17 @@ import ThunderAnim from './thunder-anim';
 describe('ThunderAnim', () => {
   it('renders thunder alerts', () => {
     const alerts = [
-      { hookId: 'h1', description: '伏笔A', 分流到: 3 },
-      { hookId: 'h2', description: '伏笔B', 分流到: 5 },
+      { chapter: 3, count: 2, message: '第 3 章预计同时唤醒 2 个伏笔' },
+      { chapter: 5, count: 4, message: '第 5 章预计同时唤醒 4 个伏笔' },
     ];
     render(<ThunderAnim alerts={alerts} active />);
     expect(screen.getByText('惊群检测')).toBeTruthy();
   });
 
   it('shows hook descriptions', () => {
-    const alerts = [{ hookId: 'h1', description: '伏笔A', 分流到: 3 }];
+    const alerts = [{ chapter: 3, count: 2, message: '第 3 章预计同时唤醒 2 个伏笔' }];
     render(<ThunderAnim alerts={alerts} active />);
-    expect(screen.getByText('伏笔A')).toBeTruthy();
+    expect(screen.getByText('第 3 章预计同时唤醒 2 个伏笔')).toBeTruthy();
   });
 
   it('shows inactive state when no active thundering', () => {
@@ -26,11 +26,11 @@ describe('ThunderAnim', () => {
 
   it('renders multiple alerts', () => {
     const alerts = [
-      { hookId: 'h1', description: '伏笔A', 分流到: 3 },
-      { hookId: 'h2', description: '伏笔B', 分流到: 5 },
-      { hookId: 'h3', description: '伏笔C', 分流到: 7 },
+      { chapter: 3, count: 2, message: '第 3 章预计同时唤醒 2 个伏笔' },
+      { chapter: 5, count: 4, message: '第 5 章预计同时唤醒 4 个伏笔' },
+      { chapter: 7, count: 5, message: '第 7 章预计同时唤醒 5 个伏笔' },
     ];
     render(<ThunderAnim alerts={alerts} active />);
-    expect(screen.getAllByText(/伏笔/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText(/预计同时唤醒/).length).toBeGreaterThanOrEqual(3);
   });
 });

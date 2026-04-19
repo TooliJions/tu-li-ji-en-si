@@ -16,30 +16,37 @@ describe('BookCreate Page', () => {
     vi.clearAllMocks();
   });
 
-  it('renders step 1 with all form fields', () => {
+  it('renders step 1 with document-aligned basic fields', () => {
     renderWithRouter();
     expect(screen.getByText('新建书籍')).toBeTruthy();
     expect(screen.getByPlaceholderText('输入书名…')).toBeTruthy();
-    expect(screen.getByRole('combobox')).toBeTruthy();
-    expect(screen.getByRole('spinbutton')).toBeTruthy();
+    expect(screen.getByLabelText('题材')).toBeTruthy();
+    expect(screen.getByLabelText('中文')).toBeTruthy();
+    expect(screen.getByLabelText('英文')).toBeTruthy();
+    expect(screen.getByLabelText('平台')).toBeTruthy();
     expect(screen.getByText('下一步')).toBeTruthy();
   });
 
-  it('advances to step 2 when clicking next', () => {
+  it('advances to step 2 and shows creation settings fields', () => {
     renderWithRouter();
 
     fireEvent.change(screen.getByPlaceholderText('输入书名…'), {
       target: { value: '测试小说' },
     });
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('题材'), {
       target: { value: '玄幻' },
     });
     fireEvent.click(screen.getByText('下一步'));
 
-    expect(screen.getByText('确认信息')).toBeTruthy();
-    expect(screen.getByText('测试小说')).toBeTruthy();
-    expect(screen.getByText('玄幻')).toBeTruthy();
-    expect(screen.getByText('30,000 字')).toBeTruthy();
+    expect(screen.getByText('创作设置')).toBeTruthy();
+    expect(screen.getByLabelText('目标章节数')).toBeTruthy();
+    expect(screen.getByLabelText('目标字数/章')).toBeTruthy();
+    expect(screen.getByLabelText('提示词版本')).toBeTruthy();
+    expect(screen.getByLabelText('Writer Agent')).toBeTruthy();
+    expect(screen.getByLabelText('Auditor Agent')).toBeTruthy();
+    expect(screen.getByLabelText('Planner Agent')).toBeTruthy();
+    expect(screen.getByLabelText('创作简报')).toBeTruthy();
+    expect(screen.getByLabelText('上传 markdown 文件')).toBeTruthy();
   });
 
   it('returns to step 1 when clicking back', () => {
@@ -48,7 +55,7 @@ describe('BookCreate Page', () => {
     fireEvent.change(screen.getByPlaceholderText('输入书名…'), {
       target: { value: '测试小说' },
     });
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('题材'), {
       target: { value: '科幻' },
     });
     fireEvent.click(screen.getByText('下一步'));
@@ -60,7 +67,7 @@ describe('BookCreate Page', () => {
     expect(stepIndicator.className).toContain('font-medium');
   });
 
-  it('submits form and calls API on confirm', async () => {
+  it('imports markdown brief and submits document-aligned payload', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { id: 'book-test-123' } }),
@@ -71,11 +78,49 @@ describe('BookCreate Page', () => {
     fireEvent.change(screen.getByPlaceholderText('输入书名…'), {
       target: { value: '成功小说' },
     });
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('题材'), {
       target: { value: '都市' },
     });
+    fireEvent.click(screen.getByLabelText('英文'));
+    fireEvent.change(screen.getByLabelText('平台'), {
+      target: { value: 'webnovel' },
+    });
     fireEvent.click(screen.getByText('下一步'));
-    fireEvent.click(screen.getByText('确认创建'));
+
+    fireEvent.change(screen.getByLabelText('目标章节数'), {
+      target: { value: '120' },
+    });
+    fireEvent.change(screen.getByLabelText('目标字数/章'), {
+      target: { value: '3200' },
+    });
+    fireEvent.change(screen.getByLabelText('提示词版本'), {
+      target: { value: 'latest' },
+    });
+    fireEvent.click(screen.getByLabelText('不使用全局默认'));
+    fireEvent.change(screen.getByLabelText('Writer Agent'), {
+      target: { value: 'qwen3.6-plus' },
+    });
+    fireEvent.change(screen.getByLabelText('Auditor Agent'), {
+      target: { value: 'gpt-4o-mini' },
+    });
+    fireEvent.change(screen.getByLabelText('Planner Agent'), {
+      target: { value: 'claude-3.7-sonnet' },
+    });
+
+    const fileInput = screen.getByLabelText('上传 markdown 文件');
+    const file = new File(['# 创作简报\n\n这是导入的设定。'], 'brief.md', {
+      type: 'text/markdown',
+    });
+    Object.defineProperty(file, 'text', {
+      value: () => Promise.resolve('# 创作简报\n\n这是导入的设定。'),
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('已导入：brief.md')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('创建书籍'));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/books', {
@@ -84,8 +129,19 @@ describe('BookCreate Page', () => {
         body: JSON.stringify({
           title: '成功小说',
           genre: '都市',
-          targetWords: 30000,
-          brief: '',
+          language: 'en-US',
+          platform: 'webnovel',
+          targetChapterCount: 120,
+          targetWordsPerChapter: 3200,
+          targetWords: 384000,
+          promptVersion: 'latest',
+          modelConfig: {
+            useGlobalDefaults: false,
+            writer: 'qwen3.6-plus',
+            auditor: 'gpt-4o-mini',
+            planner: 'claude-3.7-sonnet',
+          },
+          brief: '# 创作简报\n\n这是导入的设定。',
         }),
       });
     });
@@ -102,22 +158,30 @@ describe('BookCreate Page', () => {
     fireEvent.change(screen.getByPlaceholderText('输入书名…'), {
       target: { value: '重复书名' },
     });
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('题材'), {
       target: { value: '历史' },
     });
     fireEvent.click(screen.getByText('下一步'));
-    fireEvent.click(screen.getByText('确认创建'));
+    fireEvent.click(screen.getByText('创建书籍'));
 
     await waitFor(() => {
       expect(screen.getByText('书名已存在')).toBeTruthy();
     });
   });
 
-  it('shows default chapter count estimate', () => {
+  it('shows computed total target words in creation settings', () => {
     renderWithRouter();
 
-    const targetInput = screen.getByRole('spinbutton') as HTMLInputElement;
-    expect(targetInput.value).toBe('30000');
-    expect(screen.getByText('约 10 章（每章 ~3000 字）')).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('输入书名…'), {
+      target: { value: '字数测试' },
+    });
+    fireEvent.change(screen.getByLabelText('题材'), {
+      target: { value: '同人' },
+    });
+    fireEvent.click(screen.getByText('下一步'));
+
+    expect(screen.getByDisplayValue('100')).toBeTruthy();
+    expect(screen.getByDisplayValue('3000')).toBeTruthy();
+    expect(screen.getByText('预计总字数 300,000 字')).toBeTruthy();
   });
 });

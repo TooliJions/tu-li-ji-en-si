@@ -98,6 +98,30 @@ describe('BookDetail Page', () => {
     expect(screen.getByText('第一章')).toBeTruthy();
   });
 
+  it('exposes implemented book-scoped tool links from quick actions', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('快速操作')).toBeTruthy();
+    });
+
+    expect(screen.getByRole('link', { name: '文风配置' })).toHaveAttribute(
+      'href',
+      '/style-manager?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '同人模式' })).toHaveAttribute(
+      'href',
+      '/fanfic-init?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '情感弧线' })).toHaveAttribute(
+      'href',
+      '/book/book-001/emotional-arcs'
+    );
+  });
+
   it('renders not-found state when book does not exist', async () => {
     vi.mocked(api.fetchBook).mockRejectedValue(new Error('书籍不存在'));
     vi.mocked(api.fetchChapters).mockResolvedValue([]);

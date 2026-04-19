@@ -1,3 +1,19 @@
+export async function fetchBooks(params?: { status?: string; genre?: string }) {
+  const search = new URLSearchParams();
+  if (params?.status) {
+    search.set('status', params.status);
+  }
+  if (params?.genre) {
+    search.set('genre', params.genre);
+  }
+
+  const suffix = search.toString() ? `?${search.toString()}` : '';
+  const res = await fetch(`/api/books${suffix}`);
+  if (!res.ok) throw new Error('获取书籍列表失败');
+  const data = await res.json();
+  return data.data || [];
+}
+
 export async function fetchBook(bookId: string) {
   const res = await fetch(`/api/books/${bookId}`);
   if (!res.ok) throw new Error('书籍不存在');
@@ -60,6 +76,13 @@ export async function fetchEntityContext(bookId: string, entityName: string, cha
     chapterNumber !== undefined ? `?chapterNumber=${encodeURIComponent(String(chapterNumber))}` : '';
   const res = await fetch(`/api/books/${bookId}/context/${encodeURIComponent(entityName)}${suffix}`);
   if (!res.ok) throw new Error('实体上下文不存在');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fetchMemoryPreview(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/context/memory-preview`);
+  if (!res.ok) throw new Error('记忆透视不存在');
   const data = await res.json();
   return data.data;
 }
@@ -308,6 +331,13 @@ export async function fetchHookTimeline(bookId: string, fromChapter = 1, toChapt
     `/api/books/${bookId}/hooks/timeline?fromChapter=${fromChapter}&toChapter=${toChapter}`
   );
   if (!res.ok) throw new Error('获取伏笔时间轴失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fetchHookWakeSchedule(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/hooks/wake-schedule`);
+  if (!res.ok) throw new Error('获取伏笔唤醒排班失败');
   const data = await res.json();
   return data.data;
 }

@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   fetchAiTrace: vi.fn(),
   fetchQualityBaseline: vi.fn(),
   fetchBaselineAlert: vi.fn(),
+  fetchEmotionalArcs: vi.fn(),
   triggerInspirationShuffle: vi.fn(),
 }));
 
@@ -38,13 +39,37 @@ const mockAuditRate = {
 
 const mockTokenUsage = {
   totalTokens: 45000,
-  perChapter: {
+  perChannel: {
     writer: 20000,
     auditor: 12000,
     planner: 5000,
     composer: 3000,
     reviser: 5000,
   },
+  perChapter: [
+    {
+      chapter: 1,
+      totalTokens: 22000,
+      channels: {
+        writer: 10000,
+        auditor: 7000,
+        planner: 2000,
+        composer: 1000,
+        reviser: 2000,
+      },
+    },
+    {
+      chapter: 2,
+      totalTokens: 23000,
+      channels: {
+        writer: 10000,
+        auditor: 5000,
+        planner: 3000,
+        composer: 2000,
+        reviser: 3000,
+      },
+    },
+  ],
 };
 
 const mockAiTrace = {
@@ -109,6 +134,45 @@ const mockInspirationShuffle = {
   generationTime: 8.2,
 };
 
+const mockEmotionalArcs = {
+  characters: [
+    {
+      name: '林晨',
+      chapters: [
+        {
+          chapterNumber: 1,
+          emotions: { joy: 0.4, anger: 0.1, sadness: 0.1, fear: 0.1, surprise: 0.1, disgust: 0, trust: 0.1, anticipation: 0.1 },
+          deltas: null,
+          dominantEmotion: 'joy',
+          summary: '喜悦为主(40%)',
+        },
+      ],
+    },
+    {
+      name: '苏小雨',
+      chapters: [
+        {
+          chapterNumber: 1,
+          emotions: { joy: 0.2, anger: 0.1, sadness: 0.3, fear: 0.1, surprise: 0.1, disgust: 0, trust: 0.1, anticipation: 0.1 },
+          deltas: null,
+          dominantEmotion: 'sadness',
+          summary: '悲伤为主(30%)',
+        },
+      ],
+    },
+  ],
+  alerts: [
+    {
+      type: 'flatline',
+      character: '林晨',
+      chapterNumber: 4,
+      emotion: 'joy',
+      severity: 'warning',
+      message: '林晨 的情感弧线进入平缓期',
+    },
+  ],
+};
+
 function renderWithRouter(bookId = 'book-001') {
   return render(
     <MemoryRouter initialEntries={[`/analytics?bookId=${bookId}`]}>
@@ -131,6 +195,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -144,6 +209,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -151,8 +217,8 @@ describe('Analytics Page', () => {
       expect(screen.getByText('字数统计')).toBeTruthy();
     });
     // Chapter bars should be visible
-    expect(screen.getByText('第1章')).toBeTruthy();
-    expect(screen.getByText('第4章')).toBeTruthy();
+    expect(screen.getAllByText('第1章').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('第4章').length).toBeGreaterThan(0);
     // Word count bars show chapter word counts
     expect(screen.getByText('3,200')).toBeTruthy();
     expect(screen.getByText('2,800')).toBeTruthy();
@@ -165,6 +231,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -181,6 +248,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -190,6 +258,7 @@ describe('Analytics Page', () => {
     expect(screen.getByText('45,000')).toBeTruthy();
     expect(screen.getByText('writer')).toBeTruthy();
     expect(screen.getByText('auditor')).toBeTruthy();
+    expect(screen.getAllByText('第1章').length).toBeGreaterThan(0);
   });
 
   it('renders AI trace trend', async () => {
@@ -199,6 +268,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -215,6 +285,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -236,6 +307,7 @@ describe('Analytics Page', () => {
       severity: 'warning',
       suggestedAction: '建议运行灵感洗牌',
     });
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
 
     renderWithRouter();
 
@@ -252,6 +324,7 @@ describe('Analytics Page', () => {
     vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
     vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
     vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
     vi.mocked(api.triggerInspirationShuffle).mockResolvedValue(mockInspirationShuffle);
 
     renderWithRouter();
@@ -270,5 +343,25 @@ describe('Analytics Page', () => {
 
     expect(screen.getByText('快节奏视角')).toBeTruthy();
     expect(screen.getByText('抒情回忆')).toBeTruthy();
+  });
+
+  it('renders emotional arc overview from runtime data', async () => {
+    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
+    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
+    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
+    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
+    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
+    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
+    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('情感弧线概览')).toBeTruthy();
+    });
+
+    expect(screen.getByText('林晨')).toBeTruthy();
+    expect(screen.getByText('苏小雨')).toBeTruthy();
+    expect(screen.getByText('林晨 的情感弧线进入平缓期')).toBeTruthy();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
+import type { TelemetryLogger } from '../telemetry/logger';
 
 // Mock fs module — factory is hoisted, so we use inline functions
 vi.mock('fs', () => ({
@@ -58,6 +59,14 @@ function createMockProvider(): LLMProvider & {
   };
 }
 
+function createNoopTelemetryLogger(): TelemetryLogger {
+  return {
+    record: vi.fn(),
+    read: vi.fn(() => null),
+    listBookTelemetry: vi.fn(() => []),
+  } as unknown as TelemetryLogger;
+}
+
 describe('PipelineRunner', () => {
   let mockProvider: ReturnType<typeof createMockProvider>;
   let runner: PipelineRunner;
@@ -97,6 +106,7 @@ describe('PipelineRunner', () => {
       provider: mockProvider,
       maxRevisionRetries: 2,
       fallbackAction: 'accept_with_warnings',
+      telemetryLogger: createNoopTelemetryLogger(),
     });
   });
 
@@ -616,6 +626,7 @@ describe('PipelineRunner', () => {
         provider: mockProvider,
         maxRevisionRetries: 2,
         fallbackAction: 'pause',
+        telemetryLogger: createNoopTelemetryLogger(),
       });
 
       mockProvider.generateJSON.mockResolvedValueOnce({
@@ -890,6 +901,186 @@ describe('PipelineRunner', () => {
       );
       expect(indexPayload.chapters[0]).not.toHaveProperty('chapterNumber');
       expect(indexPayload.chapters[0]).not.toHaveProperty('status');
+    });
+
+    it('records telemetry for writer/composer/auditor channels after completion', async () => {
+      const recordFn = vi.fn();
+      const spyLogger = {
+        record: recordFn,
+        read: vi.fn(() => null),
+        listBookTelemetry: vi.fn(() => []),
+      } as unknown as TelemetryLogger;
+
+      const runnerWithSpy = new PipelineRunner({
+        rootDir: '/tmp/test-books',
+        provider: mockProvider,
+        maxRevisionRetries: 2,
+        fallbackAction: 'accept_with_warnings',
+        telemetryLogger: spyLogger,
+      });
+
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        summary: '上一章',
+        activeHooks: [],
+        characterStates: [],
+        locationContext: '某处',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        chapterGoal: '目标',
+        keyScenes: [],
+        emotionalArc: '',
+        hookProgression: [],
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '初稿',
+        usage: { promptTokens: 500, completionTokens: 400, totalTokens: 900 },
+        model: 'test',
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '润色稿',
+        usage: { promptTokens: 300, completionTokens: 200, totalTokens: 500 },
+        model: 'test',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '通过',
+      });
+
+      const result = await runnerWithSpy.writeNextChapter({
+        bookId: 'book-telemetry',
+        chapterNumber: 1,
+        title: '遥测章',
+        genre: 'xianxia',
+        userIntent: '测试遥测落盘',
+      });
+
+      expect(result.success).toBe(true);
+
+      const calls = recordFn.mock.calls;
+      const channels = calls.map((call) => call[2] as string);
+      expect(channels).toContain('writer');
+      expect(channels).toContain('composer');
+
+      const writerCall = calls.find((call) => call[2] === 'writer');
+      expect(writerCall?.[3]).toEqual(
+        expect.objectContaining({ totalTokens: 900 })
+      );
+      const composerCall = calls.find((call) => call[2] === 'composer');
+      expect(composerCall?.[3]).toEqual(
+        expect.objectContaining({ totalTokens: 500 })
+      );
+    });
+
+    it('records reviser channel telemetry when revision loop runs', async () => {
+      const recordFn = vi.fn();
+      const spyLogger = {
+        record: recordFn,
+        read: vi.fn(() => null),
+        listBookTelemetry: vi.fn(() => []),
+      } as unknown as TelemetryLogger;
+
+      const runnerWithSpy = new PipelineRunner({
+        rootDir: '/tmp/test-books',
+        provider: mockProvider,
+        maxRevisionRetries: 2,
+        fallbackAction: 'accept_with_warnings',
+        telemetryLogger: spyLogger,
+      });
+
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        summary: '上一章',
+        activeHooks: [],
+        characterStates: [],
+        locationContext: '某处',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        chapterGoal: '目标',
+        keyScenes: [],
+        emotionalArc: '',
+        hookProgression: [],
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '初稿',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '润色稿',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [{ severity: 'blocking', description: '需要修订' }],
+        overallScore: 40,
+        status: 'fail',
+        summary: '需修订',
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '修订稿',
+        usage: { promptTokens: 120, completionTokens: 80, totalTokens: 200 },
+        model: 'test',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 80,
+        status: 'pass',
+        summary: '通过',
+      });
+
+      const result = await runnerWithSpy.writeNextChapter({
+        bookId: 'book-telemetry-revise',
+        chapterNumber: 2,
+        title: '修订章',
+        genre: 'xianxia',
+        userIntent: '测试修订遥测',
+      });
+
+      expect(result.success).toBe(true);
+
+      const channels = recordFn.mock.calls.map((call) => call[2] as string);
+      expect(channels).toContain('reviser');
+      const reviserCall = recordFn.mock.calls.find((call) => call[2] === 'reviser');
+      expect(reviserCall?.[3]).toEqual(
+        expect.objectContaining({ totalTokens: 200 })
+      );
+    });
+
+    it('records writer telemetry on writeDraft', async () => {
+      const recordFn = vi.fn();
+      const spyLogger = {
+        record: recordFn,
+        read: vi.fn(() => null),
+        listBookTelemetry: vi.fn(() => []),
+      } as unknown as TelemetryLogger;
+
+      const runnerWithSpy = new PipelineRunner({
+        rootDir: '/tmp/test-books',
+        provider: mockProvider,
+        telemetryLogger: spyLogger,
+      });
+
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '草稿',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
+      });
+
+      await runnerWithSpy.writeDraft({
+        bookId: 'test-book',
+        chapterNumber: 7,
+        title: '草稿章',
+        genre: 'xianxia',
+        sceneDescription: '草稿测试',
+      });
+
+      const writerCall = recordFn.mock.calls.find((call) => call[2] === 'writer');
+      expect(writerCall).toBeDefined();
+      expect(writerCall?.[1]).toBe(7);
+      expect(writerCall?.[3]).toEqual(
+        expect.objectContaining({ totalTokens: 150 })
+      );
     });
 
     it('returns error when composeChapter throws unexpected exception', async () => {
