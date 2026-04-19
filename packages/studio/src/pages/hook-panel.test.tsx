@@ -201,7 +201,7 @@ describe('HookPanel Page', () => {
       expect(screen.getByText('健康概览')).toBeTruthy();
     });
 
-    expect(screen.getByText(/逾期/)).toBeTruthy();
+    expect(screen.getAllByText(/逾期/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('creates a new hook', async () => {
@@ -475,5 +475,33 @@ describe('HookPanel Page', () => {
 
     // Health score 85 should be visible
     expect(screen.getAllByText('85').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows hook health progress bars', async () => {
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
+    vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
+    vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
+
+    renderWithRouter();
+
+    // Wait for progress bars section to render
+    await screen.findByText(/伏笔健康度/, {}, { timeout: 3000 });
+    await screen.findByText(/活跃伏笔/, {}, { timeout: 3000 });
+    await screen.findByText(/休眠伏笔/, {}, { timeout: 3000 });
+    await screen.findByText(/逾期债务/, {}, { timeout: 3000 });
+  });
+
+  it('shows thundering herd collapsible with pending wakes', async () => {
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
+    vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
+    vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
+
+    renderWithRouter();
+
+    // Wait for thundering herd section to render
+    await screen.findByText(/惊群调度/, {}, { timeout: 3000 });
+    await screen.findByText(/1 次触发/, {}, { timeout: 3000 });
   });
 });

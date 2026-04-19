@@ -213,13 +213,59 @@ export default function HookPanel() {
             <Activity size={18} />
             <h2 className="text-lg font-semibold">健康概览</h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
             <InfoCard label="总数" value={health.total.toString()} />
             <InfoCard label="活跃" value={health.active.toString()} />
             <InfoCard label="休眠" value={health.dormant.toString()} />
             <InfoCard label="已回收" value={health.resolved.toString()} />
             <InfoCard label="回收率" value={`${(health.recoveryRate * 100).toFixed(0)}%`} />
           </div>
+
+          {/* Health Progress Bars */}
+          {hooks.length > 0 && (
+            <div className="space-y-3 pt-4 border-t">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-tight">
+                伏笔健康度
+              </p>
+              <ProgressBar
+                label="活跃伏笔"
+                current={health.active}
+                max={20}
+                status={health.active <= 20 ? '健康' : '过载'}
+              />
+              <ProgressBar
+                label="休眠伏笔"
+                current={health.dormant}
+                max={10}
+                status="不参与排班"
+                muted
+              />
+              {health.overdue > 0 && (
+                <div>
+                  <ProgressBar
+                    label="逾期债务"
+                    current={health.overdue}
+                    max={1}
+                    status="需要关注"
+                    danger
+                  />
+                  {health.overdueList.slice(0, 3).map((o) => (
+                    <p key={o.hookId} className="text-xs text-muted-foreground ml-2 mt-1">
+                      #{o.hookId} {o.description}（预计回收窗口: 第{o.expectedBy}章，当前第
+                      {o.currentChapter}章）
+                    </p>
+                  ))}
+                </div>
+              )}
+              <ProgressBar
+                label="回收率"
+                current={health.resolved}
+                max={Math.max(hooks.length, 1)}
+                status={`${hooks.length > 0 ? ((health.resolved / hooks.length) * 100).toFixed(0) : 0}%`}
+              />
+            </div>
+          )}
+
           {health.overdue > 0 && (
             <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 rounded px-3 py-2 mt-4">
               <AlertTriangle size={16} />
@@ -232,6 +278,24 @@ export default function HookPanel() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Thundering Herd Collapsible */}
+      {wakeSchedule && wakeSchedule.pendingWakes.length > 0 && (
+        <details className="rounded-lg border bg-card">
+          <summary className="p-4 cursor-pointer font-medium text-sm">
+            惊群调度：{wakeSchedule.pendingWakes.length} 次触发
+          </summary>
+          <div className="p-4 pt-0 space-y-2">
+            {wakeSchedule.pendingWakes.map((wake, i) => (
+              <div key={i} className="rounded border bg-muted p-3 text-sm">
+                <p className="font-medium">
+                  第{wake.wakeAtChapter}章：「{wake.description}」待唤醒（状态：{wake.status}）
+                </p>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Tabs */}
@@ -534,6 +598,36 @@ function InfoCard({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="text-lg font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function ProgressBar({
+  label,
+  current,
+  max,
+  status,
+  muted,
+  danger,
+}: {
+  label: string;
+  current: number;
+  max: number;
+  status: string;
+  muted?: boolean;
+  danger?: boolean;
+}) {
+  const pct = Math.min((current / max) * 100, 100);
+  const barClass = danger ? 'bg-red-400' : muted ? 'bg-muted-foreground/30' : 'bg-primary';
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-muted-foreground">{label}：</span>
+        <span className={danger ? 'text-red-600' : 'text-muted-foreground'}>{status}</span>
+      </div>
+      <div className="h-2 bg-secondary rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
