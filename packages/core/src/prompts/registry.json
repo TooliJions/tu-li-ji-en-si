@@ -1,0 +1,14 @@
+{
+  "latest": "v2",
+  "versions": {
+    "v1": {
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "description": "初始版本：基础 Agent 提示词模板",
+      "deprecated": true
+    },
+    "v2": {
+      "createdAt": "2025-06-01T00:00:00.000Z",
+      "description": "v2 版本：引入 33 维审计、9 类 AI 检测、伏笔治理上下文"
+    }
+  }
+}

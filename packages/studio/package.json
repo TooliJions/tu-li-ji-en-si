@@ -1,0 +1,49 @@
+{
+  "name": "@cybernovelist/studio",
+  "version": "7.0.0",
+  "private": true,
+  "description": "CyberNovelist Studio — Web workstation (React + Hono + SSE)",
+  "scripts": {
+    "dev": "pnpm build:api && pnpm dev:api & vite",
+    "dev:api": "tsx watch src/api/index.ts",
+    "build": "pnpm build:api && tsc --build && vite build",
+    "build:api": "tsc --project tsconfig.api.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "eslint src/",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@cybernovelist/core": "workspace:*",
+    "@hono/node-server": "^1.19.14",
+    "@hookform/resolvers": "^3.9.0",
+    "autoprefixer": "^10.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "hono": "^4.6.0",
+    "lucide-react": "^1.8.0",
+    "postcss": "^8.5.10",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.17.0",
+    "jsdom": "^29.0.2",
+    "prettier": "^3.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}

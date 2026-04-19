@@ -1,0 +1,419 @@
+import { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
+import {
+  BarChart3,
+  TrendingDown,
+  Zap,
+  AlertTriangle,
+  Shuffle,
+  CheckCircle,
+  Shield,
+} from 'lucide-react';
+import {
+  fetchWordCount,
+  fetchAuditRate,
+  fetchTokenUsage,
+  fetchAiTrace,
+  fetchQualityBaseline,
+  fetchBaselineAlert,
+  triggerInspirationShuffle,
+} from '../lib/api';
+
+interface WordCountData {
+  totalWords: number;
+  averagePerChapter: number;
+  chapters: { number: number; words: number }[];
+}
+
+interface AuditRateData {
+  totalAudits: number;
+  passRate: number;
+  perChapter: { number: number; passed: boolean }[];
+}
+
+interface TokenUsageData {
+  totalTokens: number;
+  perChapter: Record<string, number>;
+}
+
+interface AiTraceData {
+  trend: { chapter: number; score: number }[];
+  average: number;
+  latest: number;
+}
+
+interface QualityBaselineData {
+  baseline: {
+    version: number;
+    basedOnChapters: number[];
+    createdAt: string;
+    metrics: { aiTraceScore: number; sentenceDiversity: number; avgParagraphLength: number };
+  };
+  current: {
+    aiTraceScore: number;
+    sentenceDiversity: number;
+    avgParagraphLength: number;
+    driftPercentage: number;
+    alert: boolean;
+  };
+}
+
+interface BaselineAlertData {
+  metric: string;
+  baseline: number;
+  threshold: number;
+  windowSize: number;
+  slidingAverage: number;
+  chaptersAnalyzed: number[];
+  triggered: boolean;
+  consecutiveChapters: number;
+  severity: string;
+  suggestedAction: string | null;
+  inspirationShuffle: { available: boolean };
+}
+
+interface InspirationShuffleData {
+  alternatives: {
+    id: string;
+    style: string;
+    label: string;
+    text: string;
+    wordCount: number;
+    characteristics: string[];
+  }[];
+  generationTime: number;
+}
+
+export default function Analytics() {
+  const [searchParams] = useSearchParams();
+  const bookId = searchParams.get('bookId') || '';
+  const [loading, setLoading] = useState(true);
+
+  const [wordCount, setWordCount] = useState<WordCountData | null>(null);
+  const [auditRate, setAuditRate] = useState<AuditRateData | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
+  const [aiTrace, setAiTrace] = useState<AiTraceData | null>(null);
+  const [qualityBaseline, setQualityBaseline] = useState<QualityBaselineData | null>(null);
+  const [baselineAlert, setBaselineAlert] = useState<BaselineAlertData | null>(null);
+  const [inspirationResults, setInspirationResults] = useState<InspirationShuffleData | null>(null);
+  const [shuffleLoading, setShuffleLoading] = useState(false);
+
+  useEffect(() => {
+    if (!bookId) return;
+    Promise.all([
+      fetchWordCount(bookId),
+      fetchAuditRate(bookId),
+      fetchTokenUsage(bookId),
+      fetchAiTrace(bookId),
+      fetchQualityBaseline(bookId),
+      fetchBaselineAlert(bookId),
+    ])
+      .then(([wc, ar, tu, at, qb, ba]) => {
+        setWordCount(wc);
+        setAuditRate(ar);
+        setTokenUsage(tu);
+        setAiTrace(at);
+        setQualityBaseline(qb);
+        setBaselineAlert(ba);
+      })
+      .catch(() => {
+        // load failed
+      })
+      .finally(() => setLoading(false));
+  }, [bookId]);
+
+  async function handleShuffle() {
+    if (!bookId) return;
+    setShuffleLoading(true);
+    try {
+      const result = await triggerInspirationShuffle(bookId);
+      setInspirationResults(result);
+    } catch {
+      // shuffle failed
+    } finally {
+      setShuffleLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">加载中…</div>
+    );
+  }
+
+  const maxWords = wordCount?.chapters.length
+    ? Math.max(...wordCount.chapters.map((ch) => ch.words))
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">数据分析</h1>
+        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+          ← 返回仪表盘
+        </Link>
+      </div>
+
+      {/* Baseline Alert Banner */}
+      {baselineAlert?.triggered && (
+        <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-orange-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-orange-800">基线漂移告警</p>
+              <p className="text-sm text-orange-700 mt-1">
+                {baselineAlert.metric} 指标滑动平均值 {baselineAlert.slidingAverage.toFixed(3)}{' '}
+                超过阈值 {baselineAlert.threshold}
+                ，连续 {baselineAlert.consecutiveChapters} 章未达标。
+              </p>
+              {baselineAlert.suggestedAction && (
+                <p className="text-sm text-orange-700 mt-1 font-medium">
+                  {baselineAlert.suggestedAction}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Word Count Chart */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 size={18} />
+          <h2 className="text-lg font-semibold">字数统计</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <InfoCard label="总字数" value={wordCount?.totalWords.toLocaleString() || '0'} />
+          <InfoCard label="平均每章" value={wordCount?.averagePerChapter.toLocaleString() || '0'} />
+        </div>
+        {wordCount?.chapters.length ? (
+          <div className="space-y-2">
+            {wordCount.chapters.map((ch) => {
+              const pct = maxWords > 0 ? (ch.words / maxWords) * 100 : 0;
+              return (
+                <div key={ch.number} className="flex items-center gap-3">
+                  <span className="text-sm w-12 text-right text-muted-foreground">
+                    第{ch.number}章
+                  </span>
+                  <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-sm w-16 text-muted-foreground">
+                    {ch.words.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">暂无章节数据</p>
+        )}
+      </div>
+
+      {/* Audit Rate */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <CheckCircle size={18} className="text-green-500" />
+          <h2 className="text-lg font-semibold">审计通过率</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <InfoCard label="总审计次数" value={auditRate?.totalAudits.toLocaleString() || '0'} />
+          <InfoCard
+            label="通过率"
+            value={auditRate ? `${(auditRate.passRate * 100).toFixed(1)}%` : '0%'}
+          />
+        </div>
+        {auditRate?.perChapter.length ? (
+          <div className="flex flex-wrap gap-2">
+            {auditRate.perChapter.map((ch) => (
+              <span
+                key={ch.number}
+                className={`px-3 py-1.5 rounded text-xs font-medium ${
+                  ch.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}
+              >
+                第{ch.number}章 {ch.passed ? '通过' : '未通过'}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">暂无审计数据</p>
+        )}
+      </div>
+
+      {/* Token Usage */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={18} className="text-yellow-500" />
+          <h2 className="text-lg font-semibold">Token 用量</h2>
+        </div>
+        <div className="mb-4">
+          <InfoCard label="总计" value={tokenUsage?.totalTokens.toLocaleString() || '0'} />
+        </div>
+        {tokenUsage?.perChapter && (
+          <div className="space-y-2">
+            {Object.entries(tokenUsage.perChapter).map(([agent, tokens]) => {
+              const maxTokens = Math.max(...Object.values(tokenUsage.perChapter), 1);
+              const pct = (tokens / maxTokens) * 100;
+              return (
+                <div key={agent} className="flex items-center gap-3">
+                  <span className="text-sm w-20 text-muted-foreground">{agent}</span>
+                  <div className="flex-1 h-4 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-500 rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-sm w-16 text-muted-foreground">
+                    {tokens.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* AI Trace Trend */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingDown
+            size={18}
+            className={
+              aiTrace?.latest !== undefined && aiTrace.latest < 0.2
+                ? 'text-green-500'
+                : 'text-red-500'
+            }
+          />
+          <h2 className="text-lg font-semibold">AI 痕迹趋势</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <InfoCard
+            label="平均值"
+            value={aiTrace ? `${(aiTrace.average * 100).toFixed(1)}%` : '0%'}
+          />
+          <InfoCard label="最新" value={aiTrace ? `${(aiTrace.latest * 100).toFixed(1)}%` : '0%'} />
+          <InfoCard label="章节数" value={aiTrace?.trend.length.toString() || '0'} />
+        </div>
+        {aiTrace?.trend.length ? (
+          <div className="flex items-end gap-2 h-24">
+            {aiTrace.trend.map((point) => {
+              const height = Math.max(point.score * 100, 4);
+              return (
+                <div key={point.chapter} className="flex-1 flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    {(point.score * 100).toFixed(0)}%
+                  </span>
+                  <div
+                    className={`w-full rounded-t transition-all ${
+                      point.score < 0.2
+                        ? 'bg-green-400'
+                        : point.score < 0.4
+                          ? 'bg-yellow-400'
+                          : 'bg-red-400'
+                    }`}
+                    style={{ height: `${height}%`, maxHeight: '80px' }}
+                  />
+                  <span className="text-xs text-muted-foreground">Ch{point.chapter}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">暂无AI痕迹数据</p>
+        )}
+      </div>
+
+      {/* Quality Baseline */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield size={18} />
+          <h2 className="text-lg font-semibold">质量基线</h2>
+        </div>
+        {qualityBaseline && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <InfoCard label="版本" value={`v${qualityBaseline.baseline.version}`} />
+              <InfoCard
+                label="漂移"
+                value={`${(qualityBaseline.current.driftPercentage * 100).toFixed(1)}%`}
+              />
+              <InfoCard label="AI 痕迹" value={qualityBaseline.current.aiTraceScore.toFixed(3)} />
+              <InfoCard
+                label="句式多样"
+                value={qualityBaseline.current.sentenceDiversity.toFixed(2)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              基于第 {qualityBaseline.baseline.basedOnChapters.join(', ')} 章 · 创建于{' '}
+              {new Date(qualityBaseline.baseline.createdAt).toLocaleString('zh-CN')}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Inspiration Shuffle */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shuffle size={18} className="text-pink-500" />
+            <h2 className="text-lg font-semibold">灵感洗牌</h2>
+          </div>
+          <button
+            onClick={handleShuffle}
+            disabled={shuffleLoading}
+            className="px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+          >
+            {shuffleLoading ? '生成中…' : '生成灵感'}
+          </button>
+        </div>
+        {inspirationResults && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-3">
+              生成耗时 {inspirationResults.generationTime.toFixed(1)}s
+            </p>
+            <div className="space-y-4">
+              {inspirationResults.alternatives.map((alt) => (
+                <div
+                  key={alt.id}
+                  className="rounded-lg border p-4 hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium">{alt.label}</h3>
+                    <span className="text-xs text-muted-foreground">{alt.wordCount} 字</span>
+                  </div>
+                  <div className="flex gap-1 mb-3">
+                    {alt.characteristics.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-sm leading-relaxed text-foreground">{alt.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {!inspirationResults && !shuffleLoading && (
+          <p className="text-sm text-muted-foreground">点击「生成灵感」获取不同风格的写作方案</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-lg font-bold mt-1">{value}</p>
+    </div>
+  );
+}
