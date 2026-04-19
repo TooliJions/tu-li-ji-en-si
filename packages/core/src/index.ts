@@ -104,3 +104,4 @@ export * from './agents/market-injector';
 export * from './pipeline/runner';
 export * from './pipeline/persistence';
 export * from './daemon';
+export * from './telemetry/logger';
