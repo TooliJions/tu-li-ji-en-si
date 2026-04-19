@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Hono } from 'hono';
+import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
 import { createAnalyticsRouter } from './analytics';
 
 function createTestApp() {
@@ -8,11 +11,104 @@ function createTestApp() {
   return app;
 }
 
+/**
+ * Minimal runtime setup for a test book.
+ * Creates only the files needed for analytics endpoints to succeed the book-existence check.
+ */
+function createTestBookRuntime(bookId: string) {
+  const root = getStudioRuntimeRootDir();
+  const bookDir = path.join(root, bookId);
+  const stateDir = path.join(bookDir, 'story', 'state');
+  const chaptersDir = path.join(bookDir, 'story', 'chapters');
+
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.mkdirSync(chaptersDir, { recursive: true });
+
+  // book.json — required by hasStudioBookRuntime
+  fs.writeFileSync(
+    path.join(bookDir, 'book.json'),
+    JSON.stringify({ id: bookId, title: 'Test Book' }, null, 2),
+  );
+
+  // index.json — empty chapter list
+  fs.writeFileSync(
+    path.join(stateDir, 'index.json'),
+    JSON.stringify(
+      {
+        bookId,
+        chapters: [],
+        totalChapters: 0,
+        totalWords: 0,
+        lastUpdated: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
+
+  // manifest.json
+  fs.writeFileSync(
+    path.join(stateDir, 'manifest.json'),
+    JSON.stringify(
+      {
+        bookId,
+        versionToken: 1,
+        lastChapterWritten: 0,
+        hooks: [],
+        facts: [],
+        characters: [],
+        worldRules: [],
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function addTestChapter(
+  bookId: string,
+  chapterNumber: number,
+  title: string,
+  content: string,
+) {
+  const root = getStudioRuntimeRootDir();
+  const padded = String(chapterNumber).padStart(4, '0');
+  const chaptersDir = path.join(root, bookId, 'story', 'chapters');
+  const indexPath = path.join(root, bookId, 'story', 'state', 'index.json');
+
+  // Write chapter file with frontmatter
+  const frontmatter = `---\ntitle: ${title}\nstatus: published\n---\n`;
+  fs.writeFileSync(path.join(chaptersDir, `chapter-${padded}.md`), frontmatter + content);
+
+  // Update index
+  const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+    bookId: string;
+    chapters: Array<{ number: number; title: string | null; fileName: string; wordCount: number; createdAt: string }>;
+    totalChapters: number;
+    totalWords: number;
+    lastUpdated: string;
+  };
+  index.chapters.push({
+    number: chapterNumber,
+    title,
+    fileName: `chapter-${padded}.md`,
+    wordCount: content.length,
+    createdAt: new Date().toISOString(),
+  });
+  index.totalChapters = index.chapters.length;
+  index.totalWords += content.length;
+  index.lastUpdated = new Date().toISOString();
+  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
+}
+
 describe('Analytics Route', () => {
   let app: ReturnType<typeof createTestApp>;
 
   beforeEach(() => {
+    resetStudioCoreBridgeForTests();
     app = createTestApp();
+    createTestBookRuntime('book-001');
   });
 
   describe('GET /api/books/:bookId/analytics/word-count', () => {
@@ -25,6 +121,20 @@ describe('Analytics Route', () => {
       expect(typeof data.data.totalWords).toBe('number');
       expect(typeof data.data.averagePerChapter).toBe('number');
       expect(Array.isArray(data.data.chapters)).toBe(true);
+    });
+
+    it('returns real data when chapters exist', async () => {
+      addTestChapter('book-001', 1, '第一章', '这是一段测试内容，大约有这么多字数。');
+      addTestChapter('book-001', 2, '第二章', '第二章的内容在这里，继续写故事。');
+
+      const res = await app.request('/api/books/book-001/analytics/word-count');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: { totalWords: number; averagePerChapter: number; chapters: Array<{ number: number; words: number }> };
+      };
+      expect(data.data.totalWords).toBeGreaterThan(0);
+      expect(data.data.chapters.length).toBe(2);
+      expect(data.data.chapters[0].number).toBe(1);
     });
   });
 
@@ -77,6 +187,20 @@ describe('Analytics Route', () => {
       expect(typeof data.data.average).toBe('number');
       expect(typeof data.data.latest).toBe('number');
     });
+
+    it('detects AI traces from real chapter content', async () => {
+      addTestChapter('book-001', 1, '第一章', '林晨坐在教室里，望着窗外的雨幕，心中涌起一阵莫名的感觉。');
+
+      const res = await app.request('/api/books/book-001/analytics/ai-trace');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: { trend: Array<{ chapter: number; score: number }>; average: number; latest: number };
+      };
+      expect(data.data.trend.length).toBe(1);
+      expect(data.data.trend[0].chapter).toBe(1);
+      expect(data.data.trend[0].score).toBeGreaterThanOrEqual(0);
+      expect(data.data.trend[0].score).toBeLessThanOrEqual(1);
+    });
   });
 
   describe('GET /api/books/:bookId/analytics/quality-baseline', () => {
@@ -110,7 +234,7 @@ describe('Analytics Route', () => {
 
     it('accepts custom metric and window query params', async () => {
       const res = await app.request(
-        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=5'
+        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=5',
       );
       expect(res.status).toBe(200);
       const data = (await res.json()) as { data: { metric: string; windowSize: number } };
