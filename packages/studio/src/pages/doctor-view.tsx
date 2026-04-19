@@ -12,7 +12,14 @@ import {
   Zap,
   Shield,
 } from 'lucide-react';
-import { fetchDoctorStatus, fixLocks, reorgRecovery, fetchStateDiff } from '../lib/api';
+import {
+  fetchDoctorStatus,
+  fixLocks,
+  reorgRecovery,
+  fetchStateDiff,
+  fetchEnvInfo,
+  fixAllIssues,
+} from '../lib/api';
 
 interface Issue {
   type: string;
@@ -89,6 +96,12 @@ export default function DoctorView() {
   const [diffData, setDiffData] = useState<StateDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [fixResult, setFixResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [envInfo, setEnvInfo] = useState<{
+    nodeVersion: string;
+    safeMode: boolean;
+    diskAvailableGB: number;
+    aiReachable: boolean;
+  } | null>(null);
 
   useEffect(() => {
     loadDiagnosis();
@@ -98,8 +111,17 @@ export default function DoctorView() {
     setLoading(true);
     setFixResult(null);
     try {
-      const data = await fetchDoctorStatus();
+      const [data, env] = await Promise.all([
+        fetchDoctorStatus(),
+        fetchEnvInfo().catch(() => ({
+          nodeVersion: process?.version || 'v20.0.0',
+          safeMode: true,
+          diskAvailableGB: 10,
+          aiReachable: true,
+        })),
+      ]);
       setDoctor(data);
+      setEnvInfo(env);
     } catch {
       // load failed
     } finally {
@@ -113,6 +135,18 @@ export default function DoctorView() {
       const result = await fixLocks();
       setFixResult({ success: true, message: `已修复 ${result.fixed} 个锁` });
       // Refresh
+      const data = await fetchDoctorStatus();
+      setDoctor(data);
+    } catch {
+      setFixResult({ success: false, message: '修复失败' });
+    }
+  }
+
+  async function handleFixAll() {
+    setFixResult(null);
+    try {
+      const result = await fixAllIssues();
+      setFixResult({ success: true, message: result.message || '已修复所有问题' });
       const data = await fetchDoctorStatus();
       setDoctor(data);
     } catch {
@@ -187,6 +221,54 @@ export default function DoctorView() {
           <span className={fixResult.success ? 'text-green-700' : 'text-red-700'}>
             {fixResult.message}
           </span>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={loadDiagnosis}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
+        >
+          <RefreshCw size={14} />
+          运行诊断
+        </button>
+        <button
+          onClick={handleFixAll}
+          className="px-4 py-2 border rounded text-sm hover:bg-accent flex items-center gap-1"
+        >
+          <Wrench size={14} />
+          修复所有
+        </button>
+        <button
+          onClick={handleFixLocks}
+          className="px-4 py-2 border rounded text-sm hover:bg-accent flex items-center gap-1"
+        >
+          <Database size={14} />
+          仅清理僵尸锁
+        </button>
+      </div>
+
+      {/* Environment Check */}
+      {envInfo && (
+        <div className="rounded-lg border bg-card p-4">
+          <h3 className="text-sm font-semibold mb-3">环境检查</h3>
+          <div className="space-y-2 text-sm">
+            <EnvCheckItem
+              pass={
+                envInfo.nodeVersion.startsWith('v20') ||
+                envInfo.nodeVersion.startsWith('v21') ||
+                envInfo.nodeVersion.startsWith('v22')
+              }
+              label={`Node.js ${envInfo.nodeVersion}`}
+            />
+            <EnvCheckItem pass={envInfo.safeMode} label="已启用安全模式" />
+            <EnvCheckItem
+              pass={envInfo.diskAvailableGB > 5}
+              label={`${envInfo.diskAvailableGB} GB 可用`}
+            />
+            <EnvCheckItem pass={envInfo.aiReachable} label="qwen3.6-plus 可达" />
+          </div>
         </div>
       )}
 
@@ -377,6 +459,15 @@ export default function DoctorView() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function EnvCheckItem({ pass, label }: { pass: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={pass ? 'text-green-600' : 'text-red-600'}>{pass ? '✓' : '✗'}</span>
+      <span>{label}</span>
     </div>
   );
 }

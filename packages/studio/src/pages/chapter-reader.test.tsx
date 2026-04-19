@@ -183,8 +183,8 @@ describe('ChapterReader Page', () => {
     await waitFor(() => {
       expect(screen.getByText('审计报告')).toBeTruthy();
     });
-    expect(screen.getByText('AI 痕迹')).toBeTruthy();
-    expect(screen.getByText('连贯性')).toBeTruthy();
+    expect(screen.getAllByText('AI 痕迹').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('连贯性').length).toBeGreaterThanOrEqual(1);
   });
 
   it('toggles flow mode when clicking flow mode button', async () => {
@@ -216,7 +216,9 @@ describe('ChapterReader Page', () => {
         .some((node) => node.textContent?.includes('林晨坐在教室里'))
     ).toBe(true);
 
-    const highlightedEntity = screen.getAllByRole('mark').find((node) => node.textContent === '林晨');
+    const highlightedEntity = screen
+      .getAllByRole('mark')
+      .find((node) => node.textContent === '林晨');
     expect(highlightedEntity).toBeTruthy();
 
     await act(async () => {

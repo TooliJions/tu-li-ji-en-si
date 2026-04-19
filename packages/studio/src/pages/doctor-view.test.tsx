@@ -7,6 +7,8 @@ vi.mock('../lib/api', () => ({
   fixLocks: vi.fn(),
   reorgRecovery: vi.fn(),
   fetchStateDiff: vi.fn(),
+  fetchEnvInfo: vi.fn(),
+  fixAllIssues: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -77,6 +79,13 @@ function renderWithRouter() {
 describe('DoctorView Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.fetchEnvInfo).mockResolvedValue({
+      nodeVersion: 'v20.11.0',
+      safeMode: true,
+      diskAvailableGB: 10,
+      aiReachable: true,
+    });
+    vi.mocked(api.fixAllIssues).mockResolvedValue({ message: '已修复所有问题' });
   });
 
   it('shows loading state', () => {

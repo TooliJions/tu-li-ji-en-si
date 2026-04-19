@@ -177,6 +177,16 @@ export default function Writing() {
   });
   const [qualityPhase, setQualityPhase] = useState<'waiting' | 'computing' | 'done'>('waiting');
 
+  // Wordcloud 3s fade-out
+  const [wordcloudFade, setWordcloudFade] = useState(1);
+  useEffect(() => {
+    if (pipeline?.currentStage === 'writing') {
+      const timer = setTimeout(() => setWordcloudFade(0), 3000);
+      return () => clearTimeout(timer);
+    }
+    setWordcloudFade(1);
+  }, [pipeline?.currentStage]);
+
   const sseRef = useRef<EventSource | null>(null);
 
   async function loadWorkspaceData(targetBookId: string) {
@@ -888,7 +898,10 @@ export default function Writing() {
                 ? `从最新真相文件中抓取到 ${memoryPreview.summary.facts} 条事实, ${memoryPreview.summary.hooks} 个伏笔。`
                 : '正在构建记忆词云…'}
             </p>
-            <div className="bg-muted/30 rounded-lg p-4 border border-dashed h-64 flex items-center justify-center overflow-hidden">
+            <div
+              className="bg-muted/30 rounded-lg p-4 border border-dashed h-64 flex items-center justify-center overflow-hidden transition-opacity duration-1000"
+              style={{ opacity: wordcloudFade }}
+            >
               <MemoryWordcloud
                 memories={memoryPreview?.memories ?? []}
                 onMemoryEnter={(memory, event) => {

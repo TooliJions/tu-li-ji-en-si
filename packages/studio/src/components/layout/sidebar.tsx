@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   BookOpen,
@@ -10,11 +11,29 @@ import {
   BarChart3,
   Settings,
   Stethoscope,
+  ListOrdered,
 } from 'lucide-react';
+
+interface Book {
+  id: string;
+  title: string;
+  chapterCount: number;
+  targetChapterCount: number;
+  status: string;
+}
+
+async function fetchActiveBook(): Promise<Book | null> {
+  const res = await fetch('/api/books?status=active');
+  if (!res.ok) return null;
+  const data = await res.json();
+  const books = (data.data || []) as Book[];
+  return books.length > 0 ? books[0] : null;
+}
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
   { to: '/chapters', icon: FileText, label: '书籍与章节' },
+  { to: '/writing-plan', icon: ListOrdered, label: '创作规划' },
   { to: '/writing', icon: PenTool, label: '写作' },
   { to: '/hooks', icon: GitBranch, label: '伏笔' },
   { to: '/hooks/timeline', icon: Map, label: '双轨时间轴' },
@@ -26,6 +45,14 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+  const [activeBook, setActiveBook] = useState<Book | null>(null);
+
+  useEffect(() => {
+    fetchActiveBook()
+      .then(setActiveBook)
+      .catch(() => {});
+  }, []);
+
   return (
     <aside className="w-56 min-h-screen bg-sidebar text-sidebar-foreground flex flex-col">
       <div className="p-4 border-b border-sidebar-foreground/20">
@@ -48,10 +75,26 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      {activeBook && (
+        <div className="px-4 py-3 border-t border-sidebar-foreground/20">
+          <p className="text-xs text-sidebar-foreground/80 truncate">{activeBook.title}</p>
+          <p className="text-xs text-sidebar-foreground/60 mt-1">
+            进度: {activeBook.chapterCount}/{activeBook.targetChapterCount} 章
+          </p>
+          <div className="h-1.5 bg-sidebar-foreground/10 rounded-full overflow-hidden mt-1">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{
+                width: `${Math.min(((activeBook.chapterCount ?? 0) / (activeBook.targetChapterCount ?? 1)) * 100, 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
       <div className="m-2 rounded-md border border-sidebar-foreground/15 bg-sidebar-foreground/5 p-3 text-[11px] leading-5 text-sidebar-foreground/75">
         <p className="font-medium text-sidebar-foreground">阶段性入口说明</p>
         <p className="mt-1">
-          导出独立页与题材独立管理暂未开放；书籍级工具请从“书籍与章节”或书籍详情进入。
+          导出独立页与题材独立管理暂未开放；书籍级工具请从"书籍与章节"或书籍详情进入。
         </p>
       </div>
     </aside>

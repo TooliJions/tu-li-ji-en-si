@@ -71,6 +71,13 @@ export async function fetchChapter(bookId: string, chapterNumber: number) {
   return data.data;
 }
 
+export async function deleteChapter(bookId: string, chapterNumber: number) {
+  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}`, {
+    method: 'DELETE',
+  });
+  return res.ok;
+}
+
 export async function fetchEntityContext(
   bookId: string,
   entityName: string,
@@ -96,7 +103,7 @@ export async function fetchMemoryPreview(bookId: string) {
 }
 
 export async function fetchAuditReport(bookId: string, chapterNumber: number) {
-  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}/audit-report`);
+  const res = await fetch(`/api/books/${bookId}/pipeline/audit-report/${chapterNumber}`);
   if (!res.ok) return null;
   const data = await res.json();
   return data.data;
@@ -114,10 +121,25 @@ export async function updateChapter(bookId: string, chapterNumber: number, conte
 }
 
 export async function runAudit(bookId: string, chapterNumber: number) {
-  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}/audit`, {
+  const res = await fetch(`/api/books/${bookId}/pipeline/audit/${chapterNumber}`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('审计失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function planChapter(
+  bookId: string,
+  chapterNumber: number,
+  outlineContext: string = ''
+) {
+  const res = await fetch(`/api/books/${bookId}/pipeline/plan-chapter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chapterNumber, outlineContext }),
+  });
+  if (!res.ok) throw new Error('章节规划失败');
   const data = await res.json();
   return data.data;
 }
@@ -470,6 +492,19 @@ export async function fetchStateDiff(file: string) {
   return data.data;
 }
 
+export async function fetchEnvInfo() {
+  const res = await fetch('/api/system/doctor/env');
+  if (!res.ok) throw new Error('获取环境信息失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fixAllIssues() {
+  const res = await fetch('/api/system/doctor/fix-all', { method: 'POST' });
+  const data = await res.json();
+  return data.data;
+}
+
 // Fanfic
 export async function initFanfic(
   bookId: string,
@@ -517,6 +552,32 @@ export async function applyStyleImitation(
 export async function fetchEmotionalArcs(bookId: string) {
   const res = await fetch(`/api/books/${bookId}/analytics/emotional-arcs`);
   if (!res.ok) throw new Error('获取情感弧线失败');
+  const data = await res.json();
+  return data.data;
+}
+
+// Prompts
+export async function fetchPromptVersions(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/prompts`);
+  if (!res.ok) throw new Error('获取提示词版本失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function setPromptVersion(bookId: string, version: string) {
+  const res = await fetch(`/api/books/${bookId}/prompts/set`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  });
+  if (!res.ok) throw new Error('切换提示词版本失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fetchPromptDiff(bookId: string, from: string, to: string) {
+  const res = await fetch(`/api/books/${bookId}/prompts/diff?from=${from}&to=${to}`);
+  if (!res.ok) throw new Error('获取提示词差异失败');
   const data = await res.json();
   return data.data;
 }

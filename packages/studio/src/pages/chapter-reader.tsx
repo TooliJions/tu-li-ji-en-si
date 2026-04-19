@@ -24,6 +24,7 @@ import ContextPopup from '../components/context-popup';
 import EntityHighlight from '../components/entity-highlight';
 import PollutionBadge from '../components/pollution-badge';
 import TimeDial from '../components/time-dial';
+import RadarChart from '../components/radar-chart';
 import { extractFlowEntities } from '../lib/entity-context';
 
 interface Chapter {
@@ -65,8 +66,7 @@ function getChapterPollutionState(chapter: Chapter) {
       level: 'high' as const,
       contaminationScore: 0.95,
       source: '降级结果',
-      message:
-        chapter.warning ?? '修订次数用尽，系统已按 accept_with_warnings 降级接受结果。',
+      message: chapter.warning ?? '修订次数用尽，系统已按 accept_with_warnings 降级接受结果。',
     };
   }
 
@@ -225,6 +225,16 @@ export default function ChapterReader() {
     setPopupVisible(false);
   }
 
+  // Flow mode keyboard handler — must be before early returns
+  useEffect(() => {
+    if (!flowMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFlowMode(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [flowMode]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">加载中…</div>
@@ -242,52 +252,75 @@ export default function ChapterReader() {
     );
   }
 
-  // Flow mode: minimal UI, just content
+  // Flow mode: full-screen dark overlay
   if (flowMode) {
     return (
-      <div className="max-w-3xl mx-auto relative">
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={() => setFlowMode(false)}
-            className="text-sm text-muted-foreground hover:text-foreground"
-            title="退出心流模式"
-          >
-            ← 退出心流模式
-          </button>
+      <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: '#1a1a2e' }}>
+        <div className="max-w-3xl mx-auto px-6 py-8 relative">
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => setFlowMode(false)}
+              className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+              title="退出心流模式 (Esc)"
+            >
+              ← 退出心流模式
+            </button>
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/book/${bookId}/chapter/${Math.max(1, chNum - 1)}`}
+                className="text-sm text-slate-400 hover:text-slate-200"
+                title="上一章"
+              >
+                ◀ 上一章
+              </Link>
+              <Link
+                to={`/book/${bookId}/chapter/${chNum + 1}`}
+                className="text-sm text-slate-400 hover:text-slate-200"
+                title="下一章"
+              >
+                下一章 ▶
+              </Link>
+              <span className="text-xs text-slate-600">Esc 退出</span>
+            </div>
+          </div>
+          <div className="prose prose-sm max-w-none">
+            {editContent.split('\n').map((line, i) => (
+              <p key={i} className="text-base leading-relaxed mb-2" style={{ color: '#e2e8f0' }}>
+                {line ? (
+                  <EntityHighlight
+                    text={line}
+                    entities={flowEntities}
+                    highlightClass="border-b border-dashed border-amber-400/60 bg-transparent px-0 py-0"
+                    onEntityEnter={handleEntityEnter}
+                    onEntityLeave={handleEntityLeave}
+                  />
+                ) : (
+                  '\u00A0'
+                )}
+              </p>
+            ))}
+          </div>
+          <ContextPopup
+            title={popupContext?.name ?? ''}
+            content={
+              popupContext
+                ? `当前位置：${popupContext.currentLocation}；情绪：${popupContext.emotion}。${
+                    popupContext.inventory.length > 0
+                      ? `持有：${popupContext.inventory.join('、')}。`
+                      : ''
+                  }`
+                : ''
+            }
+            visible={popupVisible && popupContext !== null}
+            tags={
+              popupContext
+                ? [popupContext.type, ...popupContext.activeHooks.map((hook) => hook.description)]
+                : []
+            }
+            flowMode
+            position={popupPosition}
+          />
         </div>
-        <div className="prose prose-sm max-w-none">
-          {editContent.split('\n').map((line, i) => (
-            <p key={i} className="text-base leading-relaxed mb-2 text-foreground">
-              {line ? (
-                <EntityHighlight
-                  text={line}
-                  entities={flowEntities}
-                  highlightClass="border-b border-dashed border-amber-400/60 bg-transparent px-0 py-0"
-                  onEntityEnter={handleEntityEnter}
-                  onEntityLeave={handleEntityLeave}
-                />
-              ) : (
-                '\u00A0'
-              )}
-            </p>
-          ))}
-        </div>
-        <ContextPopup
-          title={popupContext?.name ?? ''}
-          content={
-            popupContext
-              ? `当前位置：${popupContext.currentLocation}；情绪：${popupContext.emotion}。${
-                  popupContext.inventory.length > 0
-                    ? `持有：${popupContext.inventory.join('、')}。`
-                    : ''
-                }`
-              : ''
-          }
-          visible={popupVisible && popupContext !== null}
-          tags={popupContext ? [popupContext.type, ...popupContext.activeHooks.map((hook) => hook.description)] : []}
-          flowMode
-          position={popupPosition}
-        />
       </div>
     );
   }
@@ -482,12 +515,18 @@ export default function ChapterReader() {
 
               {/* Radar scores */}
               {auditReport.radarScores.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium mb-3">维度评分</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center border-t pt-6 mt-6">
+                  <div>
+                    <h3 className="text-sm font-medium mb-4">质量雷达图</h3>
+                    <RadarChart data={auditReport.radarScores} size={240} className="mx-auto" />
+                  </div>
                   <div className="space-y-2">
+                    <h3 className="text-sm font-medium mb-4">详细维度评分</h3>
                     {auditReport.radarScores.map((radar) => (
                       <div key={radar.dimension} className="flex items-center gap-3">
-                        <span className="text-sm w-20">{radar.label}</span>
+                        <span className="text-sm w-20 truncate" title={radar.label}>
+                          {radar.label}
+                        </span>
                         <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all"
