@@ -3,7 +3,6 @@ import {
   ChapterPlanner,
   type ChapterPlanBrief,
   type ChapterPlanResult,
-  type ChapterPlan,
 } from './chapter-planner';
 import type { LLMProvider } from '../llm/provider';
 import type { HookAgenda } from '../governance/hook-agenda';

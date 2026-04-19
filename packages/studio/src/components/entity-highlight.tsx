@@ -6,10 +6,14 @@ export default function EntityHighlight({
   text,
   entities,
   highlightClass,
+  onEntityEnter,
+  onEntityLeave,
 }: {
   text: string;
   entities: string[];
   highlightClass?: string;
+  onEntityEnter?: (entity: string, event: React.MouseEvent<HTMLElement>) => void;
+  onEntityLeave?: () => void;
 }) {
   if (!text || entities.length === 0) {
     return <>{text}</>;
@@ -28,6 +32,8 @@ export default function EntityHighlight({
             className={
               highlightClass || 'border-b-2 border-dashed border-amber-500 bg-transparent px-0 py-0'
             }
+            onMouseEnter={(event) => onEntityEnter?.(part.text, event)}
+            onMouseLeave={() => onEntityLeave?.()}
           >
             {part.text}
           </mark>

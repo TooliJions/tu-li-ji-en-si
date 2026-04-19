@@ -67,6 +67,18 @@ describe('TruthFiles Page', () => {
     expect(screen.getByText('加载中…')).toBeTruthy();
   });
 
+  it('loads truth files with the active bookId', async () => {
+    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
+    vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);
+
+    renderWithRouter('book-xyz');
+
+    await waitFor(() => {
+      expect(api.fetchTruthFiles).toHaveBeenCalledWith('book-xyz');
+      expect(api.fetchProjectionStatus).toHaveBeenCalledWith('book-xyz');
+    });
+  });
+
   it('renders truth file list', async () => {
     vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
     vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);

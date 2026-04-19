@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Zap, BookOpen, FileEdit, RotateCcw, Brain, BarChart3 } from 'lucide-react';
+import { Zap, BookOpen, FileEdit, Brain, BarChart3 } from 'lucide-react';
 import {
   fetchBook,
   fetchChapters,

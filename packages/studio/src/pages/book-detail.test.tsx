@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 vi.mock('../lib/api', () => ({
   fetchBook: vi.fn(),
   fetchChapters: vi.fn(),
+  fetchChapterSnapshots: vi.fn(),
   mergeChapters: vi.fn(),
   splitChapter: vi.fn(),
   rollbackChapter: vi.fn(),
@@ -43,6 +44,15 @@ const mockChapters = [
     wordCount: 3000,
     qualityScore: null,
     auditStatus: null,
+  },
+];
+
+const mockSnapshots = [
+  {
+    id: 'snap-1',
+    chapter: 2,
+    label: '第2章快照',
+    timestamp: '2026-04-19T08:00:00.000Z',
   },
 ];
 
@@ -146,6 +156,7 @@ describe('BookDetail Page', () => {
   it('calls merge API when merging chapters', async () => {
     vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
     vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([]);
     vi.mocked(api.mergeChapters).mockResolvedValue(true);
 
     renderWithRouter();
@@ -167,21 +178,27 @@ describe('BookDetail Page', () => {
   });
 
   it('shows pollution badge on polluted chapters', async () => {
-    const pollutedChapters = [{ ...mockChapters[0], qualityScore: 20 }, mockChapters[1]];
+    const pollutedChapters = [
+      { ...mockChapters[0], qualityScore: null, warningCode: 'accept_with_warnings' as const },
+      mockChapters[1],
+    ];
     vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
     vi.mocked(api.fetchChapters).mockResolvedValue(pollutedChapters);
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([]);
 
     renderWithRouter();
 
     await waitFor(() => {
       expect(screen.getByText('污染隔离')).toBeTruthy();
     });
+    expect(screen.getByText('强制通过')).toBeTruthy();
   });
 
   it('does not show pollution badge on clean chapters', async () => {
     const cleanChapters = [{ ...mockChapters[0], qualityScore: 85 }, mockChapters[1]];
     vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
     vi.mocked(api.fetchChapters).mockResolvedValue(cleanChapters);
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([]);
 
     renderWithRouter();
 
@@ -190,5 +207,46 @@ describe('BookDetail Page', () => {
     });
 
     expect(screen.queryByText('污染隔离')).toBeNull();
+  });
+
+  it('opens TimeDial with real snapshots before rollback', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue(mockSnapshots);
+    vi.mocked(api.rollbackChapter).mockResolvedValue(true);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('测试小说')).toBeTruthy();
+    });
+
+    const menuButtons = screen.getAllByTitle('更多操作');
+    fireEvent.click(menuButtons[menuButtons.length - 1]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('回滚到快照'));
+    });
+
+    await waitFor(() => {
+      expect(api.fetchChapterSnapshots).toHaveBeenCalledWith('book-001', 2);
+      expect(screen.getByText('时间回溯')).toBeTruthy();
+      expect(screen.getByText('第2章快照')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('第2章快照'));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('确认回滚'));
+    });
+
+    await waitFor(
+      () => {
+        expect(api.rollbackChapter).toHaveBeenCalledWith('book-001', 2, 'snap-1');
+      },
+      { timeout: 2000 }
+    );
   });
 });

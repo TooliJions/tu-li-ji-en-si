@@ -13,6 +13,8 @@ export interface PersistChapterInput {
   title: string;
   content: string;
   status: 'draft' | 'final';
+  warningCode?: string;
+  warning?: string;
 }
 
 export interface PersistResult {
@@ -82,12 +84,20 @@ export class PipelinePersistence {
     const tmpPath = targetPath + '.tmp';
 
     try {
+      const sanitizedWarning = input.warning?.replace(/\r?\n/g, ' ').trim();
+      const warningBlock = [
+        input.warningCode ? `warningCode: ${input.warningCode}` : null,
+        sanitizedWarning ? `warning: ${sanitizedWarning}` : null,
+      ]
+        .filter((line): line is string => line !== null)
+        .join('\n');
+
       // Step 1: 写入临时文件
       const frontmatter = `---
 title: ${input.title}
 chapter: ${input.chapterNumber}
 status: ${input.status}
-createdAt: ${new Date().toISOString()}
+${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 ---
 
 `;
@@ -96,7 +106,7 @@ createdAt: ${new Date().toISOString()}
       // Step 2: 创建快照（持久化前的状态保存）
       let snapshotId: string | undefined;
       try {
-        snapshotId = this.snapshotManager.createSnapshot(input.bookId, input.chapterNumber);
+        snapshotId = this.createSnapshot(input.bookId, input.chapterNumber);
       } catch {
         // Snapshot failure is non-fatal — log but continue
       }

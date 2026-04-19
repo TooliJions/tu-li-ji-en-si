@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PipelinePersistence, type PersistChapterInput, type PersistResult } from './persistence';
+import { PipelinePersistence } from './persistence';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 import type { ChapterIndex } from '../models/chapter';
@@ -359,7 +359,7 @@ Orphan content`,
     });
 
     it('detects index-manifest mismatch', async () => {
-      const { stateManager, stateStore } = setupBook(rootDir, 'book1', [1, 2]);
+      const { stateStore } = setupBook(rootDir, 'book1', [1, 2]);
 
       // Manually change manifest to have different lastChapterWritten
       const manifest = stateStore.loadManifest('book1');

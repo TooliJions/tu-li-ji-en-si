@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CrossChapterRepetitionDetector,
   type CrossChapterInput,
-  type CrossChapterRepetitionReport,
-  type RepetitionMatch,
 } from './cross-chapter-repetition';
 
 // ── Helpers ────────────────────────────────────────────────────────

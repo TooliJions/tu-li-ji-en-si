@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { WakeSmoothing, type WakeCandidate, type SmoothingResult } from './wake-smoothing';
+import { WakeSmoothing, type WakeCandidate } from './wake-smoothing';
 import { HookPolicy } from './hook-policy';
 
 // ── Helpers ────────────────────────────────────────────────────────

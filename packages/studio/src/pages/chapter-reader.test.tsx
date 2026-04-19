@@ -5,6 +5,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 vi.mock('../lib/api', () => ({
   fetchChapter: vi.fn(),
   fetchAuditReport: vi.fn(),
+  fetchEntityContext: vi.fn(),
+  fetchChapterSnapshots: vi.fn(),
+  rollbackChapter: vi.fn(),
   updateChapter: vi.fn(),
   runAudit: vi.fn(),
 }));
@@ -21,6 +24,8 @@ const mockChapter = {
   wordCount: 120,
   qualityScore: 85,
   auditStatus: null,
+  warningCode: undefined,
+  warning: undefined,
   createdAt: '2026-04-19T00:00:00.000Z',
   updatedAt: '2026-04-19T01:00:00.000Z',
 };
@@ -79,7 +84,10 @@ describe('ChapterReader Page', () => {
     await waitFor(() => {
       expect(screen.getByText('第三章 暗流涌动')).toBeTruthy();
     });
-    expect(screen.getByText(/林晨坐在教室里/)).toBeTruthy();
+    expect(
+      screen.getAllByText((_, node) => node?.textContent?.includes('林晨坐在教室里') ?? false)
+        .length
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/竞赛试卷的最后一道题/)).toBeTruthy();
   });
 
@@ -181,6 +189,15 @@ describe('ChapterReader Page', () => {
 
   it('toggles flow mode when clicking flow mode button', async () => {
     vi.mocked(api.fetchChapter).mockResolvedValue(mockChapter);
+    vi.mocked(api.fetchEntityContext).mockResolvedValue({
+      name: '林晨',
+      type: 'character',
+      currentLocation: '教室',
+      emotion: '警惕',
+      inventory: ['竞赛试卷'],
+      relationships: [{ with: '苏小雨', type: '同伴', affinity: '信任' }],
+      activeHooks: [{ id: 'hook-001', description: '档案室谜团', status: 'open' }],
+    });
 
     renderWithRouter();
 
@@ -193,7 +210,20 @@ describe('ChapterReader Page', () => {
 
     // In flow mode, metadata and other UI elements should be hidden
     // Only the content should be prominently visible
-    expect(screen.getByText(/林晨坐在教室里/)).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.textContent?.includes('林晨坐在教室里') ?? false)).toBeTruthy();
+
+    const highlightedEntity = screen.getAllByRole('mark').find((node) => node.textContent === '林晨');
+    expect(highlightedEntity).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.mouseEnter(highlightedEntity!);
+    });
+
+    await waitFor(() => {
+      expect(api.fetchEntityContext).toHaveBeenCalledWith('book-001', '林晨', 3);
+      expect(screen.getByText(/教室/)).toBeTruthy();
+      expect(screen.getByText('竞赛试卷')).toBeTruthy();
+    });
   });
 
   it('shows navigation to previous/next chapter', async () => {
@@ -213,8 +243,10 @@ describe('ChapterReader Page', () => {
   it('shows pollution warning banner for polluted chapters', async () => {
     const pollutedChapter = {
       ...mockChapter,
-      qualityScore: 20,
+      qualityScore: null,
       status: 'draft' as const,
+      warningCode: 'accept_with_warnings' as const,
+      warning: '修订次数用尽，已按 accept_with_warnings 降级接受结果',
     };
     vi.mocked(api.fetchChapter).mockResolvedValue(pollutedChapter);
 
@@ -223,6 +255,8 @@ describe('ChapterReader Page', () => {
     await waitFor(() => {
       expect(screen.getAllByText('污染隔离').length).toBeGreaterThanOrEqual(1);
     });
+    expect(screen.getAllByText('强制通过').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/污染隔离已启用/)).toBeTruthy();
   });
 
   it('shows draft status badge', async () => {
@@ -238,8 +272,10 @@ describe('ChapterReader Page', () => {
   it('shows PollutionBadge component for polluted chapters', async () => {
     const pollutedChapter = {
       ...mockChapter,
-      qualityScore: 20,
+      qualityScore: null,
       status: 'draft' as const,
+      warningCode: 'accept_with_warnings' as const,
+      warning: '修订次数用尽，已按 accept_with_warnings 降级接受结果',
     };
     vi.mocked(api.fetchChapter).mockResolvedValue(pollutedChapter);
 

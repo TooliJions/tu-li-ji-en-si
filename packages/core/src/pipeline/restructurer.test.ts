@@ -1,16 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  ChapterRestructurer,
-  type MergeChaptersInput,
-  type SplitChapterInput,
-  type RestructureResult,
-} from './restructurer';
+import { ChapterRestructurer } from './restructurer';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
-import type { LLMProvider, LLMResponse } from '../llm/provider';
-import type { ChapterIndex, Manifest } from '../models/state';
+import type { LLMProvider } from '../llm/provider';
+import type { ChapterIndex } from '../models/state';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -366,7 +361,7 @@ describe('ChapterRestructurer', () => {
 
     it('distributes facts to the correct new chapters', async () => {
       // Need at least 2 facts for chapter 1 to test distribution
-      const { stateManager, stateStore } = setupBook(rootDir, 'book1', [
+      const { stateStore } = setupBook(rootDir, 'book1', [
         'Paragraph 1\n\nParagraph 2\n\nParagraph 3\n\nParagraph 4',
       ]);
 
@@ -401,7 +396,7 @@ describe('ChapterRestructurer', () => {
     });
 
     it('re-anchors hooks for split chapters', async () => {
-      const { stateManager, stateStore } = setupBook(rootDir, 'book1', [
+      const { stateStore } = setupBook(rootDir, 'book1', [
         'Hook1 paragraph content here\n\nHook2 paragraph content here\n\nHook3 paragraph content\n\nHook4 paragraph content',
       ]);
 

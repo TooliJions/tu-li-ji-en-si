@@ -4,14 +4,11 @@ import { applyRuntimeStateDelta } from './reducer';
 import { validateDelta } from './validator';
 import { SyncValidator } from './sync-validator';
 import { ProjectionRenderer } from './projections';
-import type { Manifest } from '../models/state';
+import type { Delta } from '../models/state';
 
 // ─── Types ─────────────────────────────────────────────────────
 
-export interface ImportAction {
-  type: string;
-  payload: Record<string, unknown>;
-}
+export type ImportAction = Delta['actions'][number];
 
 export interface ImportResult {
   success: boolean;
@@ -22,7 +19,13 @@ export interface ImportResult {
   errors?: string[];
 }
 
-export type ImportFileTarget = 'current_state.md' | 'hooks.md' | 'chapter_summaries.md';
+export type ImportFileTarget =
+  | 'current_state.md'
+  | 'hooks.md'
+  | 'chapter_summaries.md'
+  | 'subplot_board.md'
+  | 'emotional_arcs.md'
+  | 'character_matrix.md';
 
 // ─── StateImporter ─────────────────────────────────────────────
 // 负责将手动编辑的 Markdown 导入为 JSON Delta 并应用到状态。

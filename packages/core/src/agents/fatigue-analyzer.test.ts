@@ -3,7 +3,6 @@ import {
   FatigueAnalyzer,
   type FatigueInput,
   type FatigueOutput,
-  type FatigueIssue,
 } from './fatigue-analyzer';
 import type { LLMProvider } from '../llm/provider';
 

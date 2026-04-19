@@ -39,7 +39,7 @@ describe('Fanfic Core', () => {
     });
 
     it('returns generic constraints for unknown mode', () => {
-      const constraints = buildFanficConstraints('unknown' as any);
+      const constraints = buildFanficConstraints('unknown' as unknown as FanficMode);
       expect(constraints.must.length).toBe(0);
       expect(constraints.mode).toBe('unknown');
     });
@@ -99,7 +99,7 @@ describe('Fanfic Core', () => {
     });
 
     it('throws on empty mode', () => {
-      expect(() => applyFanficMode('' as any, 'test')).toThrow();
+      expect(() => applyFanficMode('' as unknown as FanficMode, 'test')).toThrow();
     });
   });
 });

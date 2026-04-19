@@ -3,10 +3,8 @@ import {
   OutlinePlanner,
   type OutlineBrief,
   type OutlineResult,
-  type ActOutline,
-  type ChapterBeat,
 } from './planner';
-import type { LLMProvider, LLMResponse } from '../llm/provider';
+import type { LLMProvider } from '../llm/provider';
 
 // ── Helpers ───────────────────────────────────────────────────
 

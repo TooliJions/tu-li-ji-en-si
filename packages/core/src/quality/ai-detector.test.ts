@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   AIGCDetector,
-  type AICategory,
-  type DetectionIssue,
-  type DetectionReport,
 } from './ai-detector';
 
 // ── Helpers ────────────────────────────────────────────────────────

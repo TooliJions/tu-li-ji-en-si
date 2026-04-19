@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HookArbiter, type ArbiterConfig } from './hook-arbiter';
+import { HookArbiter } from './hook-arbiter';
 import type { Hook } from '../models/state';
 
 // ── Helpers ────────────────────────────────────────────────────────

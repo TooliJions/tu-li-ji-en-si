@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, ArrowRight, CheckSquare } from 'lucide-react';
+import { FileText, CheckSquare } from 'lucide-react';
 
 const SEVERITY_COLORS: Record<string, string> = {
   warning: 'bg-orange-100 text-orange-700',

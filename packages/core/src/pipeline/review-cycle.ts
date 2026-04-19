@@ -218,7 +218,7 @@ ${content.substring(0, 5000)}
   "summary": "审计总结"
 }`;
 
-    return this.provider.generateJSON(prompt);
+    return this.provider.generateJSON({ prompt });
   }
 
   async #revise(
@@ -239,7 +239,7 @@ ${content}
 
 请修订后输出完整正文。`;
 
-    const result = await this.provider.generate(prompt);
+    const result = await this.provider.generate({ prompt });
     return result.text;
   }
 }

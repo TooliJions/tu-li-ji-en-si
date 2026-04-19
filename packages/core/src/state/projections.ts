@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
-import type { Manifest, Hook, Fact, Character, WorldRule } from '../models/state';
+import type { Manifest } from '../models/state';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -231,6 +231,111 @@ export class ProjectionRenderer {
   }
 
   /**
+   * 渲染 subplot_board.md 内容
+   */
+  static renderSubplotBoard(manifest: Manifest): string {
+    const lines: string[] = [];
+
+    lines.push('# 支线看板');
+    lines.push('');
+
+    const activeHooks = manifest.hooks.filter((hook) =>
+      ['open', 'progressing', 'deferred', 'dormant'].includes(hook.status)
+    );
+
+    if (activeHooks.length === 0) {
+      lines.push('暂无支线');
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    for (const hook of activeHooks) {
+      lines.push(`## ${hook.description}`);
+      lines.push('');
+      lines.push(`- **状态**: ${HOOK_STATUS_LABELS[hook.status] ?? hook.status}`);
+      lines.push(`- **优先级**: ${hook.priority}`);
+      lines.push(`- **埋设章节**: 第 ${hook.plantedChapter} 章`);
+      if (hook.expectedResolutionMin && hook.expectedResolutionMax) {
+        lines.push(
+          `- **预期推进窗口**: 第 ${hook.expectedResolutionMin}-${hook.expectedResolutionMax} 章`
+        );
+      }
+      if (hook.relatedChapters.length > 0) {
+        lines.push(`- **涉及章节**: ${hook.relatedChapters.map((c) => `第 ${c} 章`).join('、')}`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * 渲染 emotional_arcs.md 内容
+   */
+  static renderEmotionalArcs(manifest: Manifest): string {
+    const lines: string[] = [];
+
+    lines.push('# 情感弧线');
+    lines.push('');
+
+    if (manifest.characters.length === 0) {
+      lines.push('暂无情感弧线');
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    for (const character of manifest.characters) {
+      lines.push(`## ${character.name}`);
+      lines.push('');
+      lines.push(`- **角色定位**: ${CHARACTER_ROLE_LABELS[character.role] ?? character.role}`);
+      lines.push(`- **当前弧光**: ${character.arc ?? '待建立'}`);
+      lines.push(
+        `- **相关伏笔数**: ${manifest.hooks.filter((hook) => hook.relatedCharacters.includes(character.id)).length}`
+      );
+      if (character.lastAppearance) {
+        lines.push(`- **最近登场**: 第 ${character.lastAppearance} 章`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * 渲染 character_matrix.md 内容
+   */
+  static renderCharacterMatrix(manifest: Manifest): string {
+    const lines: string[] = [];
+
+    lines.push('# 角色矩阵');
+    lines.push('');
+
+    if (manifest.characters.length === 0) {
+      lines.push('暂无角色矩阵');
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    for (const character of manifest.characters) {
+      lines.push(`## ${character.name}`);
+      lines.push('');
+      lines.push(`- **角色类型**: ${CHARACTER_ROLE_LABELS[character.role] ?? character.role}`);
+      lines.push(`- **特征**: ${character.traits.length > 0 ? character.traits.join('、') : '待补充'}`);
+      if (Object.keys(character.relationships).length > 0) {
+        lines.push('- **关系矩阵**:');
+        for (const [targetId, description] of Object.entries(character.relationships)) {
+          lines.push(`  - ${targetId}: ${description}`);
+        }
+      } else {
+        lines.push('- **关系矩阵**: 暂无');
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * 计算 manifest 的 SHA-256 状态哈希
    */
   static computeStateHash(manifest: Manifest): string {
@@ -252,6 +357,9 @@ export class ProjectionRenderer {
       { name: 'current_state.md', content: this.renderCurrentState(manifest) },
       { name: 'hooks.md', content: this.renderHooks(manifest) },
       { name: 'chapter_summaries.md', content: this.renderChapterSummaries(summaries) },
+      { name: 'subplot_board.md', content: this.renderSubplotBoard(manifest) },
+      { name: 'emotional_arcs.md', content: this.renderEmotionalArcs(manifest) },
+      { name: 'character_matrix.md', content: this.renderCharacterMatrix(manifest) },
     ];
 
     // Write Markdown files

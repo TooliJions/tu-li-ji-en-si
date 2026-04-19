@@ -176,7 +176,7 @@ describe('DoctorView Page', () => {
     });
 
     await waitFor(() => {
-      expect(api.reorgRecovery).toHaveBeenCalled();
+      expect(api.reorgRecovery).toHaveBeenCalledWith('book-001');
     });
   });
 

@@ -148,7 +148,6 @@ export class EmotionalArcTracker {
 
       // Detect alerts
       for (let i = 1; i < chapters.length; i++) {
-        const prev = chapters[i - 1];
         const curr = chapters[i];
 
         // Sudden shift detection

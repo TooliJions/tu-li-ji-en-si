@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  HookAgenda,
-  type HookScheduleItem,
-  type OverdueReport,
-  type WakeResult,
-} from './hook-agenda';
+import { HookAgenda } from './hook-agenda';
 import { HookPolicy } from './hook-policy';
 import type { Hook } from '../models/state';
 
@@ -612,7 +607,7 @@ describe('HookAgenda', () => {
       hooks[1].wakeAtChapter = 7;
 
       // Second call at chapter 7: h2 should wake
-      const result2 = agenda.onChapterReached(hooks, 7);
+      agenda.onChapterReached(hooks, 7);
       expect(hooks[1].status).toBe('open');
     });
 

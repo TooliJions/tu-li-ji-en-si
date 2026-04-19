@@ -108,7 +108,7 @@ export default function HookPanel() {
   useEffect(() => {
     Promise.all([fetchHooks(bookId), fetchHookHealth(bookId), fetchHookTimeline(bookId)])
       .then(([h, he, t]) => {
-        setHooks(h.data || []);
+        setHooks(h);
         setHealth(he);
         setTimeline(t);
       })
@@ -161,7 +161,7 @@ export default function HookPanel() {
   async function handleWake() {
     if (!wakingHook) return;
     try {
-      const result = await wakeHook(bookId, wakingHook.id, 'open');
+      await wakeHook(bookId, wakingHook.id, 'open');
       setHooks((prev) => prev.map((h) => (h.id === wakingHook.id ? { ...h, status: 'open' } : h)));
       setWakingHook(null);
     } catch {

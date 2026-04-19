@@ -1,5 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { DaemonScheduler, DaemonState as CoreDaemonState } from '@cybernovelist/core';
+import {
+  clearStudioDaemon,
+  getStudioDaemon,
+  getStudioPipelineRunner,
+  hasStudioBookRuntime,
+  readStudioBookRuntime,
+  setStudioDaemon,
+} from '../core-bridge';
+import { eventHub } from '../sse';
 
 interface DaemonState {
   status: 'idle' | 'running' | 'paused' | 'stopped';
@@ -12,11 +22,9 @@ interface DaemonState {
   startedAt: string | null;
 }
 
-export const daemonStates = new Map<string, DaemonState>();
-
-function getDaemonState(bookId: string): DaemonState {
-  if (!daemonStates.has(bookId)) {
-    daemonStates.set(bookId, {
+function toApiState(scheduler?: DaemonScheduler): DaemonState {
+  if (!scheduler) {
+    return {
       status: 'idle',
       nextChapter: 1,
       chaptersCompleted: 0,
@@ -25,9 +33,20 @@ function getDaemonState(bookId: string): DaemonState {
       dailyTokenLimit: 1000000,
       consecutiveFallbacks: 0,
       startedAt: null,
-    });
+    };
   }
-  return daemonStates.get(bookId)!;
+
+  const status = scheduler.getStatus();
+  return {
+    status: status.state as DaemonState['status'],
+    nextChapter: status.nextChapter ?? 1,
+    chaptersCompleted: status.chaptersCompleted,
+    intervalSeconds: Math.max(1, Math.round(status.intervalMs / 1000)),
+    dailyTokenUsed: status.dailyTokenUsed,
+    dailyTokenLimit: status.dailyTokenLimit,
+    consecutiveFallbacks: status.consecutiveFallbacks,
+    startedAt: status.startedAt ?? null,
+  };
 }
 
 const startSchema = z.object({
@@ -43,12 +62,19 @@ export function createDaemonRouter(): Hono {
   // GET /api/books/:bookId/daemon
   router.get('/', (c) => {
     const bookId = c.req.param('bookId')!;
-    return c.json({ data: getDaemonState(bookId) });
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+    return c.json({ data: toApiState(getStudioDaemon(bookId)) });
   });
 
   // POST /api/books/:bookId/daemon/start
   router.post('/start', async (c) => {
     const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = startSchema.safeParse(body);
     if (!result.success) {
@@ -57,31 +83,69 @@ export function createDaemonRouter(): Hono {
         400
       );
     }
-    const state = getDaemonState(bookId);
-    Object.assign(state, {
-      status: 'running',
-      nextChapter: result.data.fromChapter,
-      intervalSeconds: result.data.interval,
+
+    const intervalMs = result.data.interval * 1000;
+    const book = readStudioBookRuntime(bookId);
+    const daemon = new DaemonScheduler({
+      bookId,
+      rootDir: '',
+      fromChapter: result.data.fromChapter,
+      toChapter: result.data.toChapter,
       dailyTokenLimit: result.data.dailyTokenLimit,
-      startedAt: new Date().toISOString(),
+      mode: 'cloud',
+      targetRpm: 60000 / intervalMs,
+      minIntervalMs: intervalMs,
+      maxIntervalMs: intervalMs,
+      bookTitle: book?.title,
     });
-    return c.json({ data: state });
+
+    daemon.on('state_change', (event) => {
+      eventHub.sendEvent(bookId, 'daemon_event', {
+        type: 'state_change',
+        from: event.from,
+        to: event.to,
+      });
+
+      if (event.to === CoreDaemonState.Idle || event.to === CoreDaemonState.Stopped) {
+        clearStudioDaemon(bookId);
+      }
+    });
+    daemon.on('chapter_complete', (event) => {
+      eventHub.sendEvent(bookId, 'chapter_complete', event);
+    });
+    daemon.on('chapter_error', (event) => {
+      eventHub.sendEvent(bookId, 'daemon_event', { type: 'chapter_error', ...event });
+    });
+
+    setStudioDaemon(bookId, daemon);
+    daemon.start(getStudioPipelineRunner());
+
+    return c.json({ data: toApiState(daemon) });
   });
 
   // POST /api/books/:bookId/daemon/pause
   router.post('/pause', (c) => {
     const bookId = c.req.param('bookId')!;
-    const state = getDaemonState(bookId);
-    state.status = 'paused';
-    return c.json({ data: state });
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const daemon = getStudioDaemon(bookId);
+    daemon?.pause();
+    return c.json({ data: toApiState(daemon) });
   });
 
   // POST /api/books/:bookId/daemon/stop
   router.post('/stop', (c) => {
     const bookId = c.req.param('bookId')!;
-    const state = getDaemonState(bookId);
-    state.status = 'stopped';
-    return c.json({ data: state });
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const daemon = getStudioDaemon(bookId);
+    daemon?.stop();
+    clearStudioDaemon(bookId);
+    return c.json({ data: toApiState(undefined) });
   });
 
   return router;

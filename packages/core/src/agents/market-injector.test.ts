@@ -3,7 +3,6 @@ import {
   MarketInjector,
   type MarketInput,
   type MarketOutput,
-  type MarketSuggestion,
 } from './market-injector';
 import type { LLMProvider } from '../llm/provider';
 

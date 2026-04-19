@@ -111,5 +111,92 @@ export function createAnalyticsRouter(): Hono {
     });
   });
 
+  // GET /api/books/:bookId/analytics/emotional-arcs
+  router.get('/emotional-arcs', (c) => {
+    return c.json({
+      data: {
+        characters: [
+          {
+            name: '林晨',
+            chapters: [
+              {
+                chapterNumber: 1,
+                emotions: {
+                  joy: 0.7,
+                  anger: 0.1,
+                  sadness: 0.1,
+                  fear: 0.1,
+                  surprise: 0,
+                  disgust: 0,
+                  trust: 0,
+                  anticipation: 0,
+                },
+                deltas: null,
+                dominantEmotion: 'joy',
+                summary: '喜悦为主(70%)',
+              },
+              {
+                chapterNumber: 2,
+                emotions: {
+                  joy: 0.5,
+                  anger: 0.2,
+                  sadness: 0.2,
+                  fear: 0.1,
+                  surprise: 0,
+                  disgust: 0,
+                  trust: 0,
+                  anticipation: 0,
+                },
+                deltas: {
+                  joy: -0.2,
+                  anger: 0.1,
+                  sadness: 0.1,
+                  fear: 0,
+                  surprise: 0,
+                  disgust: 0,
+                  trust: 0,
+                  anticipation: 0,
+                },
+                dominantEmotion: 'joy',
+                summary: '喜悦为主(50%)',
+              },
+            ],
+          },
+          {
+            name: '苏小雨',
+            chapters: [
+              {
+                chapterNumber: 1,
+                emotions: {
+                  joy: 0.2,
+                  anger: 0.1,
+                  sadness: 0.6,
+                  fear: 0.1,
+                  surprise: 0,
+                  disgust: 0,
+                  trust: 0,
+                  anticipation: 0,
+                },
+                deltas: null,
+                dominantEmotion: 'sadness',
+                summary: '悲伤为主(60%)',
+              },
+            ],
+          },
+        ],
+        alerts: [
+          {
+            type: 'sudden_shift',
+            character: '林晨',
+            chapterNumber: 2,
+            emotion: 'joy',
+            severity: 'warning',
+            message: '林晨 在第2章 情感波动明显',
+          },
+        ],
+      },
+    });
+  });
+
   return router;
 }

@@ -49,18 +49,6 @@ const CATEGORY_NAMES: AICategory[] = [
   'hollow-description',
 ];
 
-const CATEGORY_LABELS: Record<AICategory, string> = {
-  'cliche-phrase': 'AI套话',
-  'monotonous-syntax': '句式单调',
-  'analytical-report': '分析报告体',
-  'meta-narrative': '元叙事',
-  'imagery-repetition': '意象重复',
-  'semantic-repetition': '语义重复',
-  'logic-gap': '逻辑跳跃',
-  'false-emotion': '情感虚假',
-  'hollow-description': '描述空洞',
-};
-
 const DEFAULT_WEIGHTS: Record<AICategory, number> = {
   'cliche-phrase': 0.15,
   'monotonous-syntax': 0.12,
@@ -132,7 +120,7 @@ function detectClichePhrases(text: string): { score: number; issues: DetectionIs
  */
 function detectMonotonousSyntax(text: string): { score: number; issues: DetectionIssue[] } {
   // Split by sentence terminators (both Chinese and Western)
-  const sentences = text.split(/[。！？\.\n]+/).filter((l) => l.trim().length > 2);
+  const sentences = text.split(/[。！？.\n]+/).filter((l) => l.trim().length > 2);
   if (sentences.length < 3) return { score: 0, issues: [] };
 
   // Check for repeated sentence starters (use 1-char starter for Chinese text)

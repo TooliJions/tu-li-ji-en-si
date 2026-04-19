@@ -3,7 +3,6 @@ import {
   AuditTierClassifier,
   type AuditInput,
   type AuditOutput,
-  type ClassifiedIssue,
 } from './audit-tier-classifier';
 import type { LLMProvider } from '../llm/provider';
 

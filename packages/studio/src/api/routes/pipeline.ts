@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
+import { readStudioBookRuntime, getStudioPipelineRunner, hasStudioBookRuntime } from '../core-bridge';
+import { eventHub } from '../sse';
 
 export const pipelineStore = new Map<
   string,
@@ -11,12 +12,21 @@ export const pipelineStore = new Map<
     currentStage: string;
     progress: Record<string, { status: string; elapsedMs: number }>;
     startedAt: string;
+    finishedAt?: string;
+    result?: {
+      success: boolean;
+      chapterNumber: number;
+      status?: string;
+      persisted?: boolean;
+      error?: string;
+    };
   }
 >();
 
 const writeNextSchema = z.object({
   chapterNumber: z.number().int().positive(),
   customIntent: z.string().optional(),
+  userIntent: z.string().optional(),
   skipAudit: z.boolean().optional().default(false),
 });
 
@@ -26,8 +36,8 @@ const fastDraftSchema = z.object({
 });
 
 const upgradeDraftSchema = z.object({
-  draftId: z.string().min(1),
-  content: z.string(),
+  chapterNumber: z.number().int().positive(),
+  userIntent: z.string().optional(),
 });
 
 const writeDraftSchema = z.object({
@@ -50,11 +60,57 @@ function createPipelineEntry() {
   return id;
 }
 
+function markCurrentStage(pipelineId: string, stage: string): void {
+  const pipeline = pipelineStore.get(pipelineId);
+  if (!pipeline) {
+    return;
+  }
+
+  pipeline.currentStage = stage;
+  for (const [name, progress] of Object.entries(pipeline.progress)) {
+    if (name === stage) {
+      progress.status = 'running';
+    } else if (progress.status !== 'completed') {
+      progress.status = 'pending';
+    }
+  }
+}
+
+function finalizePipeline(
+  pipelineId: string,
+  result: {
+    success: boolean;
+    chapterNumber: number;
+    status?: string;
+    persisted?: boolean;
+    error?: string;
+  }
+): void {
+  const pipeline = pipelineStore.get(pipelineId);
+  if (!pipeline) {
+    return;
+  }
+
+  pipeline.status = result.success ? 'completed' : 'failed';
+  pipeline.currentStage = result.success ? 'persisting' : pipeline.currentStage;
+  pipeline.finishedAt = new Date().toISOString();
+  pipeline.result = result;
+
+  for (const progress of Object.values(pipeline.progress)) {
+    progress.status = result.success ? 'completed' : progress.status === 'running' ? 'failed' : progress.status;
+  }
+}
+
 export function createPipelineRouter(): Hono {
   const router = new Hono();
 
   // POST /api/books/:bookId/pipeline/write-next
   router.post('/write-next', async (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = writeNextSchema.safeParse(body);
     if (!result.success) {
@@ -64,6 +120,53 @@ export function createPipelineRouter(): Hono {
       );
     }
     const pipelineId = createPipelineEntry();
+    const userIntent = result.data.userIntent ?? result.data.customIntent ?? '继续上一章';
+
+    eventHub.sendEvent(bookId, 'pipeline_progress', {
+      pipelineId,
+      status: 'running',
+      currentStage: 'planning',
+    });
+
+    void (async () => {
+      const book = readStudioBookRuntime(bookId);
+      const runner = getStudioPipelineRunner();
+
+      markCurrentStage(pipelineId, 'composing');
+      const chapterResult = result.data.skipAudit
+        ? await runner.writeDraft({
+            bookId,
+            chapterNumber: result.data.chapterNumber,
+            title: `第 ${result.data.chapterNumber} 章`,
+            genre: book?.genre ?? 'urban',
+            sceneDescription: userIntent,
+          })
+        : await runner.composeChapter({
+            bookId,
+            chapterNumber: result.data.chapterNumber,
+            title: `第 ${result.data.chapterNumber} 章`,
+            genre: book?.genre ?? 'urban',
+            userIntent,
+          });
+
+      finalizePipeline(pipelineId, {
+        success: chapterResult.success,
+        chapterNumber: chapterResult.chapterNumber,
+        status: chapterResult.status,
+        persisted: chapterResult.persisted,
+        error: chapterResult.error,
+      });
+
+      eventHub.sendEvent(bookId, 'pipeline_progress', pipelineStore.get(pipelineId));
+      if (chapterResult.success) {
+        eventHub.sendEvent(bookId, 'chapter_complete', {
+          pipelineId,
+          chapterNumber: chapterResult.chapterNumber,
+          status: chapterResult.status,
+        });
+      }
+    })();
+
     return c.json(
       {
         data: {
@@ -78,6 +181,11 @@ export function createPipelineRouter(): Hono {
 
   // POST /api/books/:bookId/pipeline/fast-draft
   router.post('/fast-draft', async (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = fastDraftSchema.safeParse(body);
     if (!result.success) {
@@ -86,11 +194,21 @@ export function createPipelineRouter(): Hono {
         400
       );
     }
+
+    const book = readStudioBookRuntime(bookId);
+    const draft = await getStudioPipelineRunner().writeFastDraft({
+      bookId,
+      chapterNumber: 1,
+      title: '快速试写',
+      genre: book?.genre ?? 'urban',
+      sceneDescription: result.data.customIntent ?? '快速试写当前主线',
+    });
+
     return c.json({
       data: {
-        content: '【快速草稿】这是一个快速试写的占位内容...',
+        content: draft.content ?? '',
         wordCount: result.data.wordCount,
-        elapsedMs: 12000,
+        elapsedMs: draft.usage?.totalTokens ?? 0,
         llmCalls: 1,
         draftId: `draft-temp-${Date.now()}`,
       },
@@ -99,6 +217,11 @@ export function createPipelineRouter(): Hono {
 
   // POST /api/books/:bookId/pipeline/upgrade-draft
   router.post('/upgrade-draft', async (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = upgradeDraftSchema.safeParse(body);
     if (!result.success) {
@@ -108,11 +231,48 @@ export function createPipelineRouter(): Hono {
       );
     }
     const pipelineId = createPipelineEntry();
+    eventHub.sendEvent(bookId, 'pipeline_progress', {
+      pipelineId,
+      status: 'running',
+      currentStage: 'planning',
+    });
+
+    void (async () => {
+      markCurrentStage(pipelineId, 'revising');
+      const chapterResult = await getStudioPipelineRunner().upgradeDraft({
+        bookId,
+        chapterNumber: result.data.chapterNumber,
+        userIntent: result.data.userIntent,
+      });
+
+      finalizePipeline(pipelineId, {
+        success: chapterResult.success,
+        chapterNumber: chapterResult.chapterNumber,
+        status: chapterResult.status,
+        persisted: chapterResult.persisted,
+        error: chapterResult.error,
+      });
+
+      eventHub.sendEvent(bookId, 'pipeline_progress', pipelineStore.get(pipelineId));
+      if (chapterResult.success) {
+        eventHub.sendEvent(bookId, 'chapter_complete', {
+          pipelineId,
+          chapterNumber: chapterResult.chapterNumber,
+          status: chapterResult.status,
+        });
+      }
+    })();
+
     return c.json({ data: { pipelineId, status: 'running' } }, 202);
   });
 
   // POST /api/books/:bookId/pipeline/write-draft
   router.post('/write-draft', async (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = writeDraftSchema.safeParse(body);
     if (!result.success) {
@@ -121,13 +281,23 @@ export function createPipelineRouter(): Hono {
         400
       );
     }
+
+    const book = readStudioBookRuntime(bookId);
+    const draft = await getStudioPipelineRunner().writeDraft({
+      bookId,
+      chapterNumber: result.data.chapterNumber,
+      title: `第 ${result.data.chapterNumber} 章`,
+      genre: book?.genre ?? 'urban',
+      sceneDescription: '草稿模式推进主线',
+    });
+
     return c.json({
       data: {
         number: result.data.chapterNumber,
         title: null,
-        content: '【草稿模式】跳过审计的草稿内容...',
-        status: 'draft',
-        wordCount: 2000,
+        content: draft.content ?? '',
+        status: draft.status ?? 'draft',
+        wordCount: draft.content?.length ?? 0,
         qualityScore: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

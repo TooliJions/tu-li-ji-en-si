@@ -2,9 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   PipelineScheduler,
   type PipelineStage,
-  type PipelineConfig,
   type PipelineContext,
-  type PipelineExecutionResult,
   StageStatus,
 } from './scheduler';
 
@@ -193,8 +191,7 @@ describe('PipelineScheduler', () => {
         precondition: (ctx) => ctx.data.skipAudit === true,
       });
 
-      const ctx = makeContext({ skipAudit: false });
-      const order = scheduler.resolveOrder(['audit']);
+      const order = scheduler.resolveOrder(['audit'], makeContext({ skipAudit: false }));
       expect(order.length).toBe(1);
     });
   });

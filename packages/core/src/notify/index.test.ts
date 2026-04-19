@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createNotifier,
-  type NotifyConfig,
   type NotifyChannel,
   type NotifyEvent,
-  type NotifyResult,
 } from './index';
 
 // ─── Mock helpers ────────────────────────────────────────────────

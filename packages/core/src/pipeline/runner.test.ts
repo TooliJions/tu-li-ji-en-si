@@ -17,7 +17,7 @@ vi.mock('fs', () => ({
         chapters: [],
         totalChapters: 0,
         totalWords: 0,
-        updatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
       });
     }
     // Default: manifest data
@@ -42,7 +42,7 @@ vi.mock('path', () => ({
   join: (...args: string[]) => args.join('/'),
 }));
 
-import { PipelineRunner, type PipelineConfig, type UpgradeDraftInput } from './runner';
+import { PipelineRunner } from './runner';
 import * as fs from 'fs';
 
 function createMockProvider(): LLMProvider & {
@@ -65,6 +65,30 @@ describe('PipelineRunner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+      if (filePath.includes('meta.json')) {
+        return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+      }
+      if (filePath.includes('index.json')) {
+        return JSON.stringify({
+          bookId: 'test-book',
+          chapters: [],
+          totalChapters: 0,
+          totalWords: 0,
+          lastUpdated: new Date().toISOString(),
+        });
+      }
+      return JSON.stringify({
+        bookId: 'test-book',
+        versionToken: 1,
+        lastChapterWritten: 0,
+        hooks: [],
+        facts: [],
+        characters: [],
+        worldRules: [],
+        updatedAt: new Date().toISOString(),
+      });
+    });
 
     mockProvider = createMockProvider();
 
@@ -89,6 +113,12 @@ describe('PipelineRunner', () => {
         llmConfig: { apiKey: 'key', baseURL: 'url', model: 'model' },
       });
       expect(defaultRunner).toBeDefined();
+    });
+
+    it('throws when neither provider nor llmConfig is provided', () => {
+      expect(() => new PipelineRunner({ rootDir: '/tmp/test' })).toThrow(
+        '必须提供 provider 或 llmConfig'
+      );
     });
   });
 
@@ -164,6 +194,28 @@ describe('PipelineRunner', () => {
 
       expect(result.success).toBe(true);
       expect(result.content).toBeTruthy();
+    });
+
+    it('passes draft prompt inside LLM request object', async () => {
+      mockProvider.generate.mockResolvedValue({
+        text: '草稿内容',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test-model',
+      });
+
+      await runner.writeDraft({
+        bookId: 'test-book',
+        chapterNumber: 2,
+        title: '第二章',
+        genre: 'xianxia',
+        sceneDescription: '林风调查异常',
+      });
+
+      expect(mockProvider.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('林风调查异常'),
+        })
+      );
     });
 
     it('marks chapter as draft status', async () => {
@@ -548,6 +600,14 @@ describe('PipelineRunner', () => {
 
       expect(result.success).toBe(true);
       expect(result.content).toBeTruthy();
+      expect(result.warningCode).toBe('accept_with_warnings');
+      expect(result.error).toBeUndefined();
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const chapterWrite = writeCalls.find((call: unknown[]) =>
+        String(call[0]).includes('chapter-0003.md')
+      );
+      expect(String(chapterWrite?.[1] ?? '')).toContain('warningCode: accept_with_warnings');
     });
 
     it('returns error on fallbackAction=pause after max retries', async () => {
@@ -654,6 +714,91 @@ describe('PipelineRunner', () => {
       expect(result.persisted).toBe(true);
     });
 
+    it('persists extracted facts and hooks into manifest state', async () => {
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        summary: '上一章',
+        activeHooks: [],
+        characterStates: [],
+        locationContext: '某处',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        chapterGoal: '目标',
+        keyScenes: [],
+        emotionalArc: '',
+        hookProgression: [],
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '记忆落盘测试',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
+      });
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '润色稿',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '通过',
+      });
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [
+          { content: '林风获得黑色玉佩', category: 'plot', confidence: 'high' },
+        ],
+        newHooks: [
+          {
+            id: 'hook-black-jade',
+            description: '黑色玉佩的来历',
+            type: 'plot',
+            priority: 'major',
+          },
+        ],
+        updatedHooks: [],
+      });
+
+      const result = await runner.writeNextChapter({
+        bookId: 'test-book',
+        chapterNumber: 12,
+        title: '记忆落盘章',
+        genre: 'xianxia',
+        userIntent: '测试记忆落盘',
+      });
+
+      expect(result.success).toBe(true);
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const manifestWrites = writeCalls.filter((call: unknown[]) =>
+        String(call[0]).includes('manifest.json')
+      );
+      expect(manifestWrites.length).toBeGreaterThan(0);
+
+      const finalManifest = JSON.parse(String(manifestWrites.at(-1)![1])) as {
+        lastChapterWritten: number;
+        facts: Array<{ content: string; chapterNumber: number }>;
+        hooks: Array<{ id: string; description: string }>;
+      };
+
+      expect(finalManifest.lastChapterWritten).toBe(12);
+      expect(finalManifest.facts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            content: '林风获得黑色玉佩',
+            chapterNumber: 12,
+          }),
+        ])
+      );
+      expect(finalManifest.hooks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'hook-black-jade',
+            description: '黑色玉佩的来历',
+          }),
+        ])
+      );
+    });
+
     it('updates existing chapter status in index when chapter already exists', async () => {
       mockProvider.generateJSON.mockResolvedValueOnce({
         summary: '上一章',
@@ -700,7 +845,7 @@ describe('PipelineRunner', () => {
             chapters: [{ chapterNumber: 11, title: '已存在章', status: 'planned' }],
             totalChapters: 1,
             totalWords: 0,
-            updatedAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
           });
         }
         return JSON.stringify({
@@ -725,15 +870,26 @@ describe('PipelineRunner', () => {
 
       expect(result.success).toBe(true);
 
-      // Verify index.json was updated with existing chapter (status: 'written', writtenAt added)
+      // Verify legacy chapter entry was normalized instead of duplicated
       const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
       const indexWrite = writeCalls.find((call: unknown[]) => {
         const fp = String(call[0]);
         return fp.includes('index.json');
       });
       expect(indexWrite).toBeDefined();
-      const indexContent = String(indexWrite![1]);
-      expect(indexContent).toContain('"status": "written"');
+      const indexPayload = JSON.parse(String(indexWrite![1])) as {
+        chapters: Array<Record<string, unknown>>;
+      };
+      expect(indexPayload.chapters).toHaveLength(1);
+      expect(indexPayload.chapters[0]).toEqual(
+        expect.objectContaining({
+          number: 11,
+          title: '更新索引章',
+          fileName: 'chapter-0011.md',
+        })
+      );
+      expect(indexPayload.chapters[0]).not.toHaveProperty('chapterNumber');
+      expect(indexPayload.chapters[0]).not.toHaveProperty('status');
     });
 
     it('returns error when composeChapter throws unexpected exception', async () => {
@@ -814,6 +970,48 @@ describe('PipelineRunner', () => {
       expect(result.chapterNumber).toBe(1);
       expect(result.title).toBe('第一章');
     });
+
+    it('writes planned chapter entries using canonical index fields', async () => {
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        chapterNumber: 2,
+        title: '第二章',
+        summary: '第二章概要',
+        keyEvents: ['事件一'],
+        targetWordCount: 3000,
+        hooks: [],
+      });
+
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        scenes: [{ description: '场景', targetWords: 1000, mood: '紧张' }],
+        characters: ['林风'],
+        hooks: [],
+      });
+
+      await runner.planChapter({
+        bookId: 'test-book',
+        chapterNumber: 2,
+        outlineContext: '进入第二章',
+      });
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const indexWrite = writeCalls.find((call: unknown[]) => String(call[0]).includes('index.json'));
+      expect(indexWrite).toBeDefined();
+
+      const payload = JSON.parse(String(indexWrite![1])) as {
+        chapters: Array<Record<string, unknown>>;
+        lastUpdated: string;
+      };
+
+      expect(payload.chapters[0]).toEqual(
+        expect.objectContaining({
+          number: 2,
+          title: '第二章',
+          fileName: 'chapter-0002.md',
+        })
+      );
+      expect(payload.chapters[0]).not.toHaveProperty('chapterNumber');
+      expect(payload).toHaveProperty('lastUpdated');
+    });
   });
 
   // ── upgradeDraft() ──────────────────────────────────────────
@@ -858,6 +1056,31 @@ describe('PipelineRunner', () => {
 
     it('detects versionToken drift and reports warning', async () => {
       // Simulate: manifest versionToken changed since draft was written
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+        if (String(filePath).includes('meta.json')) {
+          return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+        }
+        if (String(filePath).includes('index.json')) {
+          return JSON.stringify({
+            bookId: 'test-book',
+            chapters: [],
+            totalChapters: 0,
+            totalWords: 0,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+        return JSON.stringify({
+          bookId: 'test-book',
+          versionToken: 2,
+          lastChapterWritten: 0,
+          hooks: [],
+          facts: [],
+          characters: [],
+          worldRules: [],
+          updatedAt: new Date().toISOString(),
+        });
+      });
+
       mockProvider.generate.mockResolvedValue({
         text: '润色后的转正内容',
         usage: { promptTokens: 200, completionTokens: 100, totalTokens: 300 },
@@ -872,6 +1095,15 @@ describe('PipelineRunner', () => {
 
       // Should succeed but include a warning about context drift
       expect(result.success).toBe(true);
+      expect(result.warningCode).toBe('context_drift');
+      expect(result.warning).toContain('上下文版本变化');
+      expect(result.error).toBeUndefined();
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const chapterWrite = writeCalls.find((call: unknown[]) =>
+        String(call[0]).includes('chapter-0001.md')
+      );
+      expect(String(chapterWrite?.[1] ?? '')).toContain('warningCode: context_drift');
     });
 
     it('regenerates content via ScenePolisher and persists as final', async () => {

@@ -41,9 +41,25 @@ export async function rollbackChapter(bookId: string, chapterNumber: number, sna
   return res.ok;
 }
 
+export async function fetchChapterSnapshots(bookId: string, chapterNumber: number) {
+  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}/snapshots`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data || [];
+}
+
 export async function fetchChapter(bookId: string, chapterNumber: number) {
   const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}`);
   if (!res.ok) throw new Error('章节不存在');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fetchEntityContext(bookId: string, entityName: string, chapterNumber?: number) {
+  const suffix =
+    chapterNumber !== undefined ? `?chapterNumber=${encodeURIComponent(String(chapterNumber))}` : '';
+  const res = await fetch(`/api/books/${bookId}/context/${encodeURIComponent(entityName)}${suffix}`);
+  if (!res.ok) throw new Error('实体上下文不存在');
   const data = await res.json();
   return data.data;
 }
@@ -117,11 +133,11 @@ export async function startWriteDraft(bookId: string, chapterNumber: number) {
   return data.data;
 }
 
-export async function startUpgradeDraft(bookId: string, draftId: string, content: string) {
+export async function startUpgradeDraft(bookId: string, chapterNumber: number, userIntent?: string) {
   const res = await fetch(`/api/books/${bookId}/pipeline/upgrade-draft`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ draftId, content }),
+    body: JSON.stringify({ chapterNumber, userIntent }),
   });
   if (!res.ok) throw new Error('草稿转正失败');
   const data = await res.json();
@@ -187,22 +203,27 @@ export async function triggerInspirationShuffle(bookId: string) {
 }
 
 // Truth Files
-export async function fetchTruthFiles() {
-  const res = await fetch('/api/state/');
+export async function fetchTruthFiles(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/state`);
   if (!res.ok) throw new Error('获取真相文件列表失败');
   const data = await res.json();
   return data.data;
 }
 
-export async function fetchTruthFile(fileName: string) {
-  const res = await fetch(`/api/state/${fileName}`);
+export async function fetchTruthFile(bookId: string, fileName: string) {
+  const res = await fetch(`/api/books/${bookId}/state/${fileName}`);
   if (!res.ok) throw new Error('获取真相文件失败');
   const data = await res.json();
   return data.data;
 }
 
-export async function updateTruthFile(fileName: string, content: string, versionToken: number) {
-  const res = await fetch(`/api/state/${fileName}`, {
+export async function updateTruthFile(
+  bookId: string,
+  fileName: string,
+  content: string,
+  versionToken: number
+) {
+  const res = await fetch(`/api/books/${bookId}/state/${fileName}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content, versionToken }),
@@ -212,18 +233,18 @@ export async function updateTruthFile(fileName: string, content: string, version
   return data.data;
 }
 
-export async function fetchProjectionStatus() {
-  const res = await fetch('/api/state/projection-status');
+export async function fetchProjectionStatus(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/state/projection-status`);
   if (!res.ok) throw new Error('获取投影状态失败');
   const data = await res.json();
   return data.data;
 }
 
-export async function importMarkdown(fileName: string) {
-  const res = await fetch('/api/state/import-markdown', {
+export async function importMarkdown(bookId: string, fileName: string, markdownContent: string = '# 导入占位') {
+  const res = await fetch(`/api/books/${bookId}/state/import-markdown`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName }),
+    body: JSON.stringify({ fileName, markdownContent }),
   });
   if (!res.ok) throw new Error('导入 Markdown 失败');
   const data = await res.json();
@@ -401,7 +422,7 @@ export async function reorgRecovery(bookId?: string) {
 }
 
 export async function fetchStateDiff(file: string) {
-  const res = await fetch(`/api/books/state/diff?file=${file}`);
+  const res = await fetch(`/api/system/state-diff?file=${file}`);
   if (!res.ok) throw new Error('获取状态差异失败');
   const data = await res.json();
   return data.data;

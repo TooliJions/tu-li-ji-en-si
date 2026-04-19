@@ -3,7 +3,6 @@ import {
   HookAuditor,
   type HookAuditInput,
   type HookAuditOutput,
-  type HookAuditIssue,
 } from './hook-auditor';
 import type { LLMProvider } from '../llm/provider';
 

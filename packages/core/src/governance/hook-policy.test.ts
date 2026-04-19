@@ -5,7 +5,6 @@ import {
   HookPolicy,
   type HookPolicyConfig,
   type WakePolicy,
-  type HookPolicyStatus,
 } from './hook-policy';
 
 // ── Helpers ────────────────────────────────────────────────────────

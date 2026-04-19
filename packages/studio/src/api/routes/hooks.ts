@@ -1,26 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
-
-interface HookRecord {
-  id: string;
-  description: string;
-  plantedChapter: number;
-  status: string;
-  priority: string;
-  lastAdvancedChapter: number;
-  expectedResolutionWindow: { min: number; max: number } | null;
-  healthScore: number;
-}
-
-export const hooksStore = new Map<string, Map<string, HookRecord>>();
-
-function getBookHooks(bookId: string): Map<string, HookRecord> {
-  if (!hooksStore.has(bookId)) {
-    hooksStore.set(bookId, new Map());
-  }
-  return hooksStore.get(bookId)!;
-}
+import {
+  HookAgenda,
+  HookGovernance,
+  HookPolicy,
+  ProjectionRenderer,
+  RuntimeStateStore,
+  StateManager,
+  type Hook,
+  type Manifest,
+} from '@cybernovelist/core';
+import { getStudioRuntimeRootDir, hasStudioBookRuntime } from '../core-bridge';
 
 const createHookSchema = z.object({
   description: z.string().min(1),
@@ -36,39 +27,108 @@ const updateHookSchema = z.object({
   expectedResolutionWindow: z.object({ min: z.number(), max: z.number() }).optional(),
 });
 
-// 人工意图声明：设置预期回收窗口，可选择同时标记为休眠
 const declareIntentSchema = z.object({
   min: z.number().int().positive().optional(),
   max: z.number().int().positive().optional(),
   setDormant: z.boolean().optional().default(false),
 });
 
-// 唤醒休眠伏笔
 const wakeUpSchema = z.object({
   targetStatus: z.enum(['open', 'progressing']).optional().default('open'),
   min: z.number().int().positive().optional(),
   max: z.number().int().positive().optional(),
 });
 
+function ensureBookExists(bookId: string) {
+  return hasStudioBookRuntime(bookId);
+}
+
+function getHooksContext() {
+  const manager = new StateManager(getStudioRuntimeRootDir());
+  const store = new RuntimeStateStore(manager);
+  const policy = new HookPolicy();
+  const agenda = new HookAgenda(policy);
+  const governance = new HookGovernance(policy, agenda);
+  return { manager, store, policy, agenda, governance };
+}
+
+function loadManifest(bookId: string): Manifest {
+  const { store } = getHooksContext();
+  return store.loadManifest(bookId);
+}
+
+function saveManifest(bookId: string, manifest: Manifest): Manifest {
+  const { manager, store } = getHooksContext();
+  store.saveRuntimeStateSnapshot(bookId, manifest);
+  const saved = store.loadManifest(bookId);
+  ProjectionRenderer.writeProjectionFiles(saved, manager.getBookPath(bookId, 'story', 'state'), []);
+  return saved;
+}
+
+function currentChapterOf(manifest: Manifest): number {
+  const chapterNumbers = manifest.hooks.flatMap((hook) =>
+    [hook.plantedChapter, hook.wakeAtChapter].filter((value): value is number => typeof value === 'number')
+  );
+  return Math.max(1, manifest.lastChapterWritten, ...chapterNumbers);
+}
+
+function findHook(manifest: Manifest, hookId: string): Hook | undefined {
+  return manifest.hooks.find((hook) => hook.id === hookId);
+}
+
+function toApiHook(hook: Hook, currentChapter: number, governance: HookGovernance) {
+  const health = governance.checkHealth([hook], currentChapter);
+  return {
+    ...hook,
+    lastAdvancedChapter: currentChapter,
+    expectedResolutionWindow:
+      hook.expectedResolutionMin && hook.expectedResolutionMax
+        ? { min: hook.expectedResolutionMin, max: hook.expectedResolutionMax }
+        : null,
+    healthScore: health.healthScore,
+  };
+}
+
+function buildTimelineSegments(hook: Hook, toChapter: number) {
+  if (hook.status === 'resolved' || hook.status === 'abandoned') {
+    return [{ fromChapter: hook.plantedChapter, toChapter: hook.plantedChapter, type: hook.status }];
+  }
+
+  return [
+    {
+      fromChapter: hook.plantedChapter,
+      toChapter: hook.wakeAtChapter ?? Math.max(toChapter, hook.plantedChapter),
+      type: hook.status,
+    },
+  ];
+}
+
 export function createHooksRouter(): Hono {
   const router = new Hono();
 
-  // Static routes must be registered BEFORE dynamic :hookId routes
-
-  // GET /api/books/:bookId/hooks — list hooks
   router.get('/', (c) => {
     const bookId = c.req.param('bookId')!;
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const status = c.req.query('status');
-    let hooks = Array.from(getBookHooks(bookId).values());
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const currentChapter = currentChapterOf(manifest);
+    let hooks = manifest.hooks.map((hook) => toApiHook(hook, currentChapter, governance));
     if (status) {
-      hooks = hooks.filter((h) => h.status === status);
+      hooks = hooks.filter((hook) => hook.status === status);
     }
     return c.json({ data: hooks, total: hooks.length });
   });
 
-  // POST /api/books/:bookId/hooks — create hook
   router.post('/', async (c) => {
     const bookId = c.req.param('bookId')!;
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const result = createHookSchema.safeParse(body);
     if (!result.success) {
@@ -77,89 +137,162 @@ export function createHooksRouter(): Hono {
         400
       );
     }
-    const hook: HookRecord = {
+
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const now = new Date().toISOString();
+    const hook: Hook = {
       id: `hook-${randomUUID().slice(0, 8)}`,
       description: result.data.description,
-      plantedChapter: result.data.chapter,
+      type: 'narrative',
       status: 'open',
       priority: result.data.priority,
-      lastAdvancedChapter: result.data.chapter,
-      expectedResolutionWindow: result.data.expectedResolutionWindow ?? null,
-      healthScore: 100,
+      plantedChapter: result.data.chapter,
+      expectedResolutionMin: result.data.expectedResolutionWindow?.min,
+      expectedResolutionMax: result.data.expectedResolutionWindow?.max,
+      relatedCharacters: [],
+      relatedChapters: [result.data.chapter],
+      createdAt: now,
+      updatedAt: now,
     };
-    getBookHooks(bookId).set(hook.id, hook);
-    return c.json({ data: hook }, 201);
+
+    const admission = governance.evaluateAdmission(hook, manifest.hooks);
+    if (!admission.admitted) {
+      return c.json(
+        { error: { code: 'HOOK_CONFLICT', message: admission.reason ?? '伏笔准入失败' } },
+        409
+      );
+    }
+
+    manifest.hooks.push(hook);
+    const saved = saveManifest(bookId, manifest);
+    const currentChapter = currentChapterOf(saved);
+    return c.json({ data: toApiHook(saved.hooks.at(-1)!, currentChapter, governance) }, 201);
   });
 
-  // GET /api/books/:bookId/hooks/health
   router.get('/health', (c) => {
     const bookId = c.req.param('bookId')!;
-    const hooks = Array.from(getBookHooks(bookId).values());
-    const overdue = hooks.filter((h) => h.healthScore < 50);
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const currentChapter = currentChapterOf(manifest);
+    const health = governance.checkHealth(manifest.hooks, currentChapter);
+
     return c.json({
       data: {
-        total: hooks.length,
-        active: hooks.filter((h) => h.status === 'open' || h.status === 'progressing').length,
-        dormant: hooks.filter((h) => h.status === 'dormant').length,
-        resolved: hooks.filter((h) => h.status === 'resolved').length,
-        overdue: overdue.length,
-        recoveryRate:
-          hooks.length > 0 ? hooks.filter((h) => h.status === 'resolved').length / hooks.length : 0,
-        overdueList: overdue.map((h) => ({
-          hookId: h.id,
-          description: h.description,
-          expectedBy: h.expectedResolutionWindow?.max ?? h.plantedChapter + 10,
-          currentChapter: h.plantedChapter,
-        })),
+        total: health.totalHooks,
+        active: health.byStatus.open + health.byStatus.progressing + health.byStatus.deferred,
+        dormant: health.dormantCount,
+        resolved: health.byStatus.resolved,
+        overdue: health.overdueCount,
+        recoveryRate: health.totalHooks > 0 ? health.byStatus.resolved / health.totalHooks : 0,
+        overdueList: manifest.hooks
+          .filter((hook) => hook.status === 'open' || hook.status === 'progressing')
+          .filter((hook) => !governance.checkHealth([hook], currentChapter).warnings.includes('0 个伏笔逾期'))
+          .map((hook) => ({
+            hookId: hook.id,
+            description: hook.description,
+            expectedBy: hook.expectedResolutionMax ?? hook.plantedChapter + 10,
+            currentChapter,
+          })),
       },
     });
   });
 
-  // GET /api/books/:bookId/hooks/timeline
   router.get('/timeline', (c) => {
     const bookId = c.req.param('bookId')!;
-    const fromChapter = parseInt(c.req.query('fromChapter') || '1', 10);
-    const toChapter = parseInt(c.req.query('toChapter') || '100', 10);
-    const hooks = Array.from(getBookHooks(bookId).values());
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const fromChapter = Number.parseInt(c.req.query('fromChapter') || '1', 10);
+    const toChapter = Number.parseInt(c.req.query('toChapter') || '100', 10);
+    const { policy } = getHooksContext();
+    const manifest = loadManifest(bookId);
+
+    const densityHeatmap = Array.from({ length: Math.max(0, toChapter - fromChapter + 1) }, (_, index) => {
+      const chapter = fromChapter + index;
+      const density = manifest.hooks.filter(
+        (hook) => hook.plantedChapter === chapter || hook.wakeAtChapter === chapter
+      ).length;
+      return { chapter, density };
+    });
+
+    const wakeGroups = new Map<number, Hook[]>();
+    for (const hook of manifest.hooks) {
+      if (!hook.wakeAtChapter) {
+        continue;
+      }
+      const group = wakeGroups.get(hook.wakeAtChapter) ?? [];
+      group.push(hook);
+      wakeGroups.set(hook.wakeAtChapter, group);
+    }
+
+    const thunderingHerdAlerts = Array.from(wakeGroups.entries())
+      .filter(([, hooks]) => hooks.length > policy.wakePolicy.maxWakePerChapter)
+      .map(([chapter, hooks]) => ({
+        chapter,
+        count: hooks.length,
+        message: `第 ${chapter} 章预计同时唤醒 ${hooks.length} 个伏笔`,
+      }));
+
     return c.json({
       data: {
         chapterRange: { from: fromChapter, to: toChapter },
-        densityHeatmap: [],
-        hooks: hooks.map((h) => ({
-          id: h.id,
-          description: h.description,
-          plantedChapter: h.plantedChapter,
-          status: h.status,
-          segments: [{ fromChapter: h.plantedChapter, toChapter: toChapter, type: h.status }],
-          recurrenceChapter: null,
+        densityHeatmap,
+        hooks: manifest.hooks.map((hook) => ({
+          id: hook.id,
+          description: hook.description,
+          plantedChapter: hook.plantedChapter,
+          status: hook.status,
+          segments: buildTimelineSegments(hook, toChapter),
+          recurrenceChapter: hook.wakeAtChapter ?? null,
         })),
-        thunderingHerdAnimations: [],
-        thunderingHerdAlerts: [],
+        thunderingHerdAnimations: thunderingHerdAlerts.map((alert) => ({
+          chapter: alert.chapter,
+          intensity: alert.count,
+        })),
+        thunderingHerdAlerts,
       },
     });
   });
 
-  // GET /api/books/:bookId/hooks/wake-schedule
   router.get('/wake-schedule', (c) => {
     const bookId = c.req.param('bookId')!;
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const { policy } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const currentChapter = currentChapterOf(manifest);
+
     return c.json({
       data: {
-        currentChapter: 1,
-        maxWakePerChapter: 3,
-        pendingWakes: [],
+        currentChapter,
+        maxWakePerChapter: policy.wakePolicy.maxWakePerChapter,
+        pendingWakes: manifest.hooks
+          .filter((hook) => hook.status === 'deferred' || hook.status === 'dormant')
+          .map((hook) => ({
+            hookId: hook.id,
+            description: hook.description,
+            wakeAtChapter: hook.wakeAtChapter ?? hook.expectedResolutionMin ?? currentChapter,
+            status: hook.status,
+          })),
       },
     });
   });
 
-  // PATCH /api/books/:bookId/hooks/:hookId/intent — 人工意图声明
   router.patch('/:hookId/intent', async (c) => {
     const bookId = c.req.param('bookId')!;
-    const hookId = c.req.param('hookId');
-    const hook = getBookHooks(bookId).get(hookId);
-    if (!hook) {
-      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
 
+    const hookId = c.req.param('hookId');
     const body = await c.req.json().catch(() => ({}));
     const result = declareIntentSchema.safeParse(body);
     if (!result.success) {
@@ -169,68 +302,47 @@ export function createHooksRouter(): Hono {
       );
     }
 
-    const { min, max, setDormant } = result.data;
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const hook = findHook(manifest, hookId);
+    if (!hook) {
+      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
+    }
 
-    // Validation
-    if (min !== undefined && max !== undefined && min > max) {
+    const intent = governance.declareIntent(hook, result.data);
+    if (!intent.success) {
       return c.json(
-        { error: { code: 'INVALID_STATE', message: '预期回收窗口最小值不能大于最大值' } },
-        400
+        {
+          error: {
+            code: intent.reason?.includes('无法标记为休眠') ? 'HOOK_CONFLICT' : 'INVALID_STATE',
+            message: intent.reason ?? '意图声明失败',
+          },
+        },
+        intent.reason?.includes('无法标记为休眠') ? 409 : 400
       );
     }
 
-    const isTerminal = hook.status === 'resolved' || hook.status === 'abandoned';
-    if (isTerminal && setDormant) {
-      return c.json(
-        { error: { code: 'HOOK_CONFLICT', message: `伏笔状态「${hook.status}」无法标记为休眠` } },
-        409
-      );
-    }
-
-    if (min !== undefined)
-      hook.expectedResolutionWindow = { min, max: hook.expectedResolutionWindow?.max ?? min };
-    if (max !== undefined) {
-      if (hook.expectedResolutionWindow) {
-        hook.expectedResolutionWindow = { ...hook.expectedResolutionWindow, max };
-      } else {
-        hook.expectedResolutionWindow = { min: min ?? max, max };
-      }
-    }
-    if (setDormant && !isTerminal) {
-      hook.status = 'dormant';
-    }
-
+    saveManifest(bookId, manifest);
     return c.json({
       data: {
         hookId,
         success: true,
         status: hook.status,
-        expectedResolutionWindow: hook.expectedResolutionWindow,
+        expectedResolutionWindow:
+          hook.expectedResolutionMin && hook.expectedResolutionMax
+            ? { min: hook.expectedResolutionMin, max: hook.expectedResolutionMax }
+            : null,
       },
     });
   });
 
-  // POST /api/books/:bookId/hooks/:hookId/wake — 唤醒休眠伏笔
   router.post('/:hookId/wake', async (c) => {
     const bookId = c.req.param('bookId')!;
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
     const hookId = c.req.param('hookId');
-    const hook = getBookHooks(bookId).get(hookId);
-    if (!hook) {
-      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
-    }
-
-    if (hook.status !== 'dormant') {
-      return c.json(
-        {
-          error: {
-            code: 'HOOK_CONFLICT',
-            message: `只有休眠状态的伏笔才能唤醒，当前状态：${hook.status}`,
-          },
-        },
-        409
-      );
-    }
-
     const body = await c.req.json().catch(() => ({}));
     const result = wakeUpSchema.safeParse(body);
     if (!result.success) {
@@ -240,34 +352,45 @@ export function createHooksRouter(): Hono {
       );
     }
 
-    const { targetStatus, min, max } = result.data;
-    hook.status = targetStatus;
-    if (min !== undefined || max !== undefined) {
-      hook.expectedResolutionWindow = {
-        min: min ?? hook.expectedResolutionWindow?.min ?? 1,
-        max: max ?? hook.expectedResolutionWindow?.max ?? 10,
-      };
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const hook = findHook(manifest, hookId);
+    if (!hook) {
+      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
     }
 
+    const wakeResult = governance.wakeUp(hook, result.data.targetStatus, {
+      min: result.data.min,
+      max: result.data.max,
+    });
+    if (!wakeResult.success) {
+      return c.json(
+        { error: { code: 'HOOK_CONFLICT', message: wakeResult.reason ?? '唤醒失败' } },
+        409
+      );
+    }
+
+    saveManifest(bookId, manifest);
     return c.json({
       data: {
         hookId,
         success: true,
         newStatus: hook.status,
-        expectedResolutionWindow: hook.expectedResolutionWindow,
+        expectedResolutionWindow:
+          hook.expectedResolutionMin && hook.expectedResolutionMax
+            ? { min: hook.expectedResolutionMin, max: hook.expectedResolutionMax }
+            : null,
       },
     });
   });
 
-  // Dynamic routes — registered last
-  // PATCH /api/books/:bookId/hooks/:hookId
   router.patch('/:hookId', async (c) => {
     const bookId = c.req.param('bookId')!;
-    const hookId = c.req.param('hookId');
-    const hook = getBookHooks(bookId).get(hookId);
-    if (!hook) {
-      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
+    if (!ensureBookExists(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
+
+    const hookId = c.req.param('hookId');
     const body = await c.req.json().catch(() => ({}));
     const result = updateHookSchema.safeParse(body);
     if (!result.success) {
@@ -276,8 +399,26 @@ export function createHooksRouter(): Hono {
         400
       );
     }
-    Object.assign(hook, result.data);
-    return c.json({ data: hook });
+
+    const { governance } = getHooksContext();
+    const manifest = loadManifest(bookId);
+    const hook = findHook(manifest, hookId);
+    if (!hook) {
+      return c.json({ error: { code: 'HOOK_NOT_FOUND', message: '伏笔不存在' } }, 404);
+    }
+
+    if (result.data.status) {
+      hook.status = result.data.status;
+    }
+    if (result.data.expectedResolutionWindow) {
+      hook.expectedResolutionMin = result.data.expectedResolutionWindow.min;
+      hook.expectedResolutionMax = result.data.expectedResolutionWindow.max;
+    }
+    hook.updatedAt = new Date().toISOString();
+
+    const saved = saveManifest(bookId, manifest);
+    const updated = findHook(saved, hookId)!;
+    return c.json({ data: toApiHook(updated, currentChapterOf(saved), governance) });
   });
 
   return router;

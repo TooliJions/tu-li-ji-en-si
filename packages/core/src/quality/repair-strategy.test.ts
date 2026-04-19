@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   RepairDecider,
-  type RepairStrategy,
-  type RepairDecision,
   type AuditIssue,
   type AICategoryResult,
 } from './repair-strategy';

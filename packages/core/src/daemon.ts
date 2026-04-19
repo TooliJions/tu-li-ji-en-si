@@ -1,7 +1,7 @@
 // ── Types ────────────────────────────────────────────────────────────
 
 import { SmartInterval, type SmartIntervalConfig } from './scheduler/smart-interval';
-import { QuotaGuard, type QuotaGuardConfig, type TokenRecord } from './scheduler/quota-guard';
+import { QuotaGuard, type QuotaGuardConfig } from './scheduler/quota-guard';
 import { createNotifier, type NotifyChannel, type NotifyEvent } from './notify';
 
 export enum DaemonState {
@@ -46,6 +46,8 @@ export interface ChapterResultLike {
   chapterNumber: number;
   content?: string;
   error?: string;
+  warning?: string;
+  warningCode?: 'accept_with_warnings' | 'context_drift';
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -70,6 +72,14 @@ type EventName =
   | 'quota_exhausted'
   | 'max_fallbacks_reached';
 
+interface EventPayloadMap {
+  chapter_complete: { bookId: string; chapterNumber: number; result: ChapterResultLike };
+  chapter_error: { bookId: string; chapterNumber: number; error: string };
+  state_change: { from: DaemonState; to: DaemonState };
+  quota_exhausted: Record<string, unknown>;
+  max_fallbacks_reached: { consecutiveFallbacks: number };
+}
+
 type Listener<T> = (data: T) => void;
 type Unsubscribe = () => void;
 
@@ -77,8 +87,6 @@ type Unsubscribe = () => void;
 
 export class DaemonScheduler {
   readonly #bookId: string;
-  readonly #rootDir: string;
-  readonly #fromChapter?: number;
   readonly #toChapter?: number;
   readonly #maxConsecutiveFallbacks: number;
   readonly #bookTitle?: string;
@@ -94,8 +102,7 @@ export class DaemonScheduler {
   readonly #quotaGuard: QuotaGuard;
   readonly #notifier: ReturnType<typeof createNotifier> | null;
 
-  readonly #events = new Map<EventName, Set<Listener<unknown>>>();
-  #loopPromise?: Promise<void>;
+  readonly #events = new Map<EventName, Set<Listener<EventPayloadMap[EventName]>>>();
   #stopSignal?: () => void;
 
   constructor(config: DaemonConfig) {
@@ -104,8 +111,6 @@ export class DaemonScheduler {
     }
 
     this.#bookId = config.bookId;
-    this.#rootDir = config.rootDir;
-    this.#fromChapter = config.fromChapter;
     this.#toChapter = config.toChapter;
     this.#nextChapter = config.fromChapter;
     this.#maxConsecutiveFallbacks = config.maxConsecutiveFallbacks ?? 2;
@@ -155,7 +160,7 @@ export class DaemonScheduler {
       message: '守护进程已启动',
     });
 
-    this.#loopPromise = this.#runLoop(runner);
+    void this.#runLoop(runner);
   }
 
   pause(): void {
@@ -220,11 +225,11 @@ export class DaemonScheduler {
     event: 'max_fallbacks_reached',
     listener: Listener<{ consecutiveFallbacks: number }>
   ): Unsubscribe;
-  on(event: EventName, listener: Listener<unknown>): Unsubscribe {
-    let set = this.#events.get(event);
+  on<K extends EventName>(event: K, listener: Listener<EventPayloadMap[K]>): Unsubscribe {
+    let set = this.#events.get(event) as Set<Listener<EventPayloadMap[K]>> | undefined;
     if (!set) {
       set = new Set();
-      this.#events.set(event, set);
+      this.#events.set(event, set as Set<Listener<EventPayloadMap[EventName]>>);
     }
     set.add(listener);
     return () => set!.delete(listener);
@@ -239,7 +244,7 @@ export class DaemonScheduler {
 
       const tick = async () => {
         if (this.#state !== DaemonState.Running) {
-          if (this.#state === DaemonState.Idle || this.#state === DaemonState.Stopped) {
+          if (this.#isTerminalState(this.#state)) {
             resolve();
             return;
           }
@@ -287,7 +292,7 @@ export class DaemonScheduler {
           });
         }
 
-        if (this.#state === DaemonState.Idle || this.#state === DaemonState.Stopped) {
+        if (this.#isTerminalState(this.#state)) {
           resolve();
           return;
         }
@@ -321,7 +326,7 @@ export class DaemonScheduler {
 
     if (result.success) {
       // Check for fallback marker
-      if (result.error === 'accept_with_warnings') {
+      if (result.warningCode === 'accept_with_warnings') {
         this.#consecutiveFallbacks++;
         if (this.#consecutiveFallbacks >= this.#maxConsecutiveFallbacks) {
           this.#emit('max_fallbacks_reached', { consecutiveFallbacks: this.#consecutiveFallbacks });
@@ -372,16 +377,20 @@ export class DaemonScheduler {
     this.#emit('state_change', { from: old, to: newState });
   }
 
-  #autoStop(reason: string): void {
+  #autoStop(_reason: string): void {
     this.#transitionTo(DaemonState.Stopped);
   }
 
-  #emit<T>(event: EventName, data: T): void {
-    const set = this.#events.get(event);
+  #isTerminalState(state: DaemonState): boolean {
+    return state === DaemonState.Idle || state === DaemonState.Stopped;
+  }
+
+  #emit<K extends EventName>(event: K, data: EventPayloadMap[K]): void {
+    const set = this.#events.get(event) as Set<Listener<EventPayloadMap[K]>> | undefined;
     if (!set) return;
     for (const listener of set) {
       try {
-        (listener as Listener<T>)(data);
+        listener(data);
       } catch {
         // Swallow listener errors
       }

@@ -1,9 +1,11 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
+import { applyRuntimeStateDelta } from '../state/reducer';
 import { OpenAICompatibleProvider, LLMProvider, type LLMConfig } from '../llm/provider';
 import type { AgentResult } from '../agents/base';
+import type { ChapterIndexEntry } from '../models/chapter';
+import type { Delta, Manifest } from '../models/state';
 
 // ─── Configuration ──────────────────────────────────────────────
 
@@ -79,6 +81,8 @@ export interface ChapterResult {
   content?: string;
   status?: 'draft' | 'final';
   error?: string;
+  warning?: string;
+  warningCode?: 'accept_with_warnings' | 'context_drift';
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -99,6 +103,9 @@ export class PipelineRunner {
   constructor(config: PipelineConfig) {
     this.stateManager = new StateManager(config.rootDir);
     this.stateStore = new RuntimeStateStore(this.stateManager);
+    if (!config.provider && !config.llmConfig) {
+      throw new Error('必须提供 provider 或 llmConfig');
+    }
     this.provider = config.provider ?? new OpenAICompatibleProvider(config.llmConfig!);
     this.maxRevisionRetries = config.maxRevisionRetries ?? 2;
     this.fallbackAction = config.fallbackAction ?? 'accept_with_warnings';
@@ -154,7 +161,7 @@ export class PipelineRunner {
       chapters: [],
       totalChapters: 0,
       totalWords: 0,
-      updatedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
     });
 
     return { success: true, bookId: input.bookId };
@@ -199,26 +206,37 @@ export class PipelineRunner {
       keyEvents: string[];
       targetWordCount: number;
       hooks: string[];
-    }>(outlinePrompt);
+    }>({ prompt: outlinePrompt });
 
     // 调用 ChapterPlanner
     const planPrompt = this.#buildChapterPlanPrompt(input, genre, outline);
-    const plan = await this.provider.generateJSON<{
+    await this.provider.generateJSON<{
       scenes: Array<{ description: string; targetWords: number; mood: string }>;
       characters: string[];
       hooks: string[];
-    }>(planPrompt);
+    }>({ prompt: planPrompt });
 
     // 更新状态：添加章节到索引
     const index = this.stateManager.readIndex(input.bookId);
-    index.chapters.push({
-      chapterNumber: outline.chapterNumber,
-      title: outline.title,
-      status: 'planned',
-      plannedAt: new Date().toISOString(),
-    });
+    const existingChapter = this.#findChapterEntry(index.chapters, outline.chapterNumber);
+    if (existingChapter) {
+      this.#normalizeChapterEntry(existingChapter, outline.chapterNumber, outline.title, 0);
+    } else {
+      const paddedChapterNumber = String(outline.chapterNumber).padStart(4, '0');
+      index.chapters.push({
+        number: outline.chapterNumber,
+        title: outline.title,
+        fileName: `chapter-${paddedChapterNumber}.md`,
+        wordCount: 0,
+        createdAt: new Date().toISOString(),
+      });
+    }
     index.totalChapters = index.chapters.length;
-    index.updatedAt = new Date().toISOString();
+    index.totalWords = index.chapters.reduce(
+      (sum, chapter) => sum + (Number.isFinite(chapter.wordCount) ? chapter.wordCount : 0),
+      0
+    );
+    index.lastUpdated = new Date().toISOString();
     this.stateManager.writeIndex(input.bookId, index);
 
     return {
@@ -260,7 +278,14 @@ export class PipelineRunner {
 
       // 3. 场景生成（草稿）
       const draft = await this.#generateDraft(input, meta.genre, contextCard, intent);
-      if (!draft.success) return draft;
+      if (!draft.success) {
+        return {
+          success: false,
+          bookId: input.bookId,
+          chapterNumber: input.chapterNumber,
+          error: draft.error ?? '草稿生成失败',
+        };
+      }
 
       // 4. 场景润色
       const polished = await this.#polishScene(draft.content!, meta.genre, input.chapterNumber);
@@ -269,13 +294,26 @@ export class PipelineRunner {
       const audited = await this.#auditAndRevise(polished.content!, input, meta.genre);
 
       // 6. 记忆提取
-      await this.#extractMemory(audited.content!, input.bookId, input.chapterNumber);
+      const manifestAfterMemory = await this.#extractMemory(
+        audited.content!,
+        input.bookId,
+        input.chapterNumber
+      );
 
       // 7. 持久化
-      this.#persistChapter(audited.content!, input.bookId, input.chapterNumber, input.title);
+      this.#persistChapter(audited.content!, input.bookId, input.chapterNumber, input.title, 'final', {
+        warning: audited.warning,
+        warningCode: audited.warningCode,
+      });
 
       // 8. 更新状态
-      this.#updateStateAfterChapter(input.bookId, input.chapterNumber);
+      this.#updateStateAfterChapter(
+        input.bookId,
+        input.chapterNumber,
+        input.title,
+        audited.content!,
+        manifestAfterMemory ?? undefined
+      );
 
       return {
         success: true,
@@ -283,6 +321,8 @@ export class PipelineRunner {
         chapterNumber: input.chapterNumber,
         content: audited.content,
         status: 'final',
+        warning: audited.warning,
+        warningCode: audited.warningCode,
         usage: audited.usage,
         persisted: true,
       };
@@ -319,13 +359,13 @@ export class PipelineRunner {
     try {
       // 生成草稿
       const prompt = this.#buildDraftPrompt(input);
-      const result = await this.provider.generate(prompt);
+      const result = await this.provider.generate({ prompt });
 
       // 持久化
       this.#persistChapter(result.text, input.bookId, input.chapterNumber, input.title, 'draft');
 
       // 更新状态
-      this.#updateStateAfterChapter(input.bookId, input.chapterNumber);
+      this.#updateStateAfterChapter(input.bookId, input.chapterNumber, input.title, result.text);
 
       return {
         success: true,
@@ -357,7 +397,7 @@ export class PipelineRunner {
   async writeFastDraft(input: WriteDraftInput): Promise<ChapterResult> {
     try {
       const prompt = this.#buildDraftPrompt(input);
-      const result = await this.provider.generate(prompt);
+      const result = await this.provider.generate({ prompt });
 
       return {
         success: true,
@@ -440,29 +480,32 @@ export class PipelineRunner {
       const contextCard = await this.#generateContextCard(input.bookId, input.chapterNumber);
 
       // 意图定向（如果有用户意图）
-      const intent = input.userIntent
-        ? await this.#directIntent(
-            {
-              bookId: input.bookId,
-              chapterNumber: input.chapterNumber,
-              title: '',
-              genre: meta.genre,
-              userIntent: input.userIntent,
-            },
-            meta.genre,
-            contextCard
-          )
-        : null;
+      if (input.userIntent) {
+        await this.#directIntent(
+          {
+            bookId: input.bookId,
+            chapterNumber: input.chapterNumber,
+            title: '',
+            genre: meta.genre,
+            userIntent: input.userIntent,
+          },
+          meta.genre,
+          contextCard
+        );
+      }
 
       // 使用 ScenePolisher 重新润色草稿
       const polished = await this.#polishScene(draftContent, meta.genre, input.chapterNumber);
 
       // 持久化为正式章节
       const title = meta.title || `第 ${input.chapterNumber} 章`;
-      this.#persistChapter(polished.content, input.bookId, input.chapterNumber, title, 'final');
+      this.#persistChapter(polished.content, input.bookId, input.chapterNumber, title, 'final', {
+        warning: driftWarning,
+        warningCode: driftWarning ? 'context_drift' : undefined,
+      });
 
       // 更新状态
-      this.#updateStateAfterChapter(input.bookId, input.chapterNumber);
+      this.#updateStateAfterChapter(input.bookId, input.chapterNumber, title, polished.content);
 
       return {
         success: true,
@@ -470,9 +513,10 @@ export class PipelineRunner {
         chapterNumber: input.chapterNumber,
         content: polished.content,
         status: 'final',
+        warning: driftWarning,
+        warningCode: driftWarning ? 'context_drift' : undefined,
         usage: polished.usage,
         persisted: true,
-        error: driftWarning,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -590,7 +634,7 @@ ${input.previousChapterContent ? `\n## 上一章内容参考\n${input.previousCh
   "locationContext": "当前地点"
 }`;
 
-    return this.provider.generateJSON(prompt);
+    return this.provider.generateJSON({ prompt });
   }
 
   async #directIntent(
@@ -617,7 +661,7 @@ ${genre}
   "hookProgression": ["伏笔推进"]
 }`;
 
-    return this.provider.generateJSON(prompt);
+    return this.provider.generateJSON({ prompt });
   }
 
   async #generateDraft(
@@ -625,7 +669,12 @@ ${genre}
     genre: string,
     contextCard: Record<string, unknown>,
     intent: Record<string, unknown>
-  ): Promise<{ success: boolean; content?: string; usage?: AgentResult['usage'] }> {
+  ): Promise<{
+    success: boolean;
+    content?: string;
+    usage?: AgentResult['usage'];
+    error?: string;
+  }> {
     const draftInput: WriteDraftInput = {
       bookId: input.bookId,
       chapterNumber: input.chapterNumber,
@@ -636,7 +685,7 @@ ${genre}
     };
 
     const prompt = this.#buildDraftPrompt(draftInput);
-    const result = await this.provider.generate(prompt);
+    const result = await this.provider.generate({ prompt });
 
     return { success: true, content: result.text, usage: result.usage };
   }
@@ -664,7 +713,7 @@ ${content}
 
 请直接输出润色后的正文。`;
 
-    const result = await this.provider.generate(prompt);
+    const result = await this.provider.generate({ prompt });
     return { content: result.text, usage: result.usage };
   }
 
@@ -672,7 +721,12 @@ ${content}
     chapterContent: string,
     input: WriteNextChapterInput,
     genre: string
-  ): Promise<{ content: string; usage?: AgentResult['usage'] }> {
+  ): Promise<{
+    content: string;
+    usage?: AgentResult['usage'];
+    warning?: string;
+    warningCode?: 'accept_with_warnings';
+  }> {
     let currentContent = chapterContent;
     let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
@@ -695,7 +749,7 @@ ${currentContent}
 
 请修订后输出完整正文。`;
 
-        const reviseResult = await this.provider.generate(revisePrompt);
+        const reviseResult = await this.provider.generate({ prompt: revisePrompt });
         currentContent = reviseResult.text;
         usage = {
           promptTokens: usage.promptTokens + reviseResult.usage.promptTokens,
@@ -707,7 +761,12 @@ ${currentContent}
 
     // 用尽重试次数后的降级处理
     if (this.fallbackAction === 'accept_with_warnings') {
-      return { content: currentContent, usage };
+      return {
+        content: currentContent,
+        usage,
+        warning: '修订次数用尽，已按 accept_with_warnings 降级接受结果',
+        warningCode: 'accept_with_warnings',
+      };
     }
 
     throw new Error('修订次数用尽，章节质量仍未达标');
@@ -748,10 +807,14 @@ ${content.substring(0, 5000)}
   "summary": "审计总结"
 }`;
 
-    return this.provider.generateJSON(prompt);
+    return this.provider.generateJSON({ prompt });
   }
 
-  async #extractMemory(content: string, bookId: string, chapterNumber: number): Promise<void> {
+  async #extractMemory(
+    content: string,
+    bookId: string,
+    chapterNumber: number
+  ): Promise<Manifest | null> {
     const prompt = `你是一位记忆提取师。请从以下章节内容中提取重要事实和新伏笔。
 
 ## 章节内容
@@ -771,14 +834,229 @@ ${content.substring(0, 3000)}
         facts: Array<{ content: string; category: string; confidence: string }>;
         newHooks: unknown[];
         updatedHooks: unknown[];
-      }>(prompt);
+      }>({ prompt });
 
-      // TODO: 将提取的事实和伏笔写入 StateManager
-      // 当前阶段仅做接口预留
-      void memoryResult;
+      const manifest = this.stateStore.loadManifest(bookId);
+      const actions = this.#buildMemoryDelta(memoryResult, manifest, chapterNumber);
+      if (actions.length === 0) {
+        return manifest;
+      }
+
+      const updatedManifest = applyRuntimeStateDelta(manifest, {
+        actions,
+        sourceAgent: 'MemoryExtractor',
+        sourceChapter: chapterNumber,
+      });
+      this.stateStore.saveRuntimeStateSnapshot(bookId, updatedManifest);
+      return updatedManifest;
     } catch {
       // 记忆提取失败不影响主流程
+      return null;
     }
+  }
+
+  #buildMemoryDelta(
+    memoryResult: {
+      facts: Array<{ content: string; category: string; confidence: string }>;
+      newHooks: unknown[];
+      updatedHooks: unknown[];
+    },
+    manifest: Manifest,
+    chapterNumber: number
+  ): Delta['actions'] {
+    const now = new Date().toISOString();
+    const actions: Delta['actions'] = [];
+
+    memoryResult.facts.forEach((fact, index) => {
+      const content = fact.content?.trim();
+      if (!content) {
+        return;
+      }
+      if (
+        manifest.facts.some(
+          (existingFact) =>
+            existingFact.content === content && existingFact.chapterNumber === chapterNumber
+        )
+      ) {
+        return;
+      }
+      actions.push({
+        type: 'add_fact',
+        payload: {
+          id: `fact-${chapterNumber}-${index + 1}`,
+          content,
+          chapterNumber,
+          confidence: this.#normalizeFactConfidence(fact.confidence),
+          category: this.#normalizeFactCategory(fact.category),
+          createdAt: now,
+        },
+      });
+    });
+
+    memoryResult.newHooks.forEach((rawHook, index) => {
+      const hook = rawHook as Record<string, unknown>;
+      const description = String(hook.description ?? '').trim();
+      if (!description) {
+        return;
+      }
+
+      const hookId = String(hook.id ?? `hook-${chapterNumber}-${index + 1}`);
+      if (
+        manifest.hooks.some(
+          (existingHook) => existingHook.id === hookId || existingHook.description === description
+        )
+      ) {
+        return;
+      }
+
+      actions.push({
+        type: 'add_hook',
+        payload: {
+          id: hookId,
+          description,
+          type: this.#normalizeHookType(hook.type),
+          status: this.#normalizeHookStatus(hook.status),
+          priority: this.#normalizeHookPriority(hook.priority),
+          plantedChapter: chapterNumber,
+          expectedResolutionMin: this.#toPositiveNumber(hook.expectedResolutionMin),
+          expectedResolutionMax: this.#toPositiveNumber(hook.expectedResolutionMax),
+          wakeAtChapter: this.#toPositiveNumber(hook.wakeAtChapter),
+          relatedCharacters: this.#normalizeStringArray(hook.relatedCharacters),
+          relatedChapters: this.#normalizeChapterArray(hook.relatedChapters, chapterNumber),
+          payoffDescription:
+            typeof hook.payoffDescription === 'string' ? hook.payoffDescription : undefined,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    });
+
+    memoryResult.updatedHooks.forEach((rawHook) => {
+      const hook = rawHook as Record<string, unknown>;
+      const hookId = typeof hook.id === 'string' ? hook.id : undefined;
+      if (!hookId || !manifest.hooks.some((existingHook) => existingHook.id === hookId)) {
+        return;
+      }
+
+      actions.push({
+        type: 'update_hook',
+        payload: {
+          id: hookId,
+          description:
+            typeof hook.description === 'string' ? hook.description.trim() || undefined : undefined,
+          status: this.#normalizeHookStatus(hook.status, true),
+          priority: this.#normalizeHookPriority(hook.priority, true),
+          wakeAtChapter: this.#toPositiveNumber(hook.wakeAtChapter),
+          expectedResolutionMin: this.#toPositiveNumber(hook.expectedResolutionMin),
+          expectedResolutionMax: this.#toPositiveNumber(hook.expectedResolutionMax),
+          payoffDescription:
+            typeof hook.payoffDescription === 'string' ? hook.payoffDescription : undefined,
+          updatedAt: now,
+        },
+      });
+    });
+
+    return actions.map((action) => ({
+      ...action,
+      payload: Object.fromEntries(
+        Object.entries(action.payload).filter(([, value]) => value !== undefined)
+      ),
+    }));
+  }
+
+  #normalizeFactCategory(category: string): Manifest['facts'][number]['category'] {
+    return ['character', 'world', 'plot', 'timeline', 'resource'].includes(category)
+      ? (category as Manifest['facts'][number]['category'])
+      : 'plot';
+  }
+
+  #normalizeFactConfidence(confidence: string): Manifest['facts'][number]['confidence'] {
+    return ['high', 'medium', 'low'].includes(confidence)
+      ? (confidence as Manifest['facts'][number]['confidence'])
+      : 'medium';
+  }
+
+  #normalizeHookType(type: unknown): string {
+    return typeof type === 'string' && type.trim().length > 0 ? type : 'plot';
+  }
+
+  #normalizeHookStatus(
+    status: unknown,
+    allowUndefined: boolean = false
+  ): Manifest['hooks'][number]['status'] | undefined {
+    if (typeof status !== 'string') {
+      return allowUndefined ? undefined : 'open';
+    }
+    return ['open', 'progressing', 'deferred', 'dormant', 'resolved', 'abandoned'].includes(status)
+      ? (status as Manifest['hooks'][number]['status'])
+      : allowUndefined
+        ? undefined
+        : 'open';
+  }
+
+  #normalizeHookPriority(
+    priority: unknown,
+    allowUndefined: boolean = false
+  ): Manifest['hooks'][number]['priority'] | undefined {
+    if (typeof priority !== 'string') {
+      return allowUndefined ? undefined : 'minor';
+    }
+    return ['critical', 'major', 'minor'].includes(priority)
+      ? (priority as Manifest['hooks'][number]['priority'])
+      : allowUndefined
+        ? undefined
+        : 'minor';
+  }
+
+  #normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+
+  #normalizeChapterArray(value: unknown, fallbackChapter: number): number[] {
+    if (!Array.isArray(value)) {
+      return [fallbackChapter];
+    }
+    const chapters = value.filter(
+      (item): item is number => typeof item === 'number' && Number.isInteger(item) && item > 0
+    );
+    return chapters.length > 0 ? chapters : [fallbackChapter];
+  }
+
+  #toPositiveNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+  }
+
+  #findChapterEntry(chapters: ChapterIndexEntry[], chapterNumber: number): ChapterIndexEntry | undefined {
+    return chapters.find((chapter) => {
+      const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
+      return chapter.number === chapterNumber || legacyChapter.chapterNumber === chapterNumber;
+    });
+  }
+
+  #normalizeChapterEntry(
+    chapter: ChapterIndexEntry,
+    chapterNumber: number,
+    title: string | null,
+    wordCount: number
+  ): void {
+    const legacyChapter = chapter as ChapterIndexEntry & {
+      chapterNumber?: number;
+      status?: string;
+      writtenAt?: string;
+      plannedAt?: string;
+    };
+    chapter.number = chapterNumber;
+    chapter.title = title;
+    chapter.fileName = chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`;
+    chapter.wordCount = Number.isFinite(chapter.wordCount) ? chapter.wordCount : wordCount;
+    chapter.createdAt = chapter.createdAt || new Date().toISOString();
+    delete legacyChapter.chapterNumber;
+    delete legacyChapter.status;
+    delete legacyChapter.writtenAt;
+    delete legacyChapter.plannedAt;
   }
 
   #persistChapter(
@@ -786,15 +1064,27 @@ ${content.substring(0, 3000)}
     bookId: string,
     chapterNumber: number,
     title: string,
-    status: 'draft' | 'final' = 'final'
+    status: 'draft' | 'final' = 'final',
+    metadata?: {
+      warning?: string;
+      warningCode?: 'accept_with_warnings' | 'context_drift';
+    }
   ): void {
     const filePath = this.stateManager.getChapterFilePath(bookId, chapterNumber);
+
+    const sanitizedWarning = metadata?.warning?.replace(/\r?\n/g, ' ').trim();
+    const warningBlock = [
+      metadata?.warningCode ? `warningCode: ${metadata.warningCode}` : null,
+      sanitizedWarning ? `warning: ${sanitizedWarning}` : null,
+    ]
+      .filter((line): line is string => line !== null)
+      .join('\n');
 
     const chapterMeta = `---
 title: ${title}
 chapter: ${chapterNumber}
 status: ${status}
-createdAt: ${new Date().toISOString()}
+${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 ---
 
 `;
@@ -802,27 +1092,39 @@ createdAt: ${new Date().toISOString()}
     fs.writeFileSync(filePath, chapterMeta + content, 'utf-8');
   }
 
-  #updateStateAfterChapter(bookId: string, chapterNumber: number): void {
+  #updateStateAfterChapter(
+    bookId: string,
+    chapterNumber: number,
+    title: string | null,
+    content: string,
+    manifestOverride?: Manifest
+  ): void {
     // 更新索引
     const index = this.stateManager.readIndex(bookId);
-    const existingChapter = index.chapters.find((c) => c.chapterNumber === chapterNumber);
-    if (existingChapter) {
-      existingChapter.status = 'written';
-      existingChapter.writtenAt = new Date().toISOString();
-    } else {
+    const existingChapter = this.#findChapterEntry(index.chapters, chapterNumber);
+    if (!existingChapter) {
+      const paddedChapterNumber = String(chapterNumber).padStart(4, '0');
       index.chapters.push({
-        chapterNumber,
-        title: '',
-        status: 'written',
-        writtenAt: new Date().toISOString(),
+        number: chapterNumber,
+        title,
+        fileName: `chapter-${paddedChapterNumber}.md`,
+        wordCount: content.length,
+        createdAt: new Date().toISOString(),
       });
+    } else {
+      this.#normalizeChapterEntry(existingChapter, chapterNumber, title, content.length);
+      existingChapter.wordCount = content.length;
     }
     index.totalChapters = index.chapters.length;
-    index.updatedAt = new Date().toISOString();
+    index.totalWords = index.chapters.reduce(
+      (sum, chapter) => sum + (Number.isFinite(chapter.wordCount) ? chapter.wordCount : 0),
+      0
+    );
+    index.lastUpdated = new Date().toISOString();
     this.stateManager.writeIndex(bookId, index);
 
     // 更新 manifest
-    const manifest = this.stateStore.loadManifest(bookId);
+    const manifest = manifestOverride ?? this.stateStore.loadManifest(bookId);
     if (chapterNumber > manifest.lastChapterWritten) {
       manifest.lastChapterWritten = chapterNumber;
     }

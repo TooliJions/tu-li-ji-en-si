@@ -109,8 +109,6 @@ const AUDIT_STRATEGY_MAP: Record<string, RepairStrategy> = {
 
 // ─── Thresholds ────────────────────────────────────────────────────
 
-const AI_HIGH_THRESHOLD = 70;
-const AI_MEDIUM_THRESHOLD = 40;
 const BLOCKER_CHAPTER_REWRITE = 3;
 const WARNING_CHAPTER_REWRITE = 5;
 

@@ -140,4 +140,19 @@ describe('Analytics Route', () => {
       expect(typeof data.data.generationTime).toBe('number');
     });
   });
+
+  describe('GET /api/books/:bookId/analytics/emotional-arcs', () => {
+    it('returns emotional arc data for character timelines', async () => {
+      const res = await app.request('/api/books/book-001/analytics/emotional-arcs');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          characters: Array<{ name: string; chapters: Array<{ chapterNumber: number }> }>;
+          alerts: Array<{ message: string }>;
+        };
+      };
+      expect(Array.isArray(data.data.characters)).toBe(true);
+      expect(Array.isArray(data.data.alerts)).toBe(true);
+    });
+  });
 });

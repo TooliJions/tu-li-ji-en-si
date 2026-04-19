@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   LengthNormalizer,
   type NormalizerInput,
-  type NormalizerReport,
-  type NormalizerStatus,
 } from './length-normalizer';
 
 // ── Helpers ────────────────────────────────────────────────────────

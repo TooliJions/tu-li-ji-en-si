@@ -7,8 +7,9 @@
     "dev": "pnpm build:api && pnpm dev:api & vite",
     "dev:api": "tsx watch src/api/index.ts",
     "build": "pnpm build:api && tsc --build && vite build",
-    "build:api": "tsc --project tsconfig.api.json",
-    "test": "vitest run",
+    "typecheck": "pnpm --filter @cybernovelist/core build && tsc --noEmit && tsc --project tsconfig.api.json --noEmit",
+    "build:api": "pnpm --filter @cybernovelist/core build && tsc --project tsconfig.api.json",
+    "test": "pnpm --filter @cybernovelist/core build && vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint src/",
     "format": "prettier --write src/"

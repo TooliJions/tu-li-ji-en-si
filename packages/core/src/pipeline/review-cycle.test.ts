@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
-import { ChapterReviewCycle, type ReviewInput } from './review-cycle';
+import { ChapterReviewCycle } from './review-cycle';
 
 const LONG_CONTENT =
   '这是一个足够长的章节内容。林风走进大厅，只见人头攒动，觥筹交错。他微微一怔，心中暗道此地不宜久留。于是他转身离开，不再回头。大厅外月光如水，洒在青石板上。';

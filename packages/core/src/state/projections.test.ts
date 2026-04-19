@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ProjectionRenderer, type ProjectionFile } from './projections';
+import { ProjectionRenderer } from './projections';
 import { StateManager } from './manager';
+import type { Manifest } from '../models/state';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -181,7 +182,6 @@ describe('ProjectionRenderer', () => {
 
   describe('renderChapterSummaries', () => {
     it('renders summaries in chapter order', () => {
-      const manifest = createMinimalManifest(bookId);
       // Chapter summaries come from SQLite, we pass them as array
       const summaries = [
         {
@@ -257,18 +257,24 @@ describe('ProjectionRenderer', () => {
 
       const files = ProjectionRenderer.writeProjectionFiles(manifest, stateDir, summaries);
 
-      expect(files).toHaveLength(4); // current_state.md, hooks.md, chapter_summaries.md, .state-hash
+      expect(files).toHaveLength(7); // 6 markdown projections + .state-hash
 
       const fileNames = files.map((f) => f.name);
       expect(fileNames).toContain('current_state.md');
       expect(fileNames).toContain('hooks.md');
       expect(fileNames).toContain('chapter_summaries.md');
+      expect(fileNames).toContain('subplot_board.md');
+      expect(fileNames).toContain('emotional_arcs.md');
+      expect(fileNames).toContain('character_matrix.md');
       expect(fileNames).toContain('.state-hash');
 
       // Verify files exist on disk
       expect(fs.existsSync(path.join(stateDir, 'current_state.md'))).toBe(true);
       expect(fs.existsSync(path.join(stateDir, 'hooks.md'))).toBe(true);
       expect(fs.existsSync(path.join(stateDir, 'chapter_summaries.md'))).toBe(true);
+      expect(fs.existsSync(path.join(stateDir, 'subplot_board.md'))).toBe(true);
+      expect(fs.existsSync(path.join(stateDir, 'emotional_arcs.md'))).toBe(true);
+      expect(fs.existsSync(path.join(stateDir, 'character_matrix.md'))).toBe(true);
       expect(fs.existsSync(path.join(stateDir, '.state-hash'))).toBe(true);
     });
 
@@ -333,16 +339,16 @@ describe('ProjectionRenderer', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function createMinimalManifest(bookId: string) {
+function createMinimalManifest(bookId: string): Manifest {
   return {
     bookId,
     versionToken: 1,
     lastChapterWritten: 0,
-    currentFocus: undefined as string | undefined,
-    hooks: [] as any[],
-    facts: [] as any[],
-    characters: [] as any[],
-    worldRules: [] as any[],
+    currentFocus: undefined,
+    hooks: [],
+    facts: [],
+    characters: [],
+    worldRules: [],
     updatedAt: '2026-04-18T10:00:00Z',
   };
 }

@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   PostWriteValidator,
   type ValidationInput,
-  type ValidationReport,
-  type ValidationResult,
   type ValidationRule,
 } from './post-write-validator';
 import type { Manifest } from '../models/state';

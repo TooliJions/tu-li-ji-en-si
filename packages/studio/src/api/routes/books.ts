@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import {
+  deleteStudioBookRuntime,
+  initializeStudioBookRuntime,
+  resetStudioCoreBridgeForTests,
+  updateStudioBookRuntime,
+} from '../core-bridge';
 
 // --- In-memory book store (real implementation uses file system via StateManager) ---
 interface BookRecord {
@@ -21,6 +27,10 @@ interface BookRecord {
 }
 
 const bookStore = new Map<string, BookRecord>();
+
+export function resetBookStoreForTests() {
+  bookStore.clear();
+}
 
 // --- Zod schemas ---
 const createBookSchema = z.object({
@@ -89,6 +99,7 @@ export function createBookRouter(): Hono {
     };
 
     bookStore.set(book.id, book);
+    initializeStudioBookRuntime(book);
     return c.json({ data: book }, 201);
   });
 
@@ -125,6 +136,7 @@ export function createBookRouter(): Hono {
 
     Object.assign(book, result.data, { updatedAt: new Date().toISOString() });
     bookStore.set(bookId, book);
+    updateStudioBookRuntime(book);
     return c.json({ data: book });
   });
 
@@ -134,6 +146,7 @@ export function createBookRouter(): Hono {
     if (!bookStore.has(bookId)) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
+    deleteStudioBookRuntime(bookId);
     bookStore.delete(bookId);
     return c.body(null, 204);
   });
@@ -144,10 +157,14 @@ export function createBookRouter(): Hono {
     if (!bookStore.has(bookId)) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
-    const limit = parseInt(c.req.query('limit') || '10', 10);
     // Placeholder — real implementation reads from activity log
     return c.json({ data: [] });
   });
 
   return router;
+}
+
+export function resetBookRouteForTests() {
+  resetBookStoreForTests();
+  resetStudioCoreBridgeForTests();
 }

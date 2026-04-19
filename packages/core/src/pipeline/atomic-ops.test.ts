@@ -2,11 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
 import {
   AtomicPipelineOps,
-  type AtomicOpsConfig,
   type DraftChapterInput,
-  type AuditChapterInput,
-  type ReviseChapterInput,
-  type PersistChapterInput,
 } from './atomic-ops';
 
 // Mock fs module
@@ -24,7 +20,7 @@ vi.mock('fs', () => ({
         chapters: [],
         totalChapters: 0,
         totalWords: 0,
-        updatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
       });
     }
     return JSON.stringify({
@@ -70,6 +66,30 @@ describe('AtomicPipelineOps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+      if (filePath.includes('meta.json')) {
+        return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+      }
+      if (filePath.includes('index.json')) {
+        return JSON.stringify({
+          bookId: 'test-book',
+          chapters: [],
+          totalChapters: 0,
+          totalWords: 0,
+          lastUpdated: new Date().toISOString(),
+        });
+      }
+      return JSON.stringify({
+        bookId: 'test-book',
+        versionToken: 1,
+        lastChapterWritten: 0,
+        hooks: [],
+        facts: [],
+        characters: [],
+        worldRules: [],
+        updatedAt: new Date().toISOString(),
+      });
+    });
 
     mockProvider = createMockProvider();
     ops = new AtomicPipelineOps({
@@ -102,6 +122,28 @@ describe('AtomicPipelineOps', () => {
       expect(result.content).toContain('林风');
       expect(result.operation).toBe('draft_chapter');
       expect(result.usage).toBeDefined();
+    });
+
+    it('passes prompt inside LLM request object', async () => {
+      mockProvider.generate.mockResolvedValue({
+        text: '草稿内容',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test-model',
+      });
+
+      await ops.draftChapter({
+        bookId: 'test-book',
+        chapterNumber: 2,
+        title: '第二章',
+        genre: 'xianxia',
+        sceneDescription: '林风继续前进',
+      });
+
+      expect(mockProvider.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('第二章'),
+        })
+      );
     });
 
     it('does not persist to filesystem', async () => {
@@ -201,6 +243,28 @@ describe('AtomicPipelineOps', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('LLM error');
       expect(result.operation).toBe('audit_chapter');
+    });
+
+    it('passes audit prompt inside LLM request object', async () => {
+      mockProvider.generateJSON.mockResolvedValue({
+        issues: [],
+        overallScore: 90,
+        status: 'pass',
+        summary: '通过',
+      });
+
+      await ops.auditChapter({
+        bookId: 'test-book',
+        chapterNumber: 2,
+        content: '审计内容',
+        genre: 'xianxia',
+      });
+
+      expect(mockProvider.generateJSON).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('审计内容'),
+        })
+      );
     });
   });
 
@@ -307,6 +371,36 @@ describe('AtomicPipelineOps', () => {
         return filePath.includes('index.json');
       });
       expect(indexWrite).toBeDefined();
+    });
+
+    it('writes index using canonical chapter index fields', async () => {
+      await ops.persistChapter({
+        bookId: 'test-book',
+        chapterNumber: 3,
+        title: '第三章',
+        content: '章节内容',
+        status: 'final',
+      });
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const indexWrite = writeCalls.find((call: unknown[]) => String(call[0]).includes('index.json'));
+      expect(indexWrite).toBeDefined();
+
+      const payload = JSON.parse(String(indexWrite![1])) as {
+        chapters: Array<Record<string, unknown>>;
+        lastUpdated: string;
+      };
+
+      expect(payload.chapters[0]).toEqual(
+        expect.objectContaining({
+          number: 3,
+          title: '第三章',
+          fileName: 'chapter-0003.md',
+        })
+      );
+      expect(payload.chapters[0]).not.toHaveProperty('chapterNumber');
+      expect(payload).toHaveProperty('lastUpdated');
+      expect(payload).not.toHaveProperty('updatedAt');
     });
   });
 

@@ -103,9 +103,14 @@ export default function DoctorView() {
   }
 
   async function handleReorgRecovery() {
+    const targetBookId = doctor?.reorgSentinels[0]?.bookId;
+    if (!targetBookId) {
+      setFixResult({ success: false, message: '缺少可恢复的书籍 ID' });
+      return;
+    }
     setFixResult(null);
     try {
-      const result = await reorgRecovery();
+      const result = await reorgRecovery(targetBookId);
       setFixResult({ success: true, message: `恢复了 ${result.restoredChapters} 章` });
     } catch {
       setFixResult({ success: false, message: '恢复失败' });

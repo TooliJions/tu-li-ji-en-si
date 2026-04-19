@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { HookLifecycle, type LifecycleEvents, type StateTransition } from './hook-lifecycle';
+import { HookLifecycle } from './hook-lifecycle';
 import type { Hook } from '../models/state';
 
 // ── Helpers ────────────────────────────────────────────────────────

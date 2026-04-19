@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   LockManager,
-  type LockInfo,
-  type LockReport,
-  type LockDiagnosticResult,
 } from './lock-manager';
 import { StateManager } from './manager';
 import * as fs from 'fs';

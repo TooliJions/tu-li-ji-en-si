@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HookAdmission, type AdmissionConfig } from './hook-admission';
+import { HookAdmission } from './hook-admission';
 import type { Hook } from '../models/state';
 
 // ── Helpers ────────────────────────────────────────────────────────

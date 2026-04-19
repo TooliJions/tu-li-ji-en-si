@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SessionRecovery, type RecoveryReport, type RecoveryOptions } from './recovery';
+import { SessionRecovery } from './recovery';
 import { StateManager } from './manager';
 import { StateBootstrap, type BootstrapOptions } from './bootstrap';
 import { MemoryDB } from './memory-db';

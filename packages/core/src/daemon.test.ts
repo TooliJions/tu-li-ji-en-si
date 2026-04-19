@@ -10,6 +10,7 @@ function makeFakePipelineRunner(
     composeChapterResult?: {
       success: boolean;
       chapterNumber: number;
+      warningCode?: string;
       usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     };
   } = {}
@@ -497,7 +498,7 @@ describe('DaemonScheduler', () => {
         composeChapterResult: {
           success: true,
           chapterNumber: 1,
-          error: 'accept_with_warnings',
+          warningCode: 'accept_with_warnings',
           usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 },
         },
       });
@@ -524,7 +525,7 @@ describe('DaemonScheduler', () => {
         composeChapterResult: {
           success: true,
           chapterNumber: 1,
-          error: 'accept_with_warnings',
+          warningCode: 'accept_with_warnings',
           usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 },
         },
       });
@@ -906,7 +907,7 @@ describe('DaemonScheduler', () => {
         composeChapterResult: {
           success: true,
           chapterNumber: 1,
-          error: 'accept_with_warnings',
+          warningCode: 'accept_with_warnings',
           usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 },
         },
       });

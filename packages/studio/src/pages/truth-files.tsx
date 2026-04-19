@@ -47,7 +47,7 @@ export default function TruthFiles() {
   const bookId = searchParams.get('bookId') || '';
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<TruthFileEntry[]>([]);
-  const [versionToken, setVersionToken] = useState(0);
+  const [, setVersionToken] = useState(0);
   const [projection, setProjection] = useState<ProjectionStatus | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<TruthFileContent | null>(null);
@@ -59,7 +59,7 @@ export default function TruthFiles() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchTruthFiles(), fetchProjectionStatus()])
+    Promise.all([fetchTruthFiles(bookId), fetchProjectionStatus(bookId)])
       .then(([list, status]) => {
         setFiles(list.files || []);
         setVersionToken(list.versionToken || 0);
@@ -73,7 +73,7 @@ export default function TruthFiles() {
 
   async function openFile(fileName: string) {
     try {
-      const data = await fetchTruthFile(fileName);
+      const data = await fetchTruthFile(bookId, fileName);
       setSelectedFile(data);
       setEditing(false);
       setEditContent(JSON.stringify(data.content, null, 2));
@@ -88,6 +88,7 @@ export default function TruthFiles() {
     try {
       const parsed = JSON.parse(editContent);
       const result = await updateTruthFile(
+        bookId,
         selectedFile.name,
         JSON.stringify(parsed),
         selectedFile.versionToken
@@ -96,7 +97,7 @@ export default function TruthFiles() {
       setEditContent(JSON.stringify(result.content, null, 2));
       setEditing(false);
       // Refresh file list
-      const list = await fetchTruthFiles();
+      const list = await fetchTruthFiles(bookId);
       setFiles(list.files || []);
       setVersionToken(list.versionToken || 0);
     } catch {
@@ -107,10 +108,10 @@ export default function TruthFiles() {
   async function handleImport() {
     setImportLoading(true);
     try {
-      const result = await importMarkdown(importFile);
+      const result = await importMarkdown(bookId, importFile);
       setImportResult(result);
       // Refresh file list after import
-      const list = await fetchTruthFiles();
+      const list = await fetchTruthFiles(bookId);
       setFiles(list.files || []);
       setVersionToken(list.versionToken || 0);
     } catch {

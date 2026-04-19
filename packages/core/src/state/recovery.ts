@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { StateManager } from './manager';
 import { MemoryDB } from './memory-db';
-import { ProjectionRenderer } from './projections';
 import type { ChapterIndex } from '../models/chapter';
 import type { Manifest } from '../models/state';
 
@@ -265,7 +264,7 @@ export class SessionRecovery {
 
   // ── Summary Consistency ────────────────────────────────────
 
-  #checkSummaryConsistency(bookId: string, report: RecoveryReport, autoRepair: boolean): void {
+  #checkSummaryConsistency(bookId: string, report: RecoveryReport, _autoRepair: boolean): void {
     let index: ChapterIndex;
     try {
       index = this.manager.readIndex(bookId);

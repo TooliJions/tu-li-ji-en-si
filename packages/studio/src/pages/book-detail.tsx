@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { FileText, Pencil, GitMerge, Scissors, RotateCcw, Eye, MoreHorizontal } from 'lucide-react';
-import { fetchBook, fetchChapters, mergeChapters, splitChapter, rollbackChapter } from '../lib/api';
+import {
+  fetchBook,
+  fetchChapterSnapshots,
+  fetchChapters,
+  mergeChapters,
+  splitChapter,
+  rollbackChapter,
+} from '../lib/api';
 import PollutionBadge from '../components/pollution-badge';
+import TimeDial from '../components/time-dial';
 
 interface Book {
   id: string;
@@ -24,6 +32,42 @@ interface Chapter {
   wordCount: number;
   qualityScore: number | null;
   auditStatus: string | null;
+  warningCode?: string | null;
+  warning?: string | null;
+}
+
+interface ChapterSnapshot {
+  id: string;
+  chapter: number;
+  label: string;
+  timestamp: string;
+}
+
+function getChapterPollutionState(chapter: Chapter) {
+  if (chapter.warningCode === 'accept_with_warnings') {
+    return {
+      isPolluted: true,
+      level: 'high' as const,
+      contaminationScore: 0.95,
+      source: '降级结果',
+    };
+  }
+
+  if (chapter.qualityScore !== null && chapter.qualityScore < 50) {
+    return {
+      isPolluted: true,
+      level: chapter.qualityScore < 30 ? ('high' as const) : ('medium' as const),
+      contaminationScore: 1 - chapter.qualityScore / 100,
+      source: 'AI检测',
+    };
+  }
+
+  return {
+    isPolluted: false,
+    level: 'low' as const,
+    contaminationScore: 0,
+    source: 'AI检测',
+  };
 }
 
 export default function BookDetail() {
@@ -32,6 +76,9 @@ export default function BookDetail() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMenu, setActionMenu] = useState<number | null>(null);
+  const [rollbackChapterNumber, setRollbackChapterNumber] = useState<number | null>(null);
+  const [snapshots, setSnapshots] = useState<ChapterSnapshot[]>([]);
+  const [timeDialOpen, setTimeDialOpen] = useState(false);
 
   useEffect(() => {
     if (!bookId) return;
@@ -65,11 +112,25 @@ export default function BookDetail() {
     setActionMenu(null);
   }
 
-  async function handleRollback(chapterNumber: number) {
+  async function openRollbackDial(chapterNumber: number) {
     if (!bookId) return;
-    const snapshotId = `snapshot-${chapterNumber}-${Date.now()}`;
-    await rollbackChapter(bookId, chapterNumber, snapshotId);
+    const snapshotList = await fetchChapterSnapshots(bookId, chapterNumber);
+    setRollbackChapterNumber(chapterNumber);
+    setSnapshots(snapshotList);
+    setTimeDialOpen(true);
     setActionMenu(null);
+  }
+
+  async function handleRollbackConfirm(snapshotId: string) {
+    if (!bookId || rollbackChapterNumber === null) return;
+    const ok = await rollbackChapter(bookId, rollbackChapterNumber, snapshotId);
+    if (ok) {
+      const nextChapters = await fetchChapters(bookId);
+      setChapters(nextChapters);
+    }
+    setTimeDialOpen(false);
+    setRollbackChapterNumber(null);
+    setSnapshots([]);
   }
 
   if (loading) {
@@ -167,13 +228,21 @@ export default function BookDetail() {
         ) : (
           <div className="divide-y">
             {chapters.map((ch) => {
-              const isPolluted = ch.qualityScore !== null && ch.qualityScore < 50;
+              const pollution = getChapterPollutionState(ch);
               return (
                 <div
                   key={ch.number}
                   className={`flex items-center justify-between p-4 hover:bg-accent/50 group ${
-                    isPolluted ? 'border-l-4 border-l-orange-500' : ''
+                    pollution.isPolluted ? 'border-l-4 border-l-orange-500' : ''
                   }`}
+                  style={
+                    pollution.isPolluted
+                      ? {
+                          backgroundImage:
+                            'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+                        }
+                      : undefined
+                  }
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">
@@ -191,11 +260,11 @@ export default function BookDetail() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {isPolluted && (
+                    {pollution.isPolluted && (
                       <PollutionBadge
-                        level={ch.qualityScore < 30 ? 'high' : 'medium'}
-                        contaminationScore={1 - (ch.qualityScore ?? 0) / 100}
-                        source="AI检测"
+                        level={pollution.level}
+                        contaminationScore={pollution.contaminationScore}
+                        source={pollution.source}
                       />
                     )}
                     <Link
@@ -235,7 +304,7 @@ export default function BookDetail() {
                             拆分为两章
                           </button>
                           <button
-                            onClick={() => handleRollback(ch.number)}
+                            onClick={() => openRollbackDial(ch.number)}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
                           >
                             <RotateCcw size={14} />
@@ -251,6 +320,18 @@ export default function BookDetail() {
           </div>
         )}
       </div>
+
+      <TimeDial
+        open={timeDialOpen}
+        snapshots={snapshots}
+        currentChapter={rollbackChapterNumber ?? 0}
+        onConfirm={handleRollbackConfirm}
+        onClose={() => {
+          setTimeDialOpen(false);
+          setRollbackChapterNumber(null);
+          setSnapshots([]);
+        }}
+      />
     </div>
   );
 }

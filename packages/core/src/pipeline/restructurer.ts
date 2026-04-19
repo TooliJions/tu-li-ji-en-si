@@ -3,7 +3,7 @@ import * as path from 'path';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 import { LLMProvider } from '../llm/provider';
-import type { Manifest, Fact, Hook } from '../models/state';
+import type { Manifest } from '../models/state';
 import type { ChapterIndex, ChapterIndexEntry } from '../models/chapter';
 
 // ─── Configuration ──────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { createExportRouter } from './export';
 import { createPromptsRouter } from './prompts';
 import { createContextRouter } from './context';
+import { createBookRouter, resetBookStoreForTests } from './books';
+import { resetStudioCoreBridgeForTests } from '../core-bridge';
 
 describe('Export Route', () => {
   let app: Hono;
@@ -55,17 +57,32 @@ describe('Context Route', () => {
 
   beforeEach(() => {
     app = new Hono();
+    app.route('/api/books', createBookRouter());
     app.route('/api/books/:bookId/context', createContextRouter());
+    resetBookStoreForTests();
+    resetStudioCoreBridgeForTests();
   });
 
+  async function createBook() {
+    const res = await app.request('/api/books', {
+      method: 'POST',
+      body: JSON.stringify({ title: '辅助测试书', genre: 'urban', targetWords: 30000 }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = (await res.json()) as { data: { id: string } };
+    return data.data.id;
+  }
+
   describe('GET /api/books/:bookId/context/:entityName', () => {
-    it('returns entity context', async () => {
-      const res = await app.request('/api/books/book-001/context/林晨');
-      expect(res.status).toBe(200);
+    it('returns 404 for entity when runtime has no matching context', async () => {
+      const bookId = await createBook();
+      const res = await app.request(`/api/books/${bookId}/context/林晨`);
+      expect(res.status).toBe(404);
     });
 
     it('returns 404 for unknown entity', async () => {
-      const res = await app.request('/api/books/book-001/context/unknown');
+      const bookId = await createBook();
+      const res = await app.request(`/api/books/${bookId}/context/unknown`);
       expect(res.status).toBe(404);
     });
   });

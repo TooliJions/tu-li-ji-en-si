@@ -1,6 +1,6 @@
 import type { Hook } from '../models/state';
 import type { HookPolicy } from './hook-policy';
-import { WakeSmoothing, type WakeCandidate, type SmoothingResult } from './wake-smoothing';
+import { WakeSmoothing, type WakeCandidate } from './wake-smoothing';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -203,8 +203,6 @@ export class HookAgenda {
 
     // 4. Apply state changes to hooks
     const wokenIds = new Set(smoothingResult.woken.map((w) => w.hookId));
-    const deferredIds = new Set(smoothingResult.deferred.map((d) => d.hookId));
-
     for (const hook of hooks) {
       if (wokenIds.has(hook.id)) {
         hook.status = 'open';

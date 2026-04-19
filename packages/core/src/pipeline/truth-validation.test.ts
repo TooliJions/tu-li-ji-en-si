@@ -2,9 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
 import {
   TruthValidation,
-  type TruthValidationInput,
   type TruthValidationResult,
-  type TruthIssue,
 } from './truth-validation';
 import type { Manifest, Fact, WorldRule, Character, Hook } from '../models/state';
 

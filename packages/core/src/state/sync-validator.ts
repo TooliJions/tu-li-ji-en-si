@@ -3,7 +3,7 @@ import * as path from 'path';
 import { StateManager } from './manager';
 import { RuntimeStateStore } from './runtime-store';
 import { ProjectionRenderer } from './projections';
-import type { Manifest } from '../models/state';
+import type { Delta, Manifest } from '../models/state';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -42,10 +42,7 @@ export interface DiffReport {
   files: DiffFileEntry[];
 }
 
-export interface DeltaAction {
-  type: string;
-  payload: Record<string, unknown>;
-}
+export type DeltaAction = Delta['actions'][number];
 
 export interface MarkdownDelta {
   sourceFile: string;
@@ -54,7 +51,14 @@ export interface MarkdownDelta {
 
 // ─── Projection file list ───────────────────────────────────
 
-const PROJECTION_FILES = ['current_state.md', 'hooks.md', 'chapter_summaries.md'];
+const PROJECTION_FILES = [
+  'current_state.md',
+  'hooks.md',
+  'chapter_summaries.md',
+  'subplot_board.md',
+  'emotional_arcs.md',
+  'character_matrix.md',
+];
 
 // ─── SyncValidator ─────────────────────────────────────────────
 
@@ -192,6 +196,12 @@ export class SyncValidator {
         return ProjectionRenderer.renderHooks(manifest);
       case 'chapter_summaries.md':
         return ProjectionRenderer.renderChapterSummaries([]);
+      case 'subplot_board.md':
+        return ProjectionRenderer.renderSubplotBoard(manifest);
+      case 'emotional_arcs.md':
+        return ProjectionRenderer.renderEmotionalArcs(manifest);
+      case 'character_matrix.md':
+        return ProjectionRenderer.renderCharacterMatrix(manifest);
       default:
         return undefined;
     }
@@ -229,7 +239,7 @@ export class SyncValidator {
     const actions: DeltaAction[] = [];
 
     // Parse focus
-    const focusMatch = content.match(/## 当前焦点\s*\n\n([\s\S]*?)(?=\n##)/);
+    const focusMatch = content.match(/## 当前焦点\s*\n\n([\s\S]*?)(?=\n##|$)/);
     if (focusMatch) {
       const focus = focusMatch[1].trim();
       if (focus) {

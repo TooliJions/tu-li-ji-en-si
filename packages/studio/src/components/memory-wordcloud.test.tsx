@@ -19,7 +19,7 @@ describe('MemoryWordcloud', () => {
   });
 
   it('scales font size by confidence', () => {
-    const { container } = render(<MemoryWordcloud memories={mockMemories} />);
+    render(<MemoryWordcloud memories={mockMemories} />);
     const highConfidence = screen.getByText('林晨');
     const lowConfidence = screen.getByText('线索');
     // Higher confidence = larger font

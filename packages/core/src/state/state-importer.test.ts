@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { StateImporter, type ImportResult, type ImportError } from './state-importer';
+import { StateImporter } from './state-importer';
 import { StateManager } from './manager';
 import { RuntimeStateStore } from './runtime-store';
 import { StateBootstrap, type BootstrapOptions } from './bootstrap';
@@ -241,7 +241,6 @@ describe('StateImporter', () => {
 - **埋设章节**: 第 1 章
 `;
 
-      const oldManifest = store.loadManifest(bookId);
       const result = importer.applyImport(bookId, markdown, 'hooks.md');
 
       expect(result.success).toBe(true);

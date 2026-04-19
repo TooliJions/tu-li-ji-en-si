@@ -230,9 +230,8 @@ export class LengthNormalizer {
     content: string,
     softUpper: number,
     hardLower: number,
-    hardUpper: number
+    _hardUpper: number
   ): { content: string; safetyNetActivated: boolean } {
-    let safetyNetActivated = false;
     let result = content;
 
     // Safety net floor: never compress below hardLower
@@ -266,7 +265,6 @@ export class LengthNormalizer {
 
       if (canCut < neededCut) {
         // Safety net: can't cut enough without going below floor
-        safetyNetActivated = true;
         // Cut what we can
         const truncated = this.#truncateFromEnd(result, minFloor);
         return { content: truncated, safetyNetActivated: true };
@@ -292,7 +290,7 @@ export class LengthNormalizer {
 
     for (const paragraph of paragraphs) {
       // Split into sentences, keeping terminators attached
-      const rawSentences = paragraph.split(/([。！？\.]+)/);
+      const rawSentences = paragraph.split(/([。！？.]+)/);
       const grouped: string[] = [];
       for (let i = 0; i < rawSentences.length; i += 2) {
         const body = rawSentences[i] || '';

@@ -131,23 +131,6 @@ const AUTHOR_INTRUSION_PATTERNS = [
 
 // ─── Inner thought patterns (for head-hop detection) ─────────────
 
-const THOUGHT_PATTERNS = [
-  /心想/,
-  /暗暗.*盘算/,
-  /心中.*想/,
-  /暗想/,
-  /暗忖/,
-  /心想.*:/,
-  /心道/,
-  /寻思/,
-  /琢磨/,
-  /思忖/,
-  /心想.*$/,
-  /心里.*嘀咕/,
-  /觉得.*一定/,
-  /觉得.*不会/,
-];
-
 // ─── POFilter ────────────────────────────────────────────────────
 /**
  * 叙事视角过滤器。检测章节内容中的视角跳变，包括：
@@ -260,9 +243,6 @@ export class POFilter {
         // Check if the pronoun is a standalone character usage (not part of a longer word)
         if (pronoun.length === 1) {
           // For single-char pronouns, check context to avoid false positives
-          const before = idx > 0 ? text[idx - 1] : '';
-          const after = idx + 1 < text.length ? text[idx + 1] : '';
-
           // Skip if part of a compound word/idiom
           if (this.#isPartOfCompound(text, idx, pronoun)) {
             idx += 1;
@@ -466,22 +446,6 @@ export class POFilter {
     owners.delete('谁');
 
     return [...owners];
-  }
-
-  #extractNameBeforeThought(beforeText: string): string | null {
-    // Find the last Chinese name (2-4 chars) before punctuation boundary
-    // Names typically don't include structural words
-    const clean = beforeText.replace(
-      /[，。！？、\s\n的了在到着过得已而却又但因所以如果虽然然而且即便纵然]/g,
-      ' '
-    );
-    const parts = clean.split(/\s+/).filter((p) => p.length > 0);
-    if (parts.length === 0) return null;
-
-    // Take the last meaningful word fragment
-    const last = parts[parts.length - 1];
-    if (last.length >= 2 && last.length <= 4) return last;
-    return null;
   }
 
   #isValidName(name: string): boolean {

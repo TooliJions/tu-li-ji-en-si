@@ -13,14 +13,17 @@ export default function PollutionBadge({
 }) {
   const pct = Math.round(contaminationScore * 100);
   const isHigh = level === 'high';
+  const isWarningLevel = level === 'medium' || level === 'high';
+  const primaryLabel = isWarningLevel ? '污染隔离' : '已隔离';
+  const secondaryLabel = level === 'high' ? '强制通过' : level === 'medium' ? '待复核' : null;
 
   return (
     <div
       className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-        isHigh ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-gray-50'
+        isWarningLevel ? 'border-orange-500 bg-orange-50 text-orange-900' : 'border-gray-200 bg-gray-50'
       }`}
       style={
-        isHigh
+        isWarningLevel
           ? {
               backgroundImage:
                 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,140,0,0.08) 4px, rgba(255,140,0,0.08) 8px)',
@@ -28,7 +31,8 @@ export default function PollutionBadge({
           : undefined
       }
     >
-      <span className="font-medium">{isHigh ? '污染隔离' : '已隔离'}</span>
+      <span className="font-medium">{primaryLabel}</span>
+      {secondaryLabel ? <span className="font-medium">{secondaryLabel}</span> : null}
       <span className="text-muted-foreground">{pct}%</span>
       <span className="text-muted-foreground">{source}</span>
     </div>

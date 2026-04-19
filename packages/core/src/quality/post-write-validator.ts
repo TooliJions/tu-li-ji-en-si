@@ -1,4 +1,4 @@
-import type { Manifest, Character, Fact, WorldRule } from '../models/state';
+import type { Manifest, WorldRule } from '../models/state';
 
 // ─── Types ─────────────────────────────────────────────────────────
 

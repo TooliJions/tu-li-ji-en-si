@@ -3,7 +3,6 @@ import {
   TitleVoiceAuditor,
   type TitleVoiceInput,
   type TitleVoiceOutput,
-  type TitleVoiceIssue,
 } from './title-voice-auditor';
 import type { LLMProvider } from '../llm/provider';
 

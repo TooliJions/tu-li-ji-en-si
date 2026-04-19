@@ -13,6 +13,7 @@ import ConfigView from '@/pages/config-view';
 import DoctorView from '@/pages/doctor-view';
 import FanficInit from '@/pages/fanfic-init';
 import StyleManager from '@/pages/style-manager';
+import EmotionalArcs from '@/pages/emotional-arcs';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/doctor" element={<DoctorView />} />
         <Route path="/fanfic-init" element={<FanficInit />} />
         <Route path="/style-manager" element={<StyleManager />} />
+        <Route path="/book/:bookId/emotional-arcs" element={<EmotionalArcs />} />
       </Route>
     </Routes>
   );

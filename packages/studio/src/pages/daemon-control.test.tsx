@@ -33,14 +33,6 @@ const mockRunningStatus = {
   startedAt: '2026-04-19T08:00:00.000Z',
 };
 
-const mockLogs = [
-  { time: '2026-04-19T08:00:00.000Z', level: 'info', message: '守护进程启动' },
-  { time: '2026-04-19T08:01:00.000Z', level: 'info', message: '第 1 章完成' },
-  { time: '2026-04-19T08:02:00.000Z', level: 'warn', message: 'Token 用量超过 50%' },
-  { time: '2026-04-19T08:03:00.000Z', level: 'info', message: '第 2 章完成' },
-  { time: '2026-04-19T08:04:00.000Z', level: 'error', message: '第 3 章创作失败，回退中' },
-];
-
 function renderWithRouter(bookId = 'book-001') {
   return render(
     <MemoryRouter initialEntries={[`/daemon?bookId=${bookId}`]}>

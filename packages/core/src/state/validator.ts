@@ -1,4 +1,5 @@
 import { ManifestSchema, DeltaSchema } from '../models/state';
+import type { Delta, Manifest } from '../models/state';
 
 // ─── StateValidator ─────────────────────────────────────────────
 // 基于 Zod 的运行时状态校验。
@@ -11,7 +12,7 @@ export type ValidationResult<T = unknown> =
  * 校验 Manifest 结构。
  * 非法状态返回详细错误信息，合法状态返回解析后的数据。
  */
-export function validateManifest(raw: unknown): ValidationResult<ManifestSchema['_output']> {
+export function validateManifest(raw: unknown): ValidationResult<Manifest> {
   const result = ManifestSchema.safeParse(raw);
   if (result.success) {
     return { success: true, data: result.data };
@@ -25,7 +26,7 @@ export function validateManifest(raw: unknown): ValidationResult<ManifestSchema[
 /**
  * 校验 Delta 结构。
  */
-export function validateDelta(raw: unknown): ValidationResult<DeltaSchema['_output']> {
+export function validateDelta(raw: unknown): ValidationResult<Delta> {
   const result = DeltaSchema.safeParse(raw);
   if (result.success) {
     return { success: true, data: result.data };

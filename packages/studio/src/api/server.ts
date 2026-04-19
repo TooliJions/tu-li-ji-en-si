@@ -16,6 +16,8 @@ import { createSystemRouter } from './routes/system';
 import { createPromptsRouter } from './routes/prompts';
 import { createContextRouter } from './routes/context';
 import { createNaturalAgentRouter } from './routes/natural-agent';
+import { createFanficRouter } from './routes/fanfic';
+import { createStyleRouter } from './routes/style';
 
 // Re-export for route modules
 export { eventHub, SSEClient };
@@ -77,6 +79,8 @@ export function createApp(): Hono {
   bookScope.route('/prompts', createPromptsRouter());
   bookScope.route('/context', createContextRouter());
   bookScope.route('/natural-agent', createNaturalAgentRouter());
+  bookScope.route('/fanfic', createFanficRouter());
+  bookScope.route('/style', createStyleRouter());
   app.route('/api/books/:bookId', bookScope);
 
   // Global routes

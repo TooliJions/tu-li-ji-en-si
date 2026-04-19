@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { createBookRouter } from './books';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { createBookRouter, resetBookStoreForTests } from './books';
+import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
 
 function createTestApp() {
   const app = new Hono();
@@ -15,6 +18,8 @@ describe('Books Route', () => {
 
   beforeEach(() => {
     app = createTestApp();
+    resetBookStoreForTests();
+    resetStudioCoreBridgeForTests();
   });
 
   describe('GET /api/books', () => {
@@ -54,6 +59,14 @@ describe('Books Route', () => {
       expect(data.data.genre).toBe('都市');
       expect(data.data.id).toBeDefined();
       expect(data.data.targetChapterCount).toBeDefined();
+
+      const bookId = String(data.data.id);
+      const runtimeRoot = getStudioRuntimeRootDir();
+      expect(fs.existsSync(path.join(runtimeRoot, bookId, 'book.json'))).toBe(true);
+      expect(fs.existsSync(path.join(runtimeRoot, bookId, 'meta.json'))).toBe(true);
+      expect(fs.existsSync(path.join(runtimeRoot, bookId, 'story', 'state', 'manifest.json'))).toBe(
+        true
+      );
     });
 
     it('creates a book with optional brief', async () => {

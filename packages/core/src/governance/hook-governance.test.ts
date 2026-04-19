@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  HookGovernance,
-  type AdmissionResult,
-  type HealthReport,
-  type IntentResult,
-} from './hook-governance';
+import { HookGovernance } from './hook-governance';
 import { HookPolicy } from './hook-policy';
 import { HookAgenda } from './hook-agenda';
 import type { Hook } from '../models/state';

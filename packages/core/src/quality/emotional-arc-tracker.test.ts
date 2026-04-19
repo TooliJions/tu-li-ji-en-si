@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   EmotionalArcTracker,
   type EmotionalSnapshot,
-  type EmotionArcReport,
-  type EmotionBreakAlert,
 } from './emotional-arc-tracker';
 
 describe('EmotionalArcTracker', () => {

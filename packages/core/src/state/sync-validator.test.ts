@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  SyncValidator,
-  type SyncReport,
-  type SyncIssue,
-  type MarkdownDelta,
-} from './sync-validator';
+import { SyncValidator } from './sync-validator';
 import { StateManager } from './manager';
 import { RuntimeStateStore } from './runtime-store';
 import { StateBootstrap, type BootstrapOptions } from './bootstrap';

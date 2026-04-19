@@ -3,7 +3,6 @@ import {
   CharacterDesigner,
   type CharacterDesignBrief,
   type CharacterDesignResult,
-  type CharacterProfile,
 } from './character';
 import type { LLMProvider } from '../llm/provider';
 

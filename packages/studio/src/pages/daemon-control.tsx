@@ -4,11 +4,8 @@ import {
   Play,
   Pause,
   Square,
-  Clock,
   AlertTriangle,
   Terminal,
-  Zap,
-  BookOpen,
   ChevronRight,
 } from 'lucide-react';
 import { fetchDaemonStatus, startDaemon, pauseDaemon, stopDaemon } from '../lib/api';

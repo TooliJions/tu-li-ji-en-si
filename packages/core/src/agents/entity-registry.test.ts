@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EntityRegistry, type EntityEntry, EntityType, EntityStatus } from './entity-registry';
+import { EntityRegistry, type EntityEntry } from './entity-registry';
 
 describe('EntityRegistry', () => {
   let registry: EntityRegistry;

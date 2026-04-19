@@ -123,7 +123,7 @@ export class PipelineScheduler {
    * 解析执行顺序：从目标阶段出发，拓扑排序所有可达的前置阶段。
    * 自动排除已禁用阶段和前置条件不满足的阶段。
    */
-  resolveOrder(targetStageIds: string[], ctx?: PipelineContext): PipelineStage[] {
+  resolveOrder(targetStageIds: string[], _ctx?: PipelineContext): PipelineStage[] {
     const reachable = new Set<string>();
     const disabledInPath = new Set<string>();
 

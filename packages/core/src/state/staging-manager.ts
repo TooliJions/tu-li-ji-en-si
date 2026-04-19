@@ -167,7 +167,7 @@ export class StagingManager {
 
         switch (action.action) {
           case 'create':
-          case 'replace':
+          case 'replace': {
             // Ensure target directory exists
             const targetDir = path.dirname(action.targetPath);
             fs.mkdirSync(targetDir, { recursive: true });
@@ -175,6 +175,7 @@ export class StagingManager {
             fs.renameSync(stagingPath, action.targetPath);
             applied.push(`${action.action}: ${action.stagingFile} → ${action.targetPath}`);
             break;
+          }
 
           case 'delete':
             if (fs.existsSync(action.targetPath)) {
@@ -268,7 +269,7 @@ export class StagingManager {
   /**
    * 生成拆分操作的计划。
    */
-  prepareSplitPlan(bookId: string, chapter: number, splitAtParagraph: number): ReorgPlan {
+  prepareSplitPlan(bookId: string, chapter: number, _splitAtParagraph: number): ReorgPlan {
     const bookDir = this.#getBookDir(bookId);
     if (!fs.existsSync(bookDir)) {
       return {

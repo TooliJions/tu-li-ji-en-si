@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateManifest, validateDelta, type ValidationResult } from './validator';
+import { validateManifest, validateDelta } from './validator';
 import type { Manifest } from '../models/state';
 
 // ── 工厂函数 ──────────────────────────────────────────────
@@ -44,7 +44,7 @@ describe('validateManifest', () => {
   });
 
   it('fails when bookId is missing', () => {
-    const manifest = { ...validManifest() } as any;
+    const manifest = { ...validManifest() } as Partial<Manifest>;
     delete manifest.bookId;
     const result = validateManifest(manifest);
 
@@ -55,8 +55,7 @@ describe('validateManifest', () => {
   });
 
   it('fails when versionToken is not positive', () => {
-    const manifest = validManifest();
-    (manifest as any).versionToken = 0;
+    const manifest = { ...validManifest(), versionToken: 0 };
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(false);
@@ -66,50 +65,57 @@ describe('validateManifest', () => {
   });
 
   it('fails when lastChapterWritten is negative', () => {
-    const manifest = validManifest();
-    (manifest as any).lastChapterWritten = -1;
+    const manifest = { ...validManifest(), lastChapterWritten: -1 };
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(false);
   });
 
   it('fails when hooks array contains invalid item', () => {
-    const manifest = validManifest();
-    (manifest as any).hooks = [{ id: 'hook-1', status: 'invalid-status' }];
+    const manifest = {
+      ...validManifest(),
+      hooks: [{ id: 'hook-1', status: 'invalid-status' }],
+    } as unknown;
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(false);
   });
 
   it('fails when facts array has bad confidence', () => {
-    const manifest = validManifest();
-    (manifest as any).facts = [{ id: 'f1', confidence: 'impossible' }];
+    const manifest = {
+      ...validManifest(),
+      facts: [{ id: 'f1', confidence: 'impossible' }],
+    } as unknown;
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(false);
   });
 
   it('fails when character role is invalid', () => {
-    const manifest = validManifest();
-    (manifest as any).characters = [{ id: 'c1', role: 'wizard' }];
+    const manifest = {
+      ...validManifest(),
+      characters: [{ id: 'c1', role: 'wizard' }],
+    } as unknown;
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(false);
   });
 
   it('handles optional currentFocus being undefined', () => {
-    const manifest = validManifest();
-    delete (manifest as any).currentFocus;
+    const manifest = { ...validManifest() } as Partial<Manifest>;
+    delete manifest.currentFocus;
     const result = validateManifest(manifest);
 
     expect(result.success).toBe(true);
   });
 
   it('returns detailed error messages', () => {
-    const manifest = { ...validManifest() } as any;
+    const manifest = { ...validManifest() } as Partial<Manifest>;
     delete manifest.bookId;
-    manifest.versionToken = -1;
-    const result = validateManifest(manifest);
+    const result = validateManifest({
+      ...manifest,
+      versionToken: -1,
+    });
 
     expect(result.success).toBe(false);
     if (!result.success) {

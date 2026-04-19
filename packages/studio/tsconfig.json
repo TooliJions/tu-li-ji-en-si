@@ -15,14 +15,13 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "composite": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "references": [
-      { "path": "../core" }
-    ]
+    }
   },
+  "references": [
+    { "path": "../core" }
+  ],
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

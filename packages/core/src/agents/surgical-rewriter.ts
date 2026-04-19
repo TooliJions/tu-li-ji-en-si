@@ -156,7 +156,7 @@ ${input.chapterContent}
     return lines.join('\n');
   }
 
-  #localReplaceGuidance(input: RewriteInput): string {
+  #localReplaceGuidance(_input: RewriteInput): string {
     return `
 ## 重写指引（局部替换）
 

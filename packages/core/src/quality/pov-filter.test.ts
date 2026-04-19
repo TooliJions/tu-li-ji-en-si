@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { POFilter, type POFilterInput, type POFilterReport, type POVShift } from './pov-filter';
+import { POFilter, type POFilterInput } from './pov-filter';
 
 // ── Helpers ────────────────────────────────────────────────────────
 

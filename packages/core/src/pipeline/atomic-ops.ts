@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
-import { LLMProvider, type LLMResponse } from '../llm/provider';
+import { LLMProvider } from '../llm/provider';
+import type { ChapterIndexEntry } from '../models/chapter';
 
 // ─── Config ──────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ export class AtomicPipelineOps {
   async draftChapter(input: DraftChapterInput): Promise<AtomicOperationResult> {
     try {
       const prompt = this.#buildDraftPrompt(input);
-      const result = await this.provider.generate(prompt);
+      const result = await this.provider.generate({ prompt });
 
       return {
         success: true,
@@ -115,7 +116,7 @@ export class AtomicPipelineOps {
         overallScore: number;
         status: 'pass' | 'fail';
         summary: string;
-      }>(prompt);
+      }>({ prompt });
 
       return {
         success: true,
@@ -143,7 +144,7 @@ export class AtomicPipelineOps {
   async reviseChapter(input: ReviseChapterInput): Promise<AtomicOperationResult> {
     try {
       const prompt = this.#buildRevisePrompt(input);
-      const result = await this.provider.generate(prompt);
+      const result = await this.provider.generate({ prompt });
 
       return {
         success: true,
@@ -268,22 +269,58 @@ ${input.content}
 
   // ── Internal: Helpers ─────────────────────────────────────────
 
+  #findChapterEntry(chapters: ChapterIndexEntry[], chapterNumber: number): ChapterIndexEntry | undefined {
+    return chapters.find((chapter) => {
+      const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
+      return chapter.number === chapterNumber || legacyChapter.chapterNumber === chapterNumber;
+    });
+  }
+
+  #normalizeChapterEntry(
+    chapter: ChapterIndexEntry,
+    chapterNumber: number,
+    title: string,
+    content: string
+  ): void {
+    const legacyChapter = chapter as ChapterIndexEntry & {
+      chapterNumber?: number;
+      status?: string;
+      writtenAt?: string;
+      plannedAt?: string;
+    };
+    chapter.number = chapterNumber;
+    chapter.title = title;
+    chapter.fileName = chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`;
+    chapter.wordCount = Number.isFinite(chapter.wordCount) ? chapter.wordCount : content.length;
+    chapter.createdAt = chapter.createdAt || new Date().toISOString();
+    delete legacyChapter.chapterNumber;
+    delete legacyChapter.status;
+    delete legacyChapter.writtenAt;
+    delete legacyChapter.plannedAt;
+  }
+
   #updateIndex(input: PersistChapterInput): void {
     const index = this.stateManager.readIndex(input.bookId);
-    const existingChapter = index.chapters.find((c) => c.chapterNumber === input.chapterNumber);
+    const existingChapter = this.#findChapterEntry(index.chapters, input.chapterNumber);
     if (existingChapter) {
-      existingChapter.status = input.status === 'final' ? 'written' : 'draft';
-      existingChapter.writtenAt = new Date().toISOString();
+      this.#normalizeChapterEntry(existingChapter, input.chapterNumber, input.title, input.content);
+      existingChapter.wordCount = input.content.length;
     } else {
+      const padded = String(input.chapterNumber).padStart(4, '0');
       index.chapters.push({
-        chapterNumber: input.chapterNumber,
+        number: input.chapterNumber,
         title: input.title,
-        status: input.status === 'final' ? 'written' : 'draft',
-        writtenAt: new Date().toISOString(),
+        fileName: `chapter-${padded}.md`,
+        wordCount: input.content.length,
+        createdAt: new Date().toISOString(),
       });
     }
     index.totalChapters = index.chapters.length;
-    index.updatedAt = new Date().toISOString();
+    index.totalWords = index.chapters.reduce(
+      (sum, chapter) => sum + (Number.isFinite(chapter.wordCount) ? chapter.wordCount : 0),
+      0
+    );
+    index.lastUpdated = new Date().toISOString();
     this.stateManager.writeIndex(input.bookId, index);
 
     // 更新 manifest

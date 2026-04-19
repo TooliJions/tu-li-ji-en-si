@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ReorgLock, type ReorgLockInfo, type ReorgOperation } from './reorg-lock';
-import { StagingManager, type StagingFile, type ReorgPlan } from './staging-manager';
+import { ReorgLock } from './reorg-lock';
+import { StagingManager } from './staging-manager';
 import { StateManager } from './manager';
 import { RuntimeStateStore } from './runtime-store';
 import type { ChapterIndex } from '../models/chapter';

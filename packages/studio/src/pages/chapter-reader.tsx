@@ -9,9 +9,22 @@ import {
   FileSearch,
   Zap,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
-import { fetchChapter, fetchAuditReport, updateChapter, runAudit } from '../lib/api';
+import {
+  fetchAuditReport,
+  fetchChapter,
+  fetchChapterSnapshots,
+  fetchEntityContext,
+  rollbackChapter,
+  runAudit,
+  updateChapter,
+} from '../lib/api';
+import ContextPopup from '../components/context-popup';
+import EntityHighlight from '../components/entity-highlight';
 import PollutionBadge from '../components/pollution-badge';
+import TimeDial from '../components/time-dial';
+import { extractFlowEntities } from '../lib/entity-context';
 
 interface Chapter {
   number: number;
@@ -21,8 +34,59 @@ interface Chapter {
   wordCount: number;
   qualityScore: number | null;
   auditStatus: string | null;
+  auditReport?: AuditReport | null;
+  warningCode?: string | null;
+  warning?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ChapterSnapshot {
+  id: string;
+  chapter: number;
+  label: string;
+  timestamp: string;
+}
+
+interface EntityContext {
+  name: string;
+  type: string;
+  currentLocation: string;
+  emotion: string;
+  inventory: string[];
+  relationships: Array<{ with: string; type: string; affinity?: string }>;
+  activeHooks: Array<{ id: string; description: string; status: string }>;
+}
+
+function getChapterPollutionState(chapter: Chapter) {
+  if (chapter.warningCode === 'accept_with_warnings') {
+    return {
+      isPolluted: true,
+      level: 'high' as const,
+      contaminationScore: 0.95,
+      source: '降级结果',
+      message:
+        chapter.warning ?? '修订次数用尽，系统已按 accept_with_warnings 降级接受结果。',
+    };
+  }
+
+  if (chapter.qualityScore !== null && chapter.qualityScore < 50) {
+    return {
+      isPolluted: true,
+      level: chapter.qualityScore < 30 ? ('high' as const) : ('medium' as const),
+      contaminationScore: 1 - chapter.qualityScore / 100,
+      source: 'AI检测',
+      message: `本章节 AI 痕迹评分较低（${chapter.qualityScore}分），建议人工审校。`,
+    };
+  }
+
+  return {
+    isPolluted: false,
+    level: 'low' as const,
+    contaminationScore: 0,
+    source: 'AI检测',
+    message: '',
+  };
 }
 
 interface AuditReport {
@@ -60,6 +124,12 @@ export default function ChapterReader() {
   const [flowMode, setFlowMode] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
+  const [snapshots, setSnapshots] = useState<ChapterSnapshot[]>([]);
+  const [timeDialOpen, setTimeDialOpen] = useState(false);
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupContext, setPopupContext] = useState<EntityContext | null>(null);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+  const [contextCache, setContextCache] = useState<Record<string, EntityContext>>({});
 
   const chNum = chapterNumber ? parseInt(chapterNumber, 10) : 0;
 
@@ -73,6 +143,8 @@ export default function ChapterReader() {
       .catch(() => setChapter(null))
       .finally(() => setLoading(false));
   }, [bookId, chapterNumber, chNum]);
+
+  const flowEntities = chapter ? extractFlowEntities(chapter.content, [chapter.title ?? '']) : [];
 
   async function handleSave() {
     if (!bookId) return;
@@ -105,6 +177,54 @@ export default function ChapterReader() {
     }
   }
 
+  async function openRollbackDial() {
+    if (!bookId) return;
+    const snapshotList = await fetchChapterSnapshots(bookId, chNum);
+    setSnapshots(snapshotList);
+    setTimeDialOpen(true);
+  }
+
+  async function handleRollbackConfirm(snapshotId: string) {
+    if (!bookId) return;
+    const ok = await rollbackChapter(bookId, chNum, snapshotId);
+    if (ok) {
+      const refreshed = await fetchChapter(bookId, chNum);
+      setChapter(refreshed);
+      setEditContent(refreshed.content);
+      setAuditReport(refreshed.auditReport ?? null);
+    }
+    setTimeDialOpen(false);
+    setSnapshots([]);
+  }
+
+  async function handleEntityEnter(entity: string, event: React.MouseEvent<HTMLElement>) {
+    if (!bookId) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+    setPopupVisible(true);
+
+    if (contextCache[entity]) {
+      setPopupContext(contextCache[entity]);
+      return;
+    }
+
+    try {
+      const context = await fetchEntityContext(bookId, entity, chNum);
+      setContextCache((prev) => ({ ...prev, [entity]: context }));
+      setPopupContext(context);
+    } catch {
+      setPopupContext(null);
+      setPopupVisible(false);
+    }
+  }
+
+  function handleEntityLeave() {
+    setPopupVisible(false);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">加载中…</div>
@@ -125,7 +245,7 @@ export default function ChapterReader() {
   // Flow mode: minimal UI, just content
   if (flowMode) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto relative">
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={() => setFlowMode(false)}
@@ -138,15 +258,41 @@ export default function ChapterReader() {
         <div className="prose prose-sm max-w-none">
           {editContent.split('\n').map((line, i) => (
             <p key={i} className="text-base leading-relaxed mb-2 text-foreground">
-              {line || '\u00A0'}
+              {line ? (
+                <EntityHighlight
+                  text={line}
+                  entities={flowEntities}
+                  highlightClass="border-b border-dashed border-amber-400/60 bg-transparent px-0 py-0"
+                  onEntityEnter={handleEntityEnter}
+                  onEntityLeave={handleEntityLeave}
+                />
+              ) : (
+                '\u00A0'
+              )}
             </p>
           ))}
         </div>
+        <ContextPopup
+          title={popupContext?.name ?? ''}
+          content={
+            popupContext
+              ? `当前位置：${popupContext.currentLocation}；情绪：${popupContext.emotion}。${
+                  popupContext.inventory.length > 0
+                    ? `持有：${popupContext.inventory.join('、')}。`
+                    : ''
+                }`
+              : ''
+          }
+          visible={popupVisible && popupContext !== null}
+          tags={popupContext ? [popupContext.type, ...popupContext.activeHooks.map((hook) => hook.description)] : []}
+          flowMode
+          position={popupPosition}
+        />
       </div>
     );
   }
 
-  const isPolluted = chapter.qualityScore !== null && chapter.qualityScore < 50;
+  const pollution = getChapterPollutionState(chapter);
 
   return (
     <div className="space-y-4">
@@ -159,15 +305,22 @@ export default function ChapterReader() {
               草稿
             </span>
           )}
-          {isPolluted && (
+          {pollution.isPolluted && (
             <PollutionBadge
-              level={chapter.qualityScore < 30 ? 'high' : 'medium'}
-              contaminationScore={1 - (chapter.qualityScore ?? 0) / 100}
-              source="AI检测"
+              level={pollution.level}
+              contaminationScore={pollution.contaminationScore}
+              source={pollution.source}
             />
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={openRollbackDial}
+            className="p-1.5 rounded-md hover:bg-accent"
+            title="回滚到快照"
+          >
+            <RotateCcw size={16} />
+          </button>
           <button
             onClick={() => setEditMode(!editMode)}
             className="p-1.5 rounded-md hover:bg-accent"
@@ -227,22 +380,35 @@ export default function ChapterReader() {
       )}
 
       {/* Pollution warning banner */}
-      {isPolluted && (
-        <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
+      {pollution.isPolluted && (
+        <div
+          className="rounded-lg border border-orange-300 bg-orange-50 p-4"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+          }}
+        >
           <div className="flex items-start gap-3">
             <AlertTriangle size={20} className="text-orange-600 mt-0.5" />
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <PollutionBadge
-                  level={chapter.qualityScore < 30 ? 'high' : 'medium'}
-                  contaminationScore={1 - (chapter.qualityScore ?? 0) / 100}
-                  source="AI检测"
+                  level={pollution.level}
+                  contaminationScore={pollution.contaminationScore}
+                  source={pollution.source}
                 />
               </div>
-              <p className="text-sm text-orange-700">
-                本章节 AI 痕迹评分较低（{chapter.qualityScore}
-                分），已处于隔离状态。建议进行人工审校或运行质量审计。
-              </p>
+              <p className="text-sm font-medium text-orange-800">污染隔离已启用</p>
+              <p className="text-sm text-orange-700 mt-1">{pollution.message}</p>
+              <div className="mt-3">
+                <button
+                  onClick={openRollbackDial}
+                  className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white/80 px-3 py-1.5 text-sm text-orange-800 hover:bg-white"
+                >
+                  <RotateCcw size={14} />
+                  回滚到此
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -362,6 +528,17 @@ export default function ChapterReader() {
           <ArrowRight size={14} />
         </Link>
       </div>
+
+      <TimeDial
+        open={timeDialOpen}
+        snapshots={snapshots}
+        currentChapter={chNum}
+        onConfirm={handleRollbackConfirm}
+        onClose={() => {
+          setTimeDialOpen(false);
+          setSnapshots([]);
+        }}
+      />
     </div>
   );
 }

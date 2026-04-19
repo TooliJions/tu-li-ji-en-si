@@ -4,7 +4,6 @@ import {
   RevisionLoop,
   type RevisionLoopConfig,
   type RevisionInput,
-  type RevisionResult,
 } from './revision-loop';
 
 // ── Helpers ────────────────────────────────────────────────────────

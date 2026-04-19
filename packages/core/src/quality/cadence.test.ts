@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CadenceAnalyzer,
   type CadenceInput,
-  type CadenceReport,
-  type CadenceSuggestion,
 } from './cadence';
 
 // ── Helpers ────────────────────────────────────────────────────────

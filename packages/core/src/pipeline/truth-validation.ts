@@ -1,5 +1,5 @@
 import { LLMProvider } from '../llm/provider';
-import type { Manifest, Fact, WorldRule, Character, Hook } from '../models/state';
+import type { Manifest, Fact, WorldRule, Character } from '../models/state';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ ${input.content.substring(0, 5000)}
         conflicts: TruthIssue[];
         overallStatus: 'pass' | 'warning' | 'fail';
         summary: string;
-      }>(prompt);
+      }>({ prompt });
 
       // critical 冲突或 fail 状态 → 拒绝
       const hasCritical = result.conflicts.some((c) => c.severity === 'critical');

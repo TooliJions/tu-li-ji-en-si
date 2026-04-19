@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
-import type { LLMProvider, LLMResponse } from '../llm/provider';
+import type { LLMProvider } from '../llm/provider';
 
 // ── Test double concrete agent ────────────────────────────
 
@@ -8,7 +8,7 @@ class TestAgent extends BaseAgent {
   readonly name = 'TestAgent';
   readonly temperature = 0.5;
 
-  async execute(ctx: AgentContext): Promise<AgentResult> {
+  async execute(_ctx: AgentContext): Promise<AgentResult> {
     const text = await this.generate('test prompt');
     return { success: true, data: text };
   }
@@ -18,7 +18,7 @@ class TestJsonAgent extends BaseAgent {
   readonly name = 'TestJsonAgent';
   readonly temperature = 0.3;
 
-  async execute(ctx: AgentContext): Promise<AgentResult> {
+  async execute(_ctx: AgentContext): Promise<AgentResult> {
     const json = await this.generateJSON<{ key: string }>('json prompt');
     return { success: true, data: json };
   }

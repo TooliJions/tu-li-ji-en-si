@@ -105,7 +105,7 @@ describe('HookPanel Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: [], total: 0 });
+    vi.mocked(api.fetchHooks).mockResolvedValue([]);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -115,7 +115,7 @@ describe('HookPanel Page', () => {
   });
 
   it('renders hook list with all hooks', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -131,7 +131,7 @@ describe('HookPanel Page', () => {
   });
 
   it('shows health summary', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -147,7 +147,7 @@ describe('HookPanel Page', () => {
   });
 
   it('displays priority and status badges', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -164,7 +164,7 @@ describe('HookPanel Page', () => {
   });
 
   it('shows overdue warning', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -178,7 +178,7 @@ describe('HookPanel Page', () => {
   });
 
   it('creates a new hook', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
     vi.mocked(api.createHook).mockResolvedValue({
@@ -217,7 +217,7 @@ describe('HookPanel Page', () => {
   });
 
   it('opens status change dropdown', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -243,7 +243,7 @@ describe('HookPanel Page', () => {
   });
 
   it('declares intent to set dormant', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
     vi.mocked(api.declareHookIntent).mockResolvedValue({
@@ -283,7 +283,7 @@ describe('HookPanel Page', () => {
   });
 
   it('wakes a dormant hook', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
     vi.mocked(api.wakeHook).mockResolvedValue({
@@ -321,7 +321,7 @@ describe('HookPanel Page', () => {
   });
 
   it('shows timeline tab with chapter density', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -340,7 +340,7 @@ describe('HookPanel Page', () => {
   });
 
   it('filters hooks by status', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 
@@ -360,7 +360,7 @@ describe('HookPanel Page', () => {
   });
 
   it('shows hook health score bar', async () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue({ data: mockHooks, total: mockHooks.length });
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
 

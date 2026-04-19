@@ -1,4 +1,4 @@
-import type { AgentResult, AgentContext } from '../agents/base';
+import type { AgentResult } from '../agents/base';
 import type { Manifest, Hook, Fact, Character, WorldRule } from '../models/state';
 
 // ─── Config ──────────────────────────────────────────────────────

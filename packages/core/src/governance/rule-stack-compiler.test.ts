@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { RuleStackCompiler, type RuleStackInput, type CompiledRule } from './rule-stack-compiler';
+import { RuleStackCompiler, type RuleStackInput } from './rule-stack-compiler';
 
 describe('RuleStackCompiler', () => {
   let compiler: RuleStackCompiler;

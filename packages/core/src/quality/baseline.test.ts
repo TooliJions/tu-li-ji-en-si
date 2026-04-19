@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   QualityBaseline,
   type ChapterQualityScore,
-  type DriftReport,
-  type Baseline,
 } from './baseline';
 
 // ── Helpers ────────────────────────────────────────────────────────

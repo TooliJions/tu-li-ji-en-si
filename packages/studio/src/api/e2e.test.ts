@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from './server';
-import { chapterStore } from './routes/chapters';
 import { pipelineStore } from './routes/pipeline';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -119,7 +118,7 @@ describe('E2E: Critical User Paths', () => {
   // ── 4. Write Draft (persisted) ─────────────────────────
 
   describe('4. Write draft (persisted chapter)', () => {
-    it('writes a draft chapter (returns data, not persisted to store)', async () => {
+    it('writes a draft chapter and persists it to chapter listing', async () => {
       const { status, body } = await post(`/api/books/${bookId}/pipeline/write-draft`, {
         chapterNumber: 1,
       });
@@ -131,11 +130,13 @@ describe('E2E: Critical User Paths', () => {
       expect(data.data.content).toBeTruthy();
     });
 
-    it('lists chapters (empty — write-draft does not persist to chapterStore)', async () => {
+    it('lists chapters after write-draft persistence', async () => {
       const { status, body } = await get(`/api/books/${bookId}/chapters`);
       expect(status).toBe(200);
-      const data = body as { data: unknown[] };
-      expect(data.data).toHaveLength(0);
+      const data = body as { data: Array<{ number: number; status: string }> };
+      expect(data.data.some((chapter) => chapter.number === 1 && chapter.status === 'draft')).toBe(
+        true
+      );
     });
   });
 
@@ -144,8 +145,8 @@ describe('E2E: Critical User Paths', () => {
   describe('5. Upgrade draft to final', () => {
     it('starts upgrade pipeline (async 202)', async () => {
       const { status, body } = await post(`/api/books/${bookId}/pipeline/upgrade-draft`, {
-        draftId: 'draft-1',
-        content: '润色后的正式章节内容',
+        chapterNumber: 1,
+        userIntent: '将草稿润色为正式章节',
       });
 
       expect(status).toBe(202);
@@ -309,36 +310,15 @@ describe('E2E: Critical User Paths', () => {
     });
   });
 
-  // ── 12. Chapter operations (via chapterStore directly) ──
+  // ── 12. Chapter operations ─────────────────────────────
 
   describe('12. Chapter operations', () => {
-    it('creates a chapter in store for subsequent tests', async () => {
-      // Manually insert a chapter into chapterStore so PATCH/GET works
-      const chMap = chapterStore.get(bookId) || new Map();
-      chMap.set(1, {
-        number: 1,
-        title: null,
-        content: '初始章节内容',
-        status: 'draft',
-        wordCount: 6,
-        qualityScore: null,
-        aiTraceScore: null,
-        auditStatus: null,
-        auditReport: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      if (!chapterStore.has(bookId)) {
-        chapterStore.set(bookId, chMap);
-      }
-    });
-
-    it('fetches the manually inserted chapter', async () => {
+    it('fetches the persisted draft chapter', async () => {
       const { status, body } = await get(`/api/books/${bookId}/chapters/1`);
       expect(status).toBe(200);
       const data = body as { data: { number: number; content: string } };
       expect(data.data.number).toBe(1);
-      expect(data.data.content).toBe('初始章节内容');
+      expect(data.data.content).toBeTruthy();
     });
 
     it('updates chapter content', async () => {

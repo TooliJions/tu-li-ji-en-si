@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BookLock, ChapterIndex, ChapterIndexEntry } from '../models/state';
+import type { BookLock, ChapterIndex } from '../models/state';
 
 // ─── StateManager ─────────────────────────────────────────────────
 // 负责书籍锁、路径计算、章节索引的读写。

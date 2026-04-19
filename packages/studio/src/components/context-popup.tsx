@@ -9,6 +9,7 @@ export default function ContextPopup({
   tags,
   confidence,
   flowMode,
+  position,
 }: {
   title: string;
   content: string;
@@ -16,6 +17,7 @@ export default function ContextPopup({
   tags?: string[];
   confidence?: number;
   flowMode?: boolean;
+  position?: { x: number; y: number };
 }) {
   if (!visible) return null;
 
@@ -24,6 +26,14 @@ export default function ContextPopup({
       className={`absolute z-50 bg-popover border rounded-lg shadow-lg p-4 w-64 max-w-sm ${
         flowMode ? 'animate-in fade-in-0 duration-300' : ''
       }`}
+      style={
+        position
+          ? {
+              left: position.x,
+              top: position.y,
+            }
+          : undefined
+      }
     >
       <h4 className="text-sm font-semibold mb-2">{title}</h4>
       <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{content}</p>

@@ -160,7 +160,7 @@ export class CadenceAnalyzer {
     const paragraphLengths = paragraphs.map((p) => this.#countChars(p));
 
     // Split into sentences (Chinese + Western terminators)
-    const sentences = chapterContent.split(/[。！？\.！\?]+/).filter((s) => s.trim().length > 0);
+    const sentences = chapterContent.split(/[。！？.!?]+/).filter((s) => s.trim().length > 0);
     const sentenceLengths = sentences.map((s) => this.#countChars(s.trim()));
 
     // Dialogue ratio
