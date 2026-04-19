@@ -314,4 +314,50 @@ describe('ConfigView Page', () => {
       expect(screen.getByText(/连接失败|Invalid API key/)).toBeTruthy();
     });
   });
+
+  it('显示通知配置区域', async () => {
+    vi.mocked(api.fetchConfig).mockResolvedValue(mockConfig);
+
+    renderWithRouter();
+
+    await screen.findByText(/通知配置/, {}, { timeout: 3000 });
+
+    expect(screen.getByText('Telegram')).toBeTruthy();
+    expect(screen.getByText('飞书')).toBeTruthy();
+    expect(screen.getByText('自定义 Webhook')).toBeTruthy();
+  });
+
+  it('显示备用Provider状态表格', async () => {
+    vi.mocked(api.fetchConfig).mockResolvedValue(mockConfig);
+
+    renderWithRouter();
+
+    await screen.findByText(/备用 Provider/, {}, { timeout: 3000 });
+
+    expect(screen.getByText('Provider')).toBeTruthy();
+    expect(screen.getByText('API Key')).toBeTruthy();
+    expect(screen.getByText('Base URL')).toBeTruthy();
+    expect(screen.getByText('状态')).toBeTruthy();
+    // Data rows
+    expect(screen.getAllByText('DashScope').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('OpenAI').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('可以切换通知开关', async () => {
+    vi.mocked(api.fetchConfig).mockResolvedValue(mockConfig);
+
+    renderWithRouter();
+
+    await screen.findByText(/通知配置/, {}, { timeout: 3000 });
+
+    // Checkboxes are visually hidden (sr-only), but still accessible
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes.length).toBeGreaterThanOrEqual(3);
+
+    await act(async () => {
+      fireEvent.click(checkboxes[0]);
+    });
+
+    expect((checkboxes[0] as HTMLInputElement).checked).toBe(true);
+  });
 });

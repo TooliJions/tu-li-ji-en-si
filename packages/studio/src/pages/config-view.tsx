@@ -11,6 +11,7 @@ import {
   CheckCircle,
   XCircle,
   Globe,
+  Bell,
 } from 'lucide-react';
 import { fetchConfig, updateConfig, testProvider } from '../lib/api';
 
@@ -55,6 +56,14 @@ export default function ConfigView() {
     latencyMs?: number;
     error?: string;
   } | null>(null);
+
+  // Notification config
+  const [notifications, setNotifications] = useState({
+    telegram: false,
+    feishu: false,
+    webhook: false,
+    webhookUrl: '',
+  });
 
   useEffect(() => {
     fetchConfig()
@@ -308,6 +317,119 @@ export default function ConfigView() {
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Notification Configuration */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Bell size={18} />
+          <h2 className="text-lg font-semibold">通知配置</h2>
+        </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-2 border-b last:border-0">
+            <div>
+              <p className="font-medium text-sm">Telegram</p>
+              <p className="text-xs text-muted-foreground">通过 Telegram Bot 推送流水线状态</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifications.telegram}
+                onChange={(e) => setNotifications({ ...notifications, telegram: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+          <div className="flex items-center justify-between py-2 border-b last:border-0">
+            <div>
+              <p className="font-medium text-sm">飞书</p>
+              <p className="text-xs text-muted-foreground">通过飞书 Webhook 推送消息</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifications.feishu}
+                onChange={(e) => setNotifications({ ...notifications, feishu: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+          <div className="flex items-center justify-between py-2 border-b last:border-0">
+            <div>
+              <p className="font-medium text-sm">自定义 Webhook</p>
+              <p className="text-xs text-muted-foreground">通用 HTTP Webhook 推送</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {notifications.webhook && (
+                <input
+                  value={notifications.webhookUrl}
+                  onChange={(e) =>
+                    setNotifications({ ...notifications, webhookUrl: e.target.value })
+                  }
+                  placeholder="https://example.com/webhook"
+                  className="px-2 py-1 rounded border bg-background text-xs w-48"
+                />
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifications.webhook}
+                  onChange={(e) =>
+                    setNotifications({ ...notifications, webhook: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Backup Providers Table */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={18} />
+          <h2 className="text-lg font-semibold">备用 Provider（故障切换）</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 px-3 font-medium">Provider</th>
+                <th className="text-left py-2 px-3 font-medium">API Key</th>
+                <th className="text-left py-2 px-3 font-medium">Base URL</th>
+                <th className="text-left py-2 px-3 font-medium">状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {config.providers.map((p) => (
+                <tr key={p.name} className="border-b last:border-0">
+                  <td className="py-2 px-3 font-medium">{p.name}</td>
+                  <td className="py-2 px-3 text-muted-foreground">
+                    {p.apiKey ? '•'.repeat(8) + p.apiKey.slice(-4) : 'N/A'}
+                  </td>
+                  <td className="py-2 px-3 text-muted-foreground truncate max-w-[200px]">
+                    {p.baseUrl || '-'}
+                  </td>
+                  <td className="py-2 px-3">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs ${
+                        p.status === 'connected'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {p.status === 'connected' ? '可用' : '不可用'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
