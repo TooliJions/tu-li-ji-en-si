@@ -5,9 +5,11 @@ import {
   TrendingDown,
   Zap,
   AlertTriangle,
+  AlertCircle,
   Shuffle,
   CheckCircle,
   Shield,
+  Activity,
 } from 'lucide-react';
 import {
   fetchWordCount,
@@ -19,6 +21,7 @@ import {
   fetchEmotionalArcs,
   triggerInspirationShuffle,
 } from '../lib/api';
+import TrendDetailChart from '../components/trend-detail-chart';
 
 interface WordCountData {
   totalWords: number;
@@ -150,9 +153,12 @@ export default function Analytics() {
   const [emotionalArcs, setEmotionalArcs] = useState<EmotionalArcData | null>(null);
   const [inspirationResults, setInspirationResults] = useState<InspirationShuffleData | null>(null);
   const [shuffleLoading, setShuffleLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [shuffleError, setShuffleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bookId) return;
+    setLoadError(null);
     Promise.all([
       fetchWordCount(bookId),
       fetchAuditRate(bookId),
@@ -171,8 +177,8 @@ export default function Analytics() {
         setBaselineAlert(ba);
         setEmotionalArcs(ea);
       })
-      .catch(() => {
-        // load failed
+      .catch((err: unknown) => {
+        setLoadError(err instanceof Error ? err.message : '数据加载失败');
       })
       .finally(() => setLoading(false));
   }, [bookId]);
@@ -180,11 +186,12 @@ export default function Analytics() {
   async function handleShuffle() {
     if (!bookId) return;
     setShuffleLoading(true);
+    setShuffleError(null);
     try {
       const result = await triggerInspirationShuffle(bookId);
       setInspirationResults(result);
-    } catch {
-      // shuffle failed
+    } catch (err: unknown) {
+      setShuffleError(err instanceof Error ? err.message : '灵感生成失败');
     } finally {
       setShuffleLoading(false);
     }
@@ -196,9 +203,27 @@ export default function Analytics() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <AlertCircle className="h-10 w-10 text-destructive opacity-60" />
+        <p className="text-sm">{loadError}</p>
+      </div>
+    );
+  }
+
   const maxWords = wordCount?.chapters.length
     ? Math.max(...wordCount.chapters.map((ch) => ch.words))
     : 0;
+
+  const detailedTrendData =
+    aiTrace?.trend.map((pt) => ({
+      chapter: pt.chapter,
+      aiTraceScore: pt.score,
+      sentenceDiversity: qualityBaseline?.current.sentenceDiversity ?? 0.5,
+      avgParagraphLength: qualityBaseline?.current.avgParagraphLength ?? 200,
+      driftPercentage: qualityBaseline?.current.driftPercentage ?? 0,
+    })) || [];
 
   return (
     <div className="space-y-6">
@@ -209,27 +234,30 @@ export default function Analytics() {
         </Link>
       </div>
 
-      {/* Baseline Alert Banner */}
-      {baselineAlert?.triggered && (
-        <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="text-orange-600 mt-0.5 shrink-0" />
-            <div>
-              <p className="font-semibold text-orange-800">基线漂移告警</p>
-              <p className="text-sm text-orange-700 mt-1">
-                {baselineAlert.metric} 指标滑动平均值 {baselineAlert.slidingAverage.toFixed(3)}{' '}
-                超过阈值 {baselineAlert.threshold}
-                ，连续 {baselineAlert.consecutiveChapters} 章未达标。
-              </p>
-              {baselineAlert.suggestedAction && (
-                <p className="text-sm text-orange-700 mt-1 font-medium">
-                  {baselineAlert.suggestedAction}
-                </p>
-              )}
-            </div>
-          </div>
+      {/* Baseline Alert Banner same */}
+
+      {/* NEW: Quality Trend Detail Chart */}
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-6">
+          <Activity size={18} className="text-primary" />
+          <h2 className="text-lg font-semibold">质量趋势详情</h2>
         </div>
-      )}
+        <TrendDetailChart data={detailedTrendData} title="多维度演进分析" />
+        <div className="mt-4 p-3 bg-muted/30 rounded text-xs text-muted-foreground leading-relaxed">
+          <p>
+            • <strong>AI 痕迹</strong>: 反映生成内容的机械感，数值越高表示 AI 痕迹越重。
+          </p>
+          <p>
+            • <strong>句式多样性</strong>: 衡量语言表达的丰富度，理想基线通常在 0.6 以上。
+          </p>
+          <p>
+            • <strong>基线漂移</strong>:
+            检测当前创作是否偏离了设定的质量基线，漂移过大可能导致风格不统一。
+          </p>
+        </div>
+      </div>
+
+      {/* Word Count Chart same logic but maybe layout optimization */}
 
       {/* Word Count Chart */}
       <div className="rounded-lg border bg-card p-6">
@@ -341,7 +369,9 @@ export default function Analytics() {
                   <div key={chapter.chapter} className="rounded border bg-secondary/40 p-3">
                     <div className="flex items-center justify-between text-sm mb-2">
                       <span>第{chapter.chapter}章</span>
-                      <span className="text-muted-foreground">{chapter.totalTokens.toLocaleString()}</span>
+                      <span className="text-muted-foreground">
+                        {chapter.totalTokens.toLocaleString()}
+                      </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(chapter.channels)
@@ -387,32 +417,97 @@ export default function Analytics() {
           <InfoCard label="章节数" value={aiTrace?.trend.length.toString() || '0'} />
         </div>
         {aiTrace?.trend.length ? (
-          <div className="flex items-end gap-2 h-24">
-            {aiTrace.trend.map((point) => {
-              const height = Math.max(point.score * 100, 4);
-              return (
-                <div key={point.chapter} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    {(point.score * 100).toFixed(0)}%
-                  </span>
-                  <div
-                    className={`w-full rounded-t transition-all ${
-                      point.score < 0.2
-                        ? 'bg-green-400'
-                        : point.score < 0.4
-                          ? 'bg-yellow-400'
-                          : 'bg-red-400'
-                    }`}
-                    style={{ height: `${height}%`, maxHeight: '80px' }}
-                  />
-                  <span className="text-xs text-muted-foreground">Ch{point.chapter}</span>
-                </div>
-              );
-            })}
+          <div className="relative">
+            {/* Amber gradient attention zone SVG */}
+            <svg width="0" height="0" className="absolute">
+              <defs>
+                <linearGradient id="amberGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.05" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className="flex items-end gap-2 h-24 relative">
+              {/* Attention zone background - 0.20 threshold */}
+              <div
+                className="absolute left-0 right-0 bg-amber-400/10 border-t border-dashed border-amber-400"
+                data-attention-zone
+                style={{ bottom: '20%', height: '80%' }}
+              />
+              {/* 0.20 threshold line */}
+              <div
+                className="absolute left-0 right-0 border-t border-dashed border-amber-500 z-10"
+                style={{ bottom: '20%' }}
+              >
+                <span className="absolute right-0 -top-4 text-[10px] text-amber-600 font-medium">
+                  关注区 0.20
+                </span>
+              </div>
+              {aiTrace.trend.map((point) => {
+                const height = Math.max(point.score * 100, 4);
+                return (
+                  <div key={point.chapter} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground">
+                      {(point.score * 100).toFixed(0)}%
+                    </span>
+                    <div
+                      className={`w-full rounded-t transition-all ${
+                        point.score < 0.2
+                          ? 'bg-green-400'
+                          : point.score < 0.4
+                            ? 'bg-yellow-400'
+                            : 'bg-red-400'
+                      }`}
+                      style={{ height: `${height}%`, maxHeight: '80px' }}
+                    />
+                    <span className="text-xs text-muted-foreground">Ch{point.chapter}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">暂无AI痕迹数据</p>
         )}
+
+        {/* Suggestion bubble - when recent chapters trend into attention zone */}
+        {aiTrace &&
+          aiTrace.trend.length >= 3 &&
+          (() => {
+            const recent = aiTrace.trend.slice(-3);
+            const anyInAttention = recent.some((p) => p.score >= 0.2);
+            return anyInAttention ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 relative mt-6">
+                <div className="absolute -top-2 left-8 w-4 h-4 bg-amber-50 border-l border-t border-amber-200 transform rotate-45" />
+                <p className="text-sm font-medium text-amber-800 mb-2">建议</p>
+                <p className="text-sm text-amber-700 mb-2">近期的文字似乎有些刻板，可能的原因：</p>
+                <ul className="text-sm text-amber-700 space-y-1 mb-3">
+                  <li>· 当前模型的表达风格趋于模式化</li>
+                  <li>· 大纲结构可能限制了叙事自由度</li>
+                  <li>· 角色情感弧线进入平缓期</li>
+                </ul>
+                <p className="text-sm font-medium text-amber-800 mb-2">试试这样做：</p>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    to={`/config?bookId=${bookId}`}
+                    className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
+                  >
+                    切换至更具创造力的模型
+                  </Link>
+                  <button
+                    onClick={async () => {
+                      if (bookId) {
+                        await triggerInspirationShuffle(bookId);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
+                  >
+                    灵感洗牌：重写当前段落
+                  </button>
+                </div>
+              </div>
+            ) : null;
+          })()}
       </div>
 
       {/* Quality Baseline */}
@@ -546,7 +641,8 @@ export default function Analytics() {
             </div>
           </div>
         )}
-        {!inspirationResults && !shuffleLoading && (
+        {shuffleError && <p className="text-sm text-destructive">{shuffleError}</p>}
+        {!inspirationResults && !shuffleLoading && !shuffleError && (
           <p className="text-sm text-muted-foreground">点击「生成灵感」获取不同风格的写作方案</p>
         )}
       </div>

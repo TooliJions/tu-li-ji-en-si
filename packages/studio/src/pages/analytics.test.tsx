@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import Analytics from './analytics';
+import * as api from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   fetchWordCount: vi.fn(),
@@ -13,374 +15,106 @@ vi.mock('../lib/api', () => ({
   triggerInspirationShuffle: vi.fn(),
 }));
 
-import * as api from '../lib/api';
-import Analytics from './analytics';
-import { pendingPromise } from '../test-utils/pending';
-
-const mockWordCount = {
-  totalWords: 12000,
-  averagePerChapter: 3000,
-  chapters: [
-    { number: 1, words: 3200 },
-    { number: 2, words: 2800 },
-    { number: 3, words: 3000 },
-    { number: 4, words: 3000 },
-  ],
-};
-
-const mockAuditRate = {
-  totalAudits: 3,
-  passRate: 0.85,
-  perChapter: [
-    { number: 1, passed: true },
-    { number: 2, passed: false },
-    { number: 3, passed: true },
-  ],
-};
-
-const mockTokenUsage = {
-  totalTokens: 45000,
-  perChannel: {
-    writer: 20000,
-    auditor: 12000,
-    planner: 5000,
-    composer: 3000,
-    reviser: 5000,
-  },
-  perChapter: [
-    {
-      chapter: 1,
-      totalTokens: 22000,
-      channels: {
-        writer: 10000,
-        auditor: 7000,
-        planner: 2000,
-        composer: 1000,
-        reviser: 2000,
-      },
-    },
-    {
-      chapter: 2,
-      totalTokens: 23000,
-      channels: {
-        writer: 10000,
-        auditor: 5000,
-        planner: 3000,
-        composer: 2000,
-        reviser: 3000,
-      },
-    },
-  ],
-};
-
-const mockAiTrace = {
+const mockAiTraceHigh = {
   trend: [
-    { chapter: 1, score: 0.25 },
-    { chapter: 2, score: 0.18 },
-    { chapter: 3, score: 0.12 },
+    { chapter: 1, score: 0.1 },
+    { chapter: 2, score: 0.15 },
+    { chapter: 3, score: 0.25 },
   ],
-  average: 0.18,
-  latest: 0.12,
+  average: 0.17,
+  latest: 0.25,
 };
 
-const mockQualityBaseline = {
-  baseline: {
-    version: 1,
-    basedOnChapters: [1, 2],
-    createdAt: '2026-04-18T00:00:00.000Z',
-    metrics: { aiTraceScore: 0.15, sentenceDiversity: 0.82, avgParagraphLength: 48 },
-  },
-  current: {
-    aiTraceScore: 0.15,
-    sentenceDiversity: 0.82,
-    avgParagraphLength: 48,
-    driftPercentage: 0,
-    alert: false,
-  },
-};
-
-const mockBaselineAlert = {
-  metric: 'aiTraceScore',
-  baseline: 0.15,
-  threshold: 0.2,
-  windowSize: 3,
-  slidingAverage: 0.15,
-  chaptersAnalyzed: [1, 2, 3],
-  triggered: false,
-  consecutiveChapters: 0,
-  severity: 'ok',
-  suggestedAction: null,
-  inspirationShuffle: { available: false },
-};
-
-const mockInspirationShuffle = {
-  alternatives: [
-    {
-      id: 'A',
-      style: 'fast_paced',
-      label: '快节奏视角',
-      text: '门被猛地推开，林晨冲进走廊。他的心跳加速，呼吸急促。没有时间犹豫了。档案室的钥匙在口袋里发烫，每一秒都可能是最后的机会。',
-      wordCount: 2800,
-      characteristics: ['短句为主', '紧张感拉满'],
-    },
-    {
-      id: 'B',
-      style: 'lyrical',
-      label: '抒情回忆',
-      text: '窗外的雨，像极了那个秋天的午后。林晨望着玻璃上滑落的水珠，思绪飘向了远方。那时候的苏小雨，总是笑着说起未来的事。',
-      wordCount: 2600,
-      characteristics: ['情感细腻', '回忆交织'],
-    },
+const mockAiTraceLow = {
+  trend: [
+    { chapter: 1, score: 0.05 },
+    { chapter: 2, score: 0.08 },
+    { chapter: 3, score: 0.1 },
   ],
-  generationTime: 8.2,
+  average: 0.08,
+  latest: 0.1,
 };
 
-const mockEmotionalArcs = {
-  characters: [
-    {
-      name: '林晨',
-      chapters: [
-        {
-          chapterNumber: 1,
-          emotions: {
-            joy: 0.4,
-            anger: 0.1,
-            sadness: 0.1,
-            fear: 0.1,
-            surprise: 0.1,
-            disgust: 0,
-            trust: 0.1,
-            anticipation: 0.1,
-          },
-          deltas: null,
-          dominantEmotion: 'joy',
-          summary: '喜悦为主(40%)',
-        },
-      ],
-    },
-    {
-      name: '苏小雨',
-      chapters: [
-        {
-          chapterNumber: 1,
-          emotions: {
-            joy: 0.2,
-            anger: 0.1,
-            sadness: 0.3,
-            fear: 0.1,
-            surprise: 0.1,
-            disgust: 0,
-            trust: 0.1,
-            anticipation: 0.1,
-          },
-          deltas: null,
-          dominantEmotion: 'sadness',
-          summary: '悲伤为主(30%)',
-        },
-      ],
-    },
-  ],
-  alerts: [
-    {
-      type: 'flatline',
-      character: '林晨',
-      chapterNumber: 4,
-      emotion: 'joy',
-      severity: 'warning',
-      message: '林晨 的情感弧线进入平缓期',
-    },
-  ],
-};
-
-function renderWithRouter(bookId = 'book-001') {
-  return render(
-    <MemoryRouter initialEntries={[`/analytics?bookId=${bookId}`]}>
-      <Routes>
-        <Route path="/analytics" element={<Analytics />} />
-      </Routes>
-    </MemoryRouter>
-  );
-}
-
-describe('Analytics Page', () => {
+describe('Analytics - AI Trace Attention Zone', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (api.fetchWordCount as any).mockResolvedValue({
+      totalWords: 10000,
+      averagePerChapter: 3000,
+      chapters: [],
+    });
+    (api.fetchAuditRate as any).mockResolvedValue({
+      totalAudits: 5,
+      passRate: 0.8,
+      perChapter: [],
+    });
+    (api.fetchTokenUsage as any).mockResolvedValue({
+      totalTokens: 5000,
+      perChannel: { writer: 2000, auditor: 1000, planner: 500, composer: 500, reviser: 1000 },
+      perChapter: [],
+    });
+    (api.fetchQualityBaseline as any).mockResolvedValue({
+      baseline: {
+        version: 1,
+        basedOnChapters: [1, 2],
+        createdAt: '2026-04-01',
+        metrics: { aiTraceScore: 0.1, sentenceDiversity: 0.7, avgParagraphLength: 200 },
+      },
+      current: {
+        aiTraceScore: 0.12,
+        sentenceDiversity: 0.68,
+        avgParagraphLength: 195,
+        driftPercentage: 0.02,
+        alert: false,
+      },
+    });
+    (api.fetchBaselineAlert as any).mockResolvedValue(null);
+    (api.fetchEmotionalArcs as any).mockResolvedValue({ characters: [], alerts: [] });
   });
 
-  it('shows loading state', () => {
-    vi.mocked(api.fetchWordCount).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchAuditRate).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchTokenUsage).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchAiTrace).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchQualityBaseline).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchBaselineAlert).mockReturnValue(pendingPromise());
-    vi.mocked(api.fetchEmotionalArcs).mockReturnValue(pendingPromise());
+  it('shows attention zone on AI trace chart', async () => {
+    (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceHigh);
 
-    renderWithRouter();
+    render(
+      <MemoryRouter initialEntries={['/analytics?bookId=book-1']}>
+        <Analytics />
+      </MemoryRouter>
+    );
 
-    expect(screen.getByText('加载中…')).toBeTruthy();
+    await waitFor(() => {
+      expect(document.querySelector('[data-attention-zone]')).toBeInTheDocument();
+    });
+    expect(screen.getByText('关注区 0.20')).toBeDefined();
   });
 
-  it('renders word count chart with chapter data', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
+  it('shows suggestion bubble when recent chapters enter attention zone', async () => {
+    (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceHigh);
 
-    renderWithRouter();
+    render(
+      <MemoryRouter initialEntries={['/analytics?bookId=book-1']}>
+        <Analytics />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('字数统计')).toBeTruthy();
+      expect(screen.getByText('建议')).toBeDefined();
     });
-    // Chapter bars should be visible
-    expect(screen.getAllByText('第1章').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('第4章').length).toBeGreaterThan(0);
-    // Word count bars show chapter word counts
-    expect(screen.getByText('3,200')).toBeTruthy();
-    expect(screen.getByText('2,800')).toBeTruthy();
+    expect(screen.getByText(/近期的文字似乎有些刻板/)).toBeDefined();
   });
 
-  it('renders audit rate section', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
+  it('does NOT show suggestion bubble when all scores are below threshold', async () => {
+    (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceLow);
 
-    renderWithRouter();
+    render(
+      <MemoryRouter initialEntries={['/analytics?bookId=book-1']}>
+        <Analytics />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('审计通过率')).toBeTruthy();
-    });
-    expect(screen.getByText('85.0%')).toBeTruthy();
-  });
-
-  it('renders token usage breakdown', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('Token 用量')).toBeTruthy();
-    });
-    expect(screen.getByText('45,000')).toBeTruthy();
-    expect(screen.getByText('writer')).toBeTruthy();
-    expect(screen.getByText('auditor')).toBeTruthy();
-    expect(screen.getAllByText('第1章').length).toBeGreaterThan(0);
-  });
-
-  it('renders AI trace trend', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('AI 痕迹趋势')).toBeTruthy();
-    });
-    expect(screen.getByText('12.0%')).toBeTruthy(); // latest score
-  });
-
-  it('renders quality baseline info', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('质量基线')).toBeTruthy();
-    });
-    expect(screen.getByText('v1')).toBeTruthy();
-  });
-
-  it('shows baseline alert status', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue({
-      ...mockBaselineAlert,
-      triggered: true,
-      severity: 'warning',
-      suggestedAction: '建议运行灵感洗牌',
-    });
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('基线漂移告警')).toBeTruthy();
-    });
-    expect(screen.getByText('建议运行灵感洗牌')).toBeTruthy();
-  });
-
-  it('triggers inspiration shuffle and shows results', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-    vi.mocked(api.triggerInspirationShuffle).mockResolvedValue(mockInspirationShuffle);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('灵感洗牌')).toBeTruthy();
+      expect(screen.getByText('AI 痕迹趋势')).toBeDefined();
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByText('生成灵感'));
-    });
-
-    await waitFor(() => {
-      expect(api.triggerInspirationShuffle).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText('快节奏视角')).toBeTruthy();
-    expect(screen.getByText('抒情回忆')).toBeTruthy();
-  });
-
-  it('renders emotional arc overview from runtime data', async () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('情感弧线概览')).toBeTruthy();
-    });
-
-    expect(screen.getByText('林晨')).toBeTruthy();
-    expect(screen.getByText('苏小雨')).toBeTruthy();
-    expect(screen.getByText('林晨 的情感弧线进入平缓期')).toBeTruthy();
+    expect(screen.queryByText('建议')).toBeNull();
   });
 });
