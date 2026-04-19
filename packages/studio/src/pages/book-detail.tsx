@@ -11,6 +11,10 @@ import {
   Sparkles,
   Palette,
   Heart,
+  History,
+  Trash2,
+  Play,
+  Stethoscope,
 } from 'lucide-react';
 import {
   fetchBook,
@@ -19,6 +23,7 @@ import {
   mergeChapters,
   splitChapter,
   rollbackChapter,
+  deleteChapter,
 } from '../lib/api';
 import PollutionBadge from '../components/pollution-badge';
 import TimeDial from '../components/time-dial';
@@ -91,6 +96,21 @@ export default function BookDetail() {
   const [snapshots, setSnapshots] = useState<ChapterSnapshot[]>([]);
   const [timeDialOpen, setTimeDialOpen] = useState(false);
 
+  // Merge/Split confirmation dialogs
+  const [mergeConfirm, setMergeConfirm] = useState<{
+    from: number;
+    fromTitle: string;
+    to: number;
+    toTitle: string;
+  } | null>(null);
+  const [splitDialog, setSplitDialog] = useState<{
+    chapterNumber: number;
+    title: string;
+    totalParagraphs: number;
+  } | null>(null);
+  const [splitPosition, setSplitPosition] = useState(1);
+  const [newChapterTitle, setNewChapterTitle] = useState('');
+
   useEffect(() => {
     if (!bookId) return;
 
@@ -103,23 +123,73 @@ export default function BookDetail() {
       .finally(() => setLoading(false));
   }, [bookId]);
 
-  async function handleMerge(fromNumber: number, toNumber: number) {
+  useEffect(() => {
+    function handleClickOutside() {
+      setActionMenu(null);
+    }
+    if (actionMenu !== null) {
+      window.addEventListener('click', handleClickOutside);
+    }
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [actionMenu]);
+
+  function handleMerge(fromNumber: number, toNumber: number) {
     if (!bookId) return;
-    const ok = await mergeChapters(bookId, fromNumber, toNumber);
+    const fromCh = chapters.find((c) => c.number === fromNumber);
+    const toCh = chapters.find((c) => c.number === toNumber);
+    setMergeConfirm({
+      from: fromNumber,
+      fromTitle: fromCh?.title ?? `第${fromNumber}章`,
+      to: toNumber,
+      toTitle: toCh?.title ?? `第${toNumber}章`,
+    });
+    setActionMenu(null);
+  }
+
+  async function confirmMerge() {
+    if (!mergeConfirm || !bookId) return;
+    const ok = await mergeChapters(bookId, mergeConfirm.from, mergeConfirm.to);
     if (ok) {
-      setChapters((prev) => prev.filter((ch) => ch.number !== fromNumber));
+      setChapters((prev) => prev.filter((ch) => ch.number !== mergeConfirm.from));
+    }
+    setMergeConfirm(null);
+    setActionMenu(null);
+  }
+
+  async function handleDelete(chapterNumber: number) {
+    if (!bookId || !window.confirm(`确定要删除第 ${chapterNumber} 章吗？此操作不可撤销。`)) return;
+    const ok = await deleteChapter(bookId, chapterNumber);
+    if (ok) {
+      setChapters((prev) => prev.filter((ch) => ch.number !== chapterNumber));
     }
     setActionMenu(null);
   }
 
-  async function handleSplit(chapterNumber: number) {
+  function handleSplit(chapterNumber: number) {
     if (!bookId) return;
-    const data = await splitChapter(bookId, chapterNumber);
+    const ch = chapters.find((c) => c.number === chapterNumber);
+    const paragraphs = (ch?.content ?? '').split(/\n\n+/).filter(Boolean).length;
+    setSplitDialog({
+      chapterNumber,
+      title: ch?.title ?? `第${chapterNumber}章`,
+      totalParagraphs: Math.max(paragraphs, 1),
+    });
+    setSplitPosition(Math.ceil(Math.max(paragraphs, 1) / 2));
+    setNewChapterTitle('');
+    setActionMenu(null);
+  }
+
+  async function confirmSplit() {
+    if (!splitDialog || !bookId) return;
+    const data = await splitChapter(bookId, splitDialog.chapterNumber);
     if (data) {
       setChapters((prev) =>
-        prev.map((ch) => (ch.number === chapterNumber ? data[0] : ch)).concat(data.slice(1))
+        prev
+          .map((ch) => (ch.number === splitDialog.chapterNumber ? data[0] : ch))
+          .concat(data.slice(1))
       );
     }
+    setSplitDialog(null);
     setActionMenu(null);
   }
 
@@ -244,6 +314,27 @@ export default function BookDetail() {
             <Heart size={14} />
             情感弧线
           </Link>
+          <Link
+            to={`/book/${bookId}/prompts`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <History size={14} />
+            提示词版本
+          </Link>
+          <Link
+            to={`/daemon?bookId=${bookId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Play size={14} />
+            守护进程
+          </Link>
+          <Link
+            to={`/doctor?bookId=${bookId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Stethoscope size={14} />
+            系统诊断
+          </Link>
         </div>
       </div>
 
@@ -316,7 +407,17 @@ export default function BookDetail() {
                         <MoreHorizontal size={16} />
                       </button>
                       {actionMenu === ch.number && (
-                        <div className="absolute right-0 top-8 w-48 rounded-md border bg-popover shadow-lg z-10 py-1">
+                        <div
+                          className="absolute right-0 top-8 w-48 rounded-md border bg-popover shadow-lg z-10 py-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link
+                            to={`/book/${bookId}/chapter/${ch.number}`}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                          >
+                            <Pencil size={14} />
+                            编辑/修改
+                          </Link>
                           <button
                             onClick={() => {
                               const prev = chapters.find((c) => c.number === ch.number - 1);
@@ -342,6 +443,14 @@ export default function BookDetail() {
                             <RotateCcw size={14} />
                             回滚到快照
                           </button>
+                          <div className="my-1 border-t" />
+                          <button
+                            onClick={() => handleDelete(ch.number)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 size={14} />
+                            删除章节
+                          </button>
                         </div>
                       )}
                     </div>
@@ -352,6 +461,18 @@ export default function BookDetail() {
           </div>
         )}
       </div>
+
+      {/* Stats Footer */}
+      {(() => {
+        const published = chapters.filter((c) => c.status === 'published').length;
+        const draft = chapters.filter((c) => c.status === 'draft').length;
+        const unpublished = Math.max(book.targetChapterCount - chapters.length, 0);
+        return (
+          <div className="text-sm text-muted-foreground border-t pt-4">
+            统计: 已完成 {published} 章 | 草稿 {draft} 章 | 未创作 {unpublished} 章
+          </div>
+        );
+      })()}
 
       <TimeDial
         open={timeDialOpen}
@@ -364,6 +485,102 @@ export default function BookDetail() {
           setSnapshots([]);
         }}
       />
+
+      {/* Merge Confirmation Dialog */}
+      {mergeConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg border p-6 w-[480px]">
+            <h3 className="text-lg font-semibold mb-4">确认合并</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              将「第{mergeConfirm.from}章 {mergeConfirm.fromTitle}」合并到「第{mergeConfirm.to}章{' '}
+              {mergeConfirm.toTitle}」
+            </p>
+            <div className="rounded border bg-muted p-4 mb-4">
+              <p className="text-sm font-medium mb-2">合并后效果：</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• 两章正文合并为一章，章号保留第{mergeConfirm.to}章</li>
+                <li>• 后续章节号自动重编号</li>
+                <li>• 伏笔、快照、事实时间线自动重锚定</li>
+              </ul>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setMergeConfirm(null)}
+                className="px-4 py-1.5 rounded text-sm hover:bg-accent border"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmMerge}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90"
+              >
+                确认合并
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Split Dialog */}
+      {splitDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg border p-6 w-[520px]">
+            <h3 className="text-lg font-semibold mb-4">
+              拆分「第{splitDialog.chapterNumber}章 {splitDialog.title}」
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium block mb-2">选择拆分位置：</label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  段落: 第{splitPosition}段 / 共{splitDialog.totalParagraphs}段
+                </p>
+                <input
+                  type="range"
+                  min={1}
+                  max={splitDialog.totalParagraphs}
+                  value={splitPosition}
+                  onChange={(e) => setSplitPosition(Number(e.target.value))}
+                  className="w-full"
+                />
+                <div className="rounded border bg-muted p-3 mt-3 text-sm">
+                  <p className="text-muted-foreground">
+                    前{splitPosition}段将保留在第{splitDialog.chapterNumber}章
+                  </p>
+                  <div className="border-t border-dashed my-2 py-1 text-center text-xs text-muted-foreground">
+                    ─── 拆分线 ───
+                  </div>
+                  <p className="text-muted-foreground">
+                    后{splitDialog.totalParagraphs - splitPosition}段将成为新章节
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium block mb-1">新章节标题：</label>
+                <input
+                  value={newChapterTitle}
+                  onChange={(e) => setNewChapterTitle(e.target.value)}
+                  placeholder="新章节标题"
+                  className="w-full px-3 py-2 rounded border bg-background text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-4">
+              <button
+                onClick={() => setSplitDialog(null)}
+                className="px-4 py-1.5 rounded text-sm hover:bg-accent border"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmSplit}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90"
+              >
+                确认拆分
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

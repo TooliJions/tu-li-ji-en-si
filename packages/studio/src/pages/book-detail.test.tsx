@@ -177,7 +177,7 @@ describe('BookDetail Page', () => {
     expect(screen.queryByText('与上一章合并')).toBeNull();
   });
 
-  it('calls merge API when merging chapters', async () => {
+  it('calls merge API after confirming in dialog', async () => {
     vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
     vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
     vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([]);
@@ -190,10 +190,20 @@ describe('BookDetail Page', () => {
     });
 
     const menuButtons = screen.getAllByTitle('更多操作');
-    fireEvent.click(menuButtons[menuButtons.length - 1]);
-
     await act(async () => {
-      fireEvent.click(screen.getByText('与上一章合并'));
+      fireEvent.click(menuButtons[menuButtons.length - 1]);
+    });
+
+    const mergeBtn = screen.getByText('与上一章合并');
+    await act(async () => {
+      fireEvent.pointerDown(mergeBtn);
+      fireEvent.click(mergeBtn);
+    });
+
+    // Confirm in dialog
+    await act(async () => {
+      const confirmBtns = screen.getAllByText('确认合并');
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
     });
 
     await waitFor(() => {
@@ -272,5 +282,111 @@ describe('BookDetail Page', () => {
       },
       { timeout: 2000 }
     );
+  });
+
+  it('shows merge confirmation dialog before merging', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.mergeChapters).mockResolvedValue(true);
+
+    const { container } = renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('测试小说')).toBeTruthy();
+    });
+
+    // Open action menu for chapter 2 (last chapter)
+    const menuButtons = screen.getAllByTitle('更多操作');
+    await act(async () => {
+      fireEvent.click(menuButtons[menuButtons.length - 1]);
+    });
+
+    // Verify menu is open
+    expect(screen.queryByText('与上一章合并')).toBeTruthy();
+
+    // Click merge button - use pointerDown to avoid window click handler interference
+    const mergeBtn = screen.getByText('与上一章合并');
+    await act(async () => {
+      fireEvent.pointerDown(mergeBtn);
+      fireEvent.click(mergeBtn);
+    });
+
+    // Check if dialog is in the DOM
+    await waitFor(
+      () => {
+        const allText = container.textContent;
+        expect(allText).toContain('确认合并');
+      },
+      { timeout: 3000 }
+    );
+  });
+
+  it('does NOT call merge API until confirmation is clicked', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.mergeChapters).mockResolvedValue(true);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('测试小说')).toBeTruthy();
+    });
+
+    const menuButtons = screen.getAllByTitle('更多操作');
+    await act(async () => {
+      fireEvent.click(menuButtons[menuButtons.length - 1]);
+    });
+
+    const mergeBtn = screen.getByText('与上一章合并');
+    await act(async () => {
+      fireEvent.pointerDown(mergeBtn);
+      fireEvent.click(mergeBtn);
+    });
+
+    // API should NOT be called yet - only dialog shown
+    expect(api.mergeChapters).not.toHaveBeenCalled();
+
+    // Now confirm
+    await act(async () => {
+      const confirmBtns = screen.getAllByText('确认合并');
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+    });
+
+    // NOW API is called
+    await waitFor(() => {
+      expect(api.mergeChapters).toHaveBeenCalledWith('book-001', 1, 2);
+    });
+  });
+
+  it('shows split dialog with paragraph slider before splitting', async () => {
+    const chapterWithParagraphs = {
+      ...mockChapters[0],
+      content: '段落1\n\n段落2\n\n段落3\n\n段落4',
+    };
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue([chapterWithParagraphs, mockChapters[1]]);
+    vi.mocked(api.splitChapter).mockResolvedValue(null);
+
+    const { container } = renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('第一章')).toBeTruthy();
+    });
+
+    const menuButtons = screen.getAllByTitle('更多操作');
+    await act(async () => {
+      fireEvent.click(menuButtons[0]);
+    });
+
+    const splitBtn = screen.getByText('拆分为两章');
+    await act(async () => {
+      fireEvent.pointerDown(splitBtn);
+      fireEvent.click(splitBtn);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('拆分');
+      expect(container.textContent).toContain('选择拆分位置');
+    });
   });
 });
