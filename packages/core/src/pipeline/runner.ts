@@ -372,6 +372,7 @@ export class PipelineRunner {
       // 生成草稿
       const prompt = this.#buildDraftPrompt(input);
       const result = await this.provider.generate({ prompt });
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', result.usage);
 
       // 持久化
       this.#persistChapter(result.text, input.bookId, input.chapterNumber, input.title, 'draft');
@@ -410,6 +411,7 @@ export class PipelineRunner {
     try {
       const prompt = this.#buildDraftPrompt(input);
       const result = await this.provider.generate({ prompt });
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', result.usage);
 
       return {
         success: true,
@@ -490,6 +492,8 @@ export class PipelineRunner {
     try {
       // 重新生成上下文卡片
       const contextCard = await this.#generateContextCard(input.bookId, input.chapterNumber);
+      // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
+      this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
 
       // 意图定向（如果有用户意图）
       if (input.userIntent) {
@@ -504,10 +508,12 @@ export class PipelineRunner {
           meta.genre,
           contextCard
         );
+        this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
       }
 
       // 使用 ScenePolisher 重新润色草稿
       const polished = await this.#polishScene(draftContent, meta.genre, input.chapterNumber);
+      this.#trackUsage(input.bookId, input.chapterNumber, 'composer', polished.usage);
 
       // 持久化为正式章节
       const title = meta.title || `第 ${input.chapterNumber} 章`;
