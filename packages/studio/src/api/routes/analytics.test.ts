@@ -440,7 +440,22 @@ describe('Analytics Route', () => {
   });
 
   describe('POST /api/books/:bookId/analytics/inspiration-shuffle', () => {
-    it('returns alternative rewrites', async () => {
+    it('returns available=false when book has no chapters', async () => {
+      const res = await app.request('/api/books/book-001/analytics/inspiration-shuffle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: { alternatives: unknown[]; available: boolean };
+      };
+      expect(data.data.available).toBe(false);
+      expect(data.data.alternatives.length).toBe(0);
+    });
+
+    it('returns 3 alternative rewrites when chapter exists', async () => {
+      addTestChapter('book-001', 1, '第一章', '林晨站在雨中，内心波涛汹涌。他终于明白了那个秘密。');
+
       const res = await app.request('/api/books/book-001/analytics/inspiration-shuffle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -448,16 +463,36 @@ describe('Analytics Route', () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as {
         data: {
-          alternatives: Array<{ id: string; style: string; label: string }>;
+          alternatives: Array<{
+            id: string;
+            style: string;
+            label: string;
+            text: string;
+            wordCount: number;
+          }>;
           generationTime: number;
+          available: boolean;
         };
       };
-      expect(Array.isArray(data.data.alternatives)).toBe(true);
-      expect(data.data.alternatives.length).toBeGreaterThan(0);
-      expect(data.data.alternatives[0].id).toBeDefined();
-      expect(data.data.alternatives[0].style).toBeDefined();
-      expect(data.data.alternatives[0].label).toBeDefined();
+
+      expect(data.data.alternatives.length).toBe(3);
+      const ids = data.data.alternatives.map((a) => a.id).sort();
+      expect(ids).toEqual(['A', 'B', 'C']);
+      const styles = data.data.alternatives.map((a) => a.style).sort();
+      expect(styles).toEqual(['contemplative', 'emotional', 'fast_paced']);
+      expect(data.data.available).toBe(true);
+      for (const alt of data.data.alternatives) {
+        expect(alt.text.length).toBeGreaterThan(0);
+        expect(alt.wordCount).toBeGreaterThan(0);
+      }
       expect(typeof data.data.generationTime).toBe('number');
+    });
+
+    it('returns 404 when book does not exist', async () => {
+      const res = await app.request('/api/books/non-existent/analytics/inspiration-shuffle', {
+        method: 'POST',
+      });
+      expect(res.status).toBe(404);
     });
   });
 
