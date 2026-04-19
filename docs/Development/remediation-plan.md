@@ -64,15 +64,17 @@
   - 悬停实体可打开 context popup。
   - 无需手动选中文本。
 
-### P1.1 分析面板真实化
+### P1.1 分析面板真实化 ✅
 
 - 范围：`packages/studio/src/api/routes/analytics.ts`、`packages/studio/src/pages/analytics.tsx`、core quality/baseline/scheduler/state
 - 当前问题：字数、审计通过率、Token 用量、AI 痕迹、情感弧线仍是零值或静态样本。
 - 修复目标：把 analytics 全部改为从真实章节、审计结果、质量基线、守护进程统计中聚合。
 - 验收标准：
-  - `word-count`、`audit-rate`、`token-usage` 返回真实数据。
-  - `quality-baseline` 与 `baseline-alert` 反映真实趋势。
-  - `emotional-arcs` 从真实角色/章节数据生成，而不是固定林晨/苏小雨。
+  - `word-count`、`audit-rate`、`token-usage` 返回真实数据。✅
+  - `quality-baseline` 与 `baseline-alert` 反映真实趋势。✅
+  - `emotional-arcs` 从真实角色/章节数据生成，而不是固定林晨/苏小雨。✅
+  - `inspiration-shuffle` 通过 LLMProvider 并发生成 3 个风格改写。✅
+  - 核心流水线按 writer/composer/auditor/reviser/planner 五通道落盘 telemetry。✅
 
 ### P1.2 伏笔双轨时间轴 UI 接入
 
