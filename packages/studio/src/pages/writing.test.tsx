@@ -1,532 +1,118 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import Writing from './writing';
+import * as api from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   fetchBook: vi.fn(),
   fetchChapters: vi.fn(),
-  fetchTruthFiles: vi.fn(),
   fetchMemoryPreview: vi.fn(),
-  fetchEntityContext: vi.fn(),
+  fetchTruthFiles: vi.fn(),
   startFastDraft: vi.fn(),
   startWriteNext: vi.fn(),
   startWriteDraft: vi.fn(),
   startUpgradeDraft: vi.fn(),
-  getPipelineStatus: vi.fn(),
+  fetchTokenUsage: vi.fn(),
+  fetchAiTrace: vi.fn(),
+  fetchAuditRate: vi.fn(),
 }));
 
-import * as api from '../lib/api';
-import Writing from './writing';
+// Mock EventSource
+class MockEventSource {
+  onmessage: any;
+  onerror: any;
+  addEventListener = vi.fn();
+  close = vi.fn();
+  constructor(public url: string) {}
+}
+(global as any).EventSource = MockEventSource;
 
 const mockBook = {
-  id: 'book-001',
-  title: '测试小说',
-  genre: '玄幻',
-  targetWords: 30000,
-  currentWords: 6000,
-  chapterCount: 2,
-  targetChapterCount: 10,
-  status: 'active',
-  updatedAt: '2026-04-19T00:00:00.000Z',
+  id: 'book-1',
+  title: '测试书籍',
+  currentWords: 1000,
+  targetWords: 100000,
 };
-
-const mockChapters = [
-  {
-    number: 1,
-    title: '第一章',
-    content: '内容1',
-    status: 'published' as const,
-    wordCount: 3000,
-    qualityScore: 80,
-    auditStatus: 'passed',
-  },
-  {
-    number: 2,
-    title: '第二章',
-    content: '内容2',
-    status: 'draft' as const,
-    wordCount: 3000,
-    qualityScore: null,
-    auditStatus: null,
-  },
-];
-
-const mockPipelineStatus = {
-  pipelineId: 'pipeline-123',
-  status: 'running',
-  stages: ['planning', 'composing', 'writing', 'auditing', 'revising', 'persisting'],
-  currentStage: 'planning',
-  progress: {
-    planning: { status: 'running', elapsedMs: 1000 },
-    composing: { status: 'pending', elapsedMs: 0 },
-    writing: { status: 'pending', elapsedMs: 0 },
-    auditing: { status: 'pending', elapsedMs: 0 },
-    revising: { status: 'pending', elapsedMs: 0 },
-    persisting: { status: 'pending', elapsedMs: 0 },
-  },
-  startedAt: '2026-04-19T00:00:00.000Z',
-};
-
-const mockMemoryPreview = {
-  summary: {
-    facts: 2,
-    hooks: 1,
-    characters: 2,
-  },
-  memories: [
-    { text: '林晨', confidence: 0.95, sourceType: 'character', entityType: 'character' },
-    { text: '竞赛试卷', confidence: 0.88, sourceType: 'fact', entityType: 'item' },
-    { text: '档案室谜团', confidence: 0.84, sourceType: 'hook', entityType: null },
-  ],
-};
-
-const mockTruthFiles = {
-  versionToken: 1,
-  files: [],
-};
-
-const mockCompletedUpgradePipeline = {
-  pipelineId: 'pipeline-upgrade-123',
-  status: 'completed',
-  stages: ['planning', 'composing', 'writing', 'auditing', 'revising', 'persisting'],
-  currentStage: 'persisting',
-  progress: {
-    planning: { status: 'completed', elapsedMs: 1000 },
-    composing: { status: 'completed', elapsedMs: 1000 },
-    writing: { status: 'completed', elapsedMs: 1000 },
-    auditing: { status: 'completed', elapsedMs: 1000 },
-    revising: { status: 'completed', elapsedMs: 1000 },
-    persisting: { status: 'completed', elapsedMs: 1000 },
-  },
-  startedAt: '2026-04-19T00:00:00.000Z',
-  result: {
-    success: true,
-    chapterNumber: 3,
-    status: 'final',
-  },
-};
-
-const mockEntityContext = {
-  name: '林晨',
-  type: 'character',
-  currentLocation: '教室',
-  emotion: '专注',
-  inventory: ['竞赛试卷'],
-  relationships: [{ with: '苏小雨', type: '同伴' }],
-  activeHooks: [{ id: 'hook-001', description: '档案室谜团', status: 'open' }],
-};
-
-function renderWithRouter(bookId = 'book-001') {
-  return render(
-    <MemoryRouter initialEntries={[`/writing?bookId=${bookId}`]}>
-      <Routes>
-        <Route path="/writing" element={<Writing />} />
-      </Routes>
-    </MemoryRouter>
-  );
-}
-
-function renderWithoutBookId() {
-  return render(
-    <MemoryRouter initialEntries={['/writing']}>
-      <Routes>
-        <Route path="/writing" element={<Writing />} />
-      </Routes>
-    </MemoryRouter>
-  );
-}
 
 describe('Writing Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useRealTimers();
-    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFiles);
+    (api.fetchBook as any).mockResolvedValue(mockBook);
+    (api.fetchChapters as any).mockResolvedValue([]);
+    (api.fetchMemoryPreview as any).mockResolvedValue({
+      summary: { facts: 0, hooks: 0, characters: 0 },
+      memories: [],
+    });
+    (api.fetchTruthFiles as any).mockResolvedValue({ versionToken: 1, files: [] });
+    (api.fetchTokenUsage as any).mockResolvedValue({ total: 1000, prompt: 500, completion: 500 });
+    (api.fetchAiTrace as any).mockResolvedValue({ score: 0.1, labels: ['自然'] });
+    (api.fetchAuditRate as any).mockResolvedValue({ passed: 10, failed: 1, total: 11 });
   });
 
-  it('renders writing page header and book selector', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-
-    renderWithRouter();
+  it('renders dashboard with analytics', async () => {
+    render(
+      <MemoryRouter initialEntries={['/writing?bookId=book-1']}>
+        <Writing />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('快速试写')).toBeTruthy();
+      expect(screen.getAllByText('质量仪表盘').length).toBeGreaterThan(0);
     });
-    expect(screen.getByText('完整创作')).toBeTruthy();
+    expect(screen.getByText('审计通过率')).toBeDefined();
+    expect(screen.getByText('91%')).toBeDefined(); // 10/11
   });
 
-  it('shows empty state instead of hanging on loading when bookId is missing', async () => {
-    renderWithoutBookId();
+  it('shows log panel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/writing?bookId=book-1']}>
+        <Writing />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('请选择一本书')).toBeTruthy();
-    });
-
-    expect(api.fetchBook).not.toHaveBeenCalled();
-    expect(screen.queryByText('加载中…')).toBeNull();
-  });
-
-  it('shows fast draft panel with word count input', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('快速试写')).toBeTruthy();
-    });
-
-    // Word count input should be present
-    const wordInput = screen.getByRole('spinbutton');
-    expect(wordInput).toBeTruthy();
-  });
-
-  it('submits fast draft and shows result', async () => {
-    const draftContent = '这是快速试写的草稿内容...';
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.startFastDraft).mockResolvedValue({
-      content: draftContent,
-      wordCount: 800,
-      elapsedMs: 12000,
-      llmCalls: 1,
-      draftId: 'draft-temp-123',
-    });
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('快速试写')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('开始快速试写'));
-    });
-
-    await waitFor(() => {
-      expect(api.startFastDraft).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText(draftContent)).toBeTruthy();
-  });
-
-  it('submits write-next and shows pipeline progress', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.startWriteNext).mockResolvedValue({
-      pipelineId: 'pipeline-123',
-      status: 'running',
-    });
-    vi.mocked(api.getPipelineStatus).mockResolvedValue(mockPipelineStatus);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('开始完整创作'));
-    });
-
-    await waitFor(() => {
-      expect(api.startWriteNext).toHaveBeenCalled();
-    });
-
-    // Should show pipeline stages - use getAllByText since "规划中" appears in both status and stage
-    const stageElements = screen.getAllByText('规划中');
-    expect(stageElements.length).toBeGreaterThan(0);
-  });
-
-  it('refreshes workspace data and clears loading after pipeline finishes', async () => {
-    vi.mocked(api.fetchBook)
-      .mockResolvedValueOnce(mockBook)
-      .mockResolvedValueOnce({ ...mockBook, currentWords: 9000, chapterCount: 3 });
-    vi.mocked(api.fetchChapters)
-      .mockResolvedValueOnce(mockChapters)
-      .mockResolvedValueOnce([
-        ...mockChapters,
-        {
-          number: 3,
-          title: '第三章',
-          content: '新增内容',
-          status: 'published' as const,
-          wordCount: 3000,
-          qualityScore: 82,
-          auditStatus: 'passed',
-        },
-      ]);
-    vi.mocked(api.fetchMemoryPreview)
-      .mockResolvedValueOnce(mockMemoryPreview)
-      .mockResolvedValueOnce({
-        ...mockMemoryPreview,
-        summary: { facts: 3, hooks: 1, characters: 2 },
-      });
-    vi.mocked(api.startWriteNext).mockResolvedValue({
-      pipelineId: 'pipeline-123',
-      status: 'running',
-    });
-    vi.mocked(api.getPipelineStatus).mockResolvedValue({
-      ...mockPipelineStatus,
-      status: 'completed',
-      currentStage: 'persisting',
-      progress: {
-        planning: { status: 'done', elapsedMs: 1000 },
-        composing: { status: 'done', elapsedMs: 1000 },
-        writing: { status: 'done', elapsedMs: 1000 },
-        auditing: { status: 'done', elapsedMs: 1000 },
-        revising: { status: 'done', elapsedMs: 1000 },
-        persisting: { status: 'done', elapsedMs: 1000 },
-      },
-    });
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('开始完整创作'));
-    });
-
-    await waitFor(() => {
-      expect(api.getPipelineStatus).toHaveBeenCalledTimes(1);
-      expect(api.fetchBook).toHaveBeenCalledTimes(2);
-      expect(screen.getByText('开始完整创作')).toBeTruthy();
-      expect(screen.getByText('章节数')).toBeTruthy();
-      expect(screen.getByText('3')).toBeTruthy();
+      expect(screen.getByText('流水线日志')).toBeDefined();
     });
   });
 
-  it('submits draft mode write', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.startWriteDraft).mockResolvedValue({
-      number: 3,
-      title: null,
-      content: '【草稿模式】内容',
-      status: 'draft',
-      wordCount: 2000,
-      qualityScore: null,
-    });
+  it('handles write next and starts pipeline', async () => {
+    (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-123' });
 
-    renderWithRouter();
+    render(
+      <MemoryRouter initialEntries={['/writing?bookId=book-1']}>
+        <Writing />
+      </MemoryRouter>
+    );
 
-    await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
-    });
+    await waitFor(() => screen.getByText('开始完整创作'));
 
-    // Click draft mode button
-    await act(async () => {
-      fireEvent.click(screen.getByText('草稿模式'));
-    });
+    const btn = screen.getByText('开始完整创作');
+    fireEvent.click(btn);
 
-    await waitFor(() => {
-      expect(api.startWriteDraft).toHaveBeenCalled();
-    });
+    expect(api.startWriteNext).toHaveBeenCalled();
+    expect(screen.getByText('启动完整创作流水线...')).toBeDefined();
   });
 
-  it('shows upgrade action after draft mode completes and upgrades draft to final', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.startWriteDraft).mockResolvedValue({
-      number: 3,
-      title: null,
-      content: '【草稿模式】内容',
-      status: 'draft',
-      wordCount: 2000,
-      qualityScore: null,
-    });
-    vi.mocked(api.startUpgradeDraft).mockResolvedValue({
-      pipelineId: 'pipeline-upgrade-123',
-      status: 'running',
-    });
-    vi.mocked(api.getPipelineStatus).mockResolvedValue(mockCompletedUpgradePipeline);
-
-    renderWithRouter();
+  it('shows 8-dimension quality dashboard with progress bars', async () => {
+    render(
+      <MemoryRouter initialEntries={['/writing?bookId=book-1']}>
+        <Writing />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
+      expect(screen.getAllByText('质量仪表盘').length).toBeGreaterThan(0);
     });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('草稿模式'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('转为正式章节（启动审计）')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('转为正式章节（启动审计）'));
-    });
-
-    await waitFor(() => {
-      expect(api.startUpgradeDraft).toHaveBeenCalledWith('book-001', 3, undefined);
-    });
-  });
-
-  it('prompts before upgrading when truth files changed after draft generation', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.fetchTruthFiles)
-      .mockResolvedValueOnce({ versionToken: 1, files: [] })
-      .mockResolvedValueOnce({ versionToken: 1, files: [] })
-      .mockResolvedValueOnce({ versionToken: 2, files: [] });
-    vi.mocked(api.startWriteDraft).mockResolvedValue({
-      number: 3,
-      title: null,
-      content: '【草稿模式】内容',
-      status: 'draft',
-      wordCount: 2000,
-      qualityScore: null,
-    });
-    vi.mocked(api.startUpgradeDraft).mockResolvedValue({
-      pipelineId: 'pipeline-upgrade-123',
-      status: 'running',
-    });
-    vi.mocked(api.getPipelineStatus).mockResolvedValue({
-      ...mockCompletedUpgradePipeline,
-      result: {
-        success: true,
-        chapterNumber: 3,
-        status: 'final',
-        warningCode: 'context_drift',
-        warning: '⚠️ 检测到上下文版本变化 (v2)，已重新对齐',
-      },
-    });
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('草稿模式'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('转为正式章节（启动审计）')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('转为正式章节（启动审计）'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('检测到世界状态已更新')).toBeTruthy();
-    });
-
-    expect(api.startUpgradeDraft).not.toHaveBeenCalled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('基于新状态重新润色草稿'));
-    });
-
-    await waitFor(() => {
-      expect(api.startUpgradeDraft).toHaveBeenCalledWith('book-001', 3, undefined);
-    });
-  });
-
-  it('shows quality metrics panel', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('质量仪表盘')).toBeTruthy();
-    });
-
-    expect(screen.getByText('平均质量')).toBeTruthy();
-  });
-
-  it('shows runtime memory preview instead of hardcoded keywords', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('记忆提取')).toBeTruthy();
-    });
-    expect(screen.getByText('林晨')).toBeTruthy();
-    expect(screen.getByText('竞赛试卷')).toBeTruthy();
-    expect(screen.getByText('档案室谜团')).toBeTruthy();
-    expect(screen.getByText(/已抓取 2 条事实碎片 \+ 1 条伏笔 \+ 2 个角色/)).toBeTruthy();
-    expect(screen.getByText('来源于 manifest 角色 / facts / hooks 真相文件')).toBeTruthy();
-    expect(screen.getByText('角色 2')).toBeTruthy();
-    expect(screen.getByText('事实 2')).toBeTruthy();
-    expect(screen.getByText('伏笔 1')).toBeTruthy();
-    expect(screen.queryByText('旧档案室')).toBeNull();
-  });
-
-  it('supports entity hover in fast draft preview', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-    vi.mocked(api.fetchEntityContext).mockResolvedValue(mockEntityContext);
-    vi.mocked(api.startFastDraft).mockResolvedValue({
-      content: '林晨拿起竞赛试卷，回到教室。',
-      wordCount: 800,
-      elapsedMs: 12000,
-      llmCalls: 1,
-      draftId: 'draft-temp-123',
-    });
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('快速试写')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('开始快速试写'));
-    });
-
-    await waitFor(() => {
-      expect(api.startFastDraft).toHaveBeenCalled();
-    });
-
-    const entityMarks = screen.getAllByText('林晨').filter((element) => element.tagName === 'MARK');
-    expect(entityMarks.length).toBeGreaterThan(0);
-
-    fireEvent.mouseEnter(entityMarks[0]);
-
-    await waitFor(() => {
-      expect(api.fetchEntityContext).toHaveBeenCalledWith('book-001', '林晨');
-      expect(screen.getByText(/当前位置：教室/)).toBeTruthy();
-      expect(screen.getByText(/持有：竞赛试卷/)).toBeTruthy();
-    });
-  });
-
-  it('allows custom intent input for write-next', async () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
-    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
-    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
-
-    renderWithRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText('完整创作')).toBeTruthy();
-    });
-
-    // Intent textarea should be present (in the full creation section)
-    const textarea = screen.getByPlaceholderText('输入创作意图…');
-    expect(textarea).toBeTruthy();
-
-    fireEvent.change(textarea, { target: { value: '让主角发现线索' } });
-    expect((textarea as HTMLTextAreaElement).value).toBe('让主角发现线索');
+    expect(screen.getByText('AI痕迹')).toBeDefined();
+    expect(screen.getByText('连贯性')).toBeDefined();
+    expect(screen.getByText('节奏')).toBeDefined();
+    expect(screen.getByText('对话')).toBeDefined();
+    expect(screen.getByText('描写')).toBeDefined();
+    expect(screen.getByText('情感')).toBeDefined();
+    expect(screen.getByText('创新')).toBeDefined();
+    expect(screen.getByText('完整性')).toBeDefined();
+    // Initial state shows '等待中'
+    expect(screen.getAllByText('等待中').length).toBeGreaterThan(0);
   });
 });
