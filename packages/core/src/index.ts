@@ -105,3 +105,7 @@ export * from './pipeline/runner';
 export * from './pipeline/persistence';
 export * from './daemon';
 export * from './telemetry/logger';
+export * from './quality/ai-detector';
+export * from './quality/baseline';
+export * from './quality/analytics-aggregator';
+export * from './quality/emotional-arc-tracker';

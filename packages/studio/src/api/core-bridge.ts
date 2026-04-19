@@ -19,15 +19,23 @@ export interface StudioRuntimeBookRecord {
   genre: string;
   targetWords: number;
   targetChapterCount: number;
+  targetWordsPerChapter: number;
   currentWords: number;
   chapterCount: number;
   status: 'active' | 'archived';
   language: string;
+  platform: string;
   brief?: string;
   createdAt: string;
   updatedAt: string;
   fanficMode: string | null;
   promptVersion: string;
+  modelConfig: {
+    useGlobalDefaults: boolean;
+    writer: string;
+    auditor: string;
+    planner: string;
+  };
 }
 
 const TEMP_RUNTIME_PREFIX = 'cybernovelist-studio-';
@@ -254,7 +262,13 @@ export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void
         synopsis: book.brief ?? `${book.title} 的创作概要`,
         tone: '',
         targetAudience: '',
-        platform: '',
+        platform: book.platform,
+        language: book.language,
+        promptVersion: book.promptVersion,
+        modelConfig: book.modelConfig,
+        targetChapterCount: book.targetChapterCount,
+        targetWords: book.targetWords,
+        targetWordsPerChapter: book.targetWordsPerChapter,
         createdAt: book.createdAt,
       },
       null,
@@ -298,6 +312,13 @@ export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
         ...currentMeta,
         title: book.title,
         genre: book.genre,
+        language: book.language,
+        platform: book.platform,
+        promptVersion: book.promptVersion,
+        modelConfig: book.modelConfig,
+        targetChapterCount: book.targetChapterCount,
+        targetWords: book.targetWords,
+        targetWordsPerChapter: book.targetWordsPerChapter,
         synopsis: typeof currentMeta.synopsis === 'string' ? currentMeta.synopsis : book.brief ?? '',
       },
       null,

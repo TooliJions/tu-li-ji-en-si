@@ -42,14 +42,24 @@ describe('Books Route', () => {
   });
 
   describe('POST /api/books', () => {
-    it('creates a new book with required fields', async () => {
+    it('creates a new book with document-aligned metadata and runtime files', async () => {
       const res = await app.request('/api/books', {
         method: 'POST',
         body: JSON.stringify({
           title: '测试小说',
           genre: '都市',
-          targetWords: 1000000,
           language: 'zh-CN',
+          platform: 'qidian',
+          targetChapterCount: 120,
+          targetWordsPerChapter: 3200,
+          promptVersion: 'latest',
+          modelConfig: {
+            useGlobalDefaults: false,
+            writer: 'qwen3.6-plus',
+            auditor: 'gpt-4o',
+            planner: 'qwen3.6-plus',
+          },
+          brief: '# 创作简报\n\n主角通过高考逆袭人生。',
         }),
         headers: { 'Content-Type': 'application/json' },
       });
@@ -57,8 +67,19 @@ describe('Books Route', () => {
       const data = (await res.json()) as { data: Record<string, unknown> };
       expect(data.data.title).toBe('测试小说');
       expect(data.data.genre).toBe('都市');
+      expect(data.data.language).toBe('zh-CN');
+      expect(data.data.platform).toBe('qidian');
+      expect(data.data.promptVersion).toBe('latest');
+      expect(data.data.targetChapterCount).toBe(120);
+      expect(data.data.targetWordsPerChapter).toBe(3200);
+      expect(data.data.targetWords).toBe(384000);
+      expect(data.data.modelConfig).toEqual({
+        useGlobalDefaults: false,
+        writer: 'qwen3.6-plus',
+        auditor: 'gpt-4o',
+        planner: 'qwen3.6-plus',
+      });
       expect(data.data.id).toBeDefined();
-      expect(data.data.targetChapterCount).toBeDefined();
 
       const bookId = String(data.data.id);
       const runtimeRoot = getStudioRuntimeRootDir();
@@ -67,9 +88,25 @@ describe('Books Route', () => {
       expect(fs.existsSync(path.join(runtimeRoot, bookId, 'story', 'state', 'manifest.json'))).toBe(
         true
       );
+
+      const meta = JSON.parse(
+        fs.readFileSync(path.join(runtimeRoot, bookId, 'meta.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(meta.language).toBe('zh-CN');
+      expect(meta.platform).toBe('qidian');
+      expect(meta.promptVersion).toBe('latest');
+      expect(meta.synopsis).toBe('# 创作简报\n\n主角通过高考逆袭人生。');
+      expect(meta.targetChapterCount).toBe(120);
+      expect(meta.targetWordsPerChapter).toBe(3200);
+      expect(meta.modelConfig).toEqual({
+        useGlobalDefaults: false,
+        writer: 'qwen3.6-plus',
+        auditor: 'gpt-4o',
+        planner: 'qwen3.6-plus',
+      });
     });
 
-    it('creates a book with optional brief', async () => {
+    it('creates a book with default platform and model settings when omitted', async () => {
       const res = await app.request('/api/books', {
         method: 'POST',
         body: JSON.stringify({
@@ -83,6 +120,9 @@ describe('Books Route', () => {
       expect(res.status).toBe(201);
       const data = (await res.json()) as { data: Record<string, unknown> };
       expect(data.data.title).toBe('Brief Test');
+      expect(data.data.platform).toBe('qidian');
+      expect(data.data.promptVersion).toBe('v2');
+      expect(data.data.targetWordsPerChapter).toBe(3000);
     });
 
     it('returns 400 for missing title', async () => {

@@ -9,6 +9,13 @@ import {
   inferEntityType,
 } from '../../lib/entity-context';
 
+interface MemoryPreviewItem {
+  text: string;
+  confidence: number;
+  sourceType: 'character' | 'fact' | 'hook';
+  entityType: 'character' | 'location' | 'item' | null;
+}
+
 function getContextState() {
   const manager = new StateManager(getStudioRuntimeRootDir());
   const store = new RuntimeStateStore(manager);
@@ -90,8 +97,103 @@ function buildRelationships(
     .map((name) => ({ with: name, type: '关联实体', affinity: '线索相关' }));
 }
 
+function mapFactConfidence(confidence: 'high' | 'medium' | 'low') {
+  if (confidence === 'high') return 0.9;
+  if (confidence === 'medium') return 0.68;
+  return 0.35;
+}
+
+function mapHookConfidence(priority: 'critical' | 'major' | 'minor', status: string) {
+  const priorityScore = priority === 'critical' ? 0.92 : priority === 'major' ? 0.82 : 0.7;
+  if (status === 'dormant' || status === 'deferred') {
+    return Math.max(0.45, priorityScore - 0.12);
+  }
+  if (status === 'resolved' || status === 'abandoned') {
+    return Math.max(0.4, priorityScore - 0.2);
+  }
+  return priorityScore;
+}
+
+function upsertMemory(
+  bucket: Map<string, MemoryPreviewItem>,
+  item: MemoryPreviewItem
+) {
+  const existing = bucket.get(item.text);
+  if (!existing || item.confidence > existing.confidence) {
+    bucket.set(item.text, item);
+  }
+}
+
+function buildMemoryPreview(bookId: string) {
+  const { store } = getContextState();
+  const manifest = store.loadManifest(bookId);
+  const characterNames = manifest.characters.map((character) => character.name);
+  const bucket = new Map<string, MemoryPreviewItem>();
+
+  for (const character of manifest.characters) {
+    upsertMemory(bucket, {
+      text: character.name,
+      confidence: 0.95,
+      sourceType: 'character',
+      entityType: 'character',
+    });
+  }
+
+  for (const fact of manifest.facts) {
+    const confidence = mapFactConfidence(fact.confidence);
+    const entities = extractFlowEntities(fact.content, characterNames);
+    if (entities.length === 0) {
+      upsertMemory(bucket, {
+        text: fact.content.slice(0, 18),
+        confidence,
+        sourceType: 'fact',
+        entityType: null,
+      });
+      continue;
+    }
+
+    for (const entity of entities) {
+      upsertMemory(bucket, {
+        text: entity,
+        confidence,
+        sourceType: 'fact',
+        entityType: inferEntityType(entity, characterNames),
+      });
+    }
+  }
+
+  for (const hook of manifest.hooks) {
+    upsertMemory(bucket, {
+      text: hook.description,
+      confidence: mapHookConfidence(hook.priority, hook.status),
+      sourceType: 'hook',
+      entityType: null,
+    });
+  }
+
+  return {
+    summary: {
+      facts: manifest.facts.length,
+      hooks: manifest.hooks.length,
+      characters: manifest.characters.length,
+    },
+    memories: [...bucket.values()]
+      .sort((left, right) => right.confidence - left.confidence || left.text.localeCompare(right.text, 'zh-CN'))
+      .slice(0, 18),
+  };
+}
+
 export function createContextRouter(): Hono {
   const router = new Hono();
+
+  router.get('/memory-preview', (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    return c.json({ data: buildMemoryPreview(bookId) });
+  });
 
   // GET /api/books/:bookId/context/:entityName
   router.get('/:entityName', (c) => {

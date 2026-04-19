@@ -15,15 +15,23 @@ interface BookRecord {
   genre: string;
   targetWords: number;
   targetChapterCount: number;
+  targetWordsPerChapter: number;
   currentWords: number;
   chapterCount: number;
   status: 'active' | 'archived';
   language: string;
+  platform: string;
   brief?: string;
   createdAt: string;
   updatedAt: string;
   fanficMode: string | null;
   promptVersion: string;
+  modelConfig: {
+    useGlobalDefaults: boolean;
+    writer: string;
+    auditor: string;
+    planner: string;
+  };
 }
 
 const bookStore = new Map<string, BookRecord>();
@@ -32,21 +40,74 @@ export function resetBookStoreForTests() {
   bookStore.clear();
 }
 
-// --- Zod schemas ---
-const createBookSchema = z.object({
-  title: z.string().min(1),
-  genre: z.string().min(1),
-  targetWords: z.number().int().positive(),
-  language: z.string().optional().default('zh-CN'),
-  brief: z.string().optional(),
+const defaultModelConfig = {
+  useGlobalDefaults: true,
+  writer: 'qwen3.6-plus',
+  auditor: 'gpt-4o',
+  planner: 'qwen3.6-plus',
+};
+
+const modelConfigSchema = z.object({
+  useGlobalDefaults: z.boolean(),
+  writer: z.string().min(1),
+  auditor: z.string().min(1),
+  planner: z.string().min(1),
 });
+
+// --- Zod schemas ---
+const createBookSchema = z
+  .object({
+    title: z.string().min(1),
+    genre: z.string().min(1),
+    targetWords: z.number().int().positive().optional(),
+    targetChapterCount: z.number().int().positive().optional(),
+    targetWordsPerChapter: z.number().int().positive().optional().default(3000),
+    language: z.string().optional().default('zh-CN'),
+    platform: z.string().optional().default('qidian'),
+    brief: z.string().optional(),
+    promptVersion: z.string().optional().default('v2'),
+    modelConfig: modelConfigSchema.optional().default(defaultModelConfig),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.targetWords && !data.targetChapterCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'targetWords 或 targetChapterCount 至少提供一个',
+        path: ['targetWords'],
+      });
+    }
+  })
+  .transform((data) => {
+    const targetWordsPerChapter = data.targetWordsPerChapter ?? 3000;
+    const targetWords =
+      data.targetWords ?? (data.targetChapterCount ? data.targetChapterCount * targetWordsPerChapter : 0);
+    const targetChapterCount =
+      data.targetChapterCount ?? Math.max(1, Math.ceil(targetWords / targetWordsPerChapter));
+
+    return {
+      ...data,
+      targetWords,
+      targetChapterCount,
+      targetWordsPerChapter,
+      modelConfig: data.modelConfig ?? defaultModelConfig,
+      platform: data.platform ?? 'qidian',
+      promptVersion: data.promptVersion ?? 'v2',
+      language: data.language ?? 'zh-CN',
+    };
+  });
 
 const updateBookSchema = z.object({
   title: z.string().min(1).optional(),
   targetWords: z.number().int().positive().optional(),
+  targetChapterCount: z.number().int().positive().optional(),
+  targetWordsPerChapter: z.number().int().positive().optional(),
   status: z.enum(['active', 'archived']).optional(),
+  language: z.string().min(1).optional(),
+  platform: z.string().min(1).optional(),
   promptVersion: z.string().optional(),
   genre: z.string().min(1).optional(),
+  brief: z.string().optional(),
+  modelConfig: modelConfigSchema.optional(),
 });
 
 export function createBookRouter(): Hono {
@@ -86,16 +147,19 @@ export function createBookRouter(): Hono {
       title: result.data.title,
       genre: result.data.genre,
       targetWords: result.data.targetWords,
-      targetChapterCount: Math.ceil(result.data.targetWords / 3000),
+      targetChapterCount: result.data.targetChapterCount,
+      targetWordsPerChapter: result.data.targetWordsPerChapter,
       currentWords: 0,
       chapterCount: 0,
       status: 'active',
       language: result.data.language,
+      platform: result.data.platform,
       brief: result.data.brief,
       createdAt: now,
       updatedAt: now,
       fanficMode: null,
-      promptVersion: 'v2',
+      promptVersion: result.data.promptVersion,
+      modelConfig: result.data.modelConfig,
     };
 
     bookStore.set(book.id, book);

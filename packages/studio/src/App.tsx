@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import AppLayout from '@/components/layout/app-layout';
 import Dashboard from '@/pages/dashboard';
+import ChaptersPage from '@/pages/chapters';
 import BookCreate from '@/pages/book-create';
 import BookDetail from '@/pages/book-detail';
 import ChapterReader from '@/pages/chapter-reader';
@@ -9,20 +10,12 @@ import Analytics from '@/pages/analytics';
 import TruthFiles from '@/pages/truth-files';
 import DaemonControl from '@/pages/daemon-control';
 import HookPanel from '@/pages/hook-panel';
+import HookTimelinePage from '@/pages/hook-timeline';
 import ConfigView from '@/pages/config-view';
 import DoctorView from '@/pages/doctor-view';
 import FanficInit from '@/pages/fanfic-init';
 import StyleManager from '@/pages/style-manager';
 import EmotionalArcs from '@/pages/emotional-arcs';
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">{title}</h1>
-      <p className="text-muted-foreground">页面开发中…</p>
-    </div>
-  );
-}
 
 export default function App() {
   return (
@@ -33,8 +26,9 @@ export default function App() {
         <Route path="/book/:bookId" element={<BookDetail />} />
         <Route path="/book/:bookId/chapter/:chapterNumber" element={<ChapterReader />} />
         <Route path="/writing" element={<Writing />} />
-        <Route path="/chapters" element={<Placeholder title="章节" />} />
+        <Route path="/chapters" element={<ChaptersPage />} />
         <Route path="/hooks" element={<HookPanel />} />
+        <Route path="/hooks/timeline" element={<HookTimelinePage />} />
         <Route path="/daemon" element={<DaemonControl />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/truth-files" element={<TruthFiles />} />

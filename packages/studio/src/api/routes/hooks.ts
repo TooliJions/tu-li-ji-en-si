@@ -72,6 +72,10 @@ function currentChapterOf(manifest: Manifest): number {
   return Math.max(1, manifest.lastChapterWritten, ...chapterNumbers);
 }
 
+function storyChapterOf(manifest: Manifest): number {
+  return Math.max(1, manifest.lastChapterWritten);
+}
+
 function findHook(manifest: Manifest, hookId: string): Hook | undefined {
   return manifest.hooks.find((hook) => hook.id === hookId);
 }
@@ -215,10 +219,10 @@ export function createHooksRouter(): Hono {
 
     const densityHeatmap = Array.from({ length: Math.max(0, toChapter - fromChapter + 1) }, (_, index) => {
       const chapter = fromChapter + index;
-      const density = manifest.hooks.filter(
+      const count = manifest.hooks.filter(
         (hook) => hook.plantedChapter === chapter || hook.wakeAtChapter === chapter
       ).length;
-      return { chapter, density };
+      return { chapter, count };
     });
 
     const wakeGroups = new Map<number, Hook[]>();
@@ -268,7 +272,7 @@ export function createHooksRouter(): Hono {
 
     const { policy } = getHooksContext();
     const manifest = loadManifest(bookId);
-    const currentChapter = currentChapterOf(manifest);
+    const currentChapter = storyChapterOf(manifest);
 
     return c.json({
       data: {

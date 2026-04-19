@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
+import type { TelemetryLogger } from '../telemetry/logger';
 
 // Mock fs module — factory is hoisted, so we use inline functions
 vi.mock('fs', () => ({
@@ -58,6 +59,14 @@ function createMockProvider(): LLMProvider & {
   };
 }
 
+function createNoopTelemetryLogger(): TelemetryLogger {
+  return {
+    record: vi.fn(),
+    read: vi.fn(() => null),
+    listBookTelemetry: vi.fn(() => []),
+  } as unknown as TelemetryLogger;
+}
+
 describe('PipelineRunner', () => {
   let mockProvider: ReturnType<typeof createMockProvider>;
   let runner: PipelineRunner;
@@ -97,6 +106,7 @@ describe('PipelineRunner', () => {
       provider: mockProvider,
       maxRevisionRetries: 2,
       fallbackAction: 'accept_with_warnings',
+      telemetryLogger: createNoopTelemetryLogger(),
     });
   });
 
@@ -616,6 +626,7 @@ describe('PipelineRunner', () => {
         provider: mockProvider,
         maxRevisionRetries: 2,
         fallbackAction: 'pause',
+        telemetryLogger: createNoopTelemetryLogger(),
       });
 
       mockProvider.generateJSON.mockResolvedValueOnce({

@@ -4,11 +4,11 @@ import MemoryWordcloud from './memory-wordcloud';
 
 describe('MemoryWordcloud', () => {
   const mockMemories = [
-    { text: '林晨', confidence: 0.95 },
-    { text: '苏小雨', confidence: 0.88 },
-    { text: '档案室', confidence: 0.72 },
-    { text: '伏笔', confidence: 0.6 },
-    { text: '线索', confidence: 0.45 },
+    { text: '林晨', confidence: 0.95, sourceType: 'character' as const },
+    { text: '苏小雨', confidence: 0.88, sourceType: 'character' as const },
+    { text: '档案室', confidence: 0.72, sourceType: 'fact' as const },
+    { text: '伏笔', confidence: 0.6, sourceType: 'hook' as const },
+    { text: '线索', confidence: 0.45, sourceType: 'fact' as const },
   ];
 
   it('renders memory items as tags', () => {
@@ -16,6 +16,13 @@ describe('MemoryWordcloud', () => {
     expect(screen.getByText('林晨')).toBeTruthy();
     expect(screen.getByText('苏小雨')).toBeTruthy();
     expect(screen.getByText('档案室')).toBeTruthy();
+  });
+
+  it('shows source labels for runtime memory provenance', () => {
+    render(<MemoryWordcloud memories={mockMemories} />);
+    expect(screen.getAllByText('角色').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('事实').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('伏笔').length).toBeGreaterThan(0);
   });
 
   it('scales font size by confidence', () => {

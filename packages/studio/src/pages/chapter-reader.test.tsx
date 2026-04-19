@@ -210,7 +210,11 @@ describe('ChapterReader Page', () => {
 
     // In flow mode, metadata and other UI elements should be hidden
     // Only the content should be prominently visible
-    expect(screen.getByText((_, node) => node?.textContent?.includes('林晨坐在教室里') ?? false)).toBeTruthy();
+    expect(
+      screen
+        .getAllByText((_, node) => node?.tagName === 'P')
+        .some((node) => node.textContent?.includes('林晨坐在教室里'))
+    ).toBe(true);
 
     const highlightedEntity = screen.getAllByRole('mark').find((node) => node.textContent === '林晨');
     expect(highlightedEntity).toBeTruthy();
@@ -221,8 +225,8 @@ describe('ChapterReader Page', () => {
 
     await waitFor(() => {
       expect(api.fetchEntityContext).toHaveBeenCalledWith('book-001', '林晨', 3);
-      expect(screen.getByText(/教室/)).toBeTruthy();
-      expect(screen.getByText('竞赛试卷')).toBeTruthy();
+      expect(screen.getByText(/当前位置：教室/)).toBeTruthy();
+      expect(screen.getByText(/持有：竞赛试卷/)).toBeTruthy();
     });
   });
 

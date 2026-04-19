@@ -6,6 +6,7 @@ vi.mock('../lib/api', () => ({
   fetchHooks: vi.fn(),
   fetchHookHealth: vi.fn(),
   fetchHookTimeline: vi.fn(),
+  fetchHookWakeSchedule: vi.fn(),
   createHook: vi.fn(),
   updateHook: vi.fn(),
   declareHookIntent: vi.fn(),
@@ -89,6 +90,14 @@ const mockTimeline = {
   thunderingHerdAlerts: [],
 };
 
+const mockWakeSchedule = {
+  currentChapter: 4,
+  maxWakePerChapter: 3,
+  pendingWakes: [
+    { hookId: 'hook-003', description: '苏小雨的过去', wakeAtChapter: 6, status: 'dormant' },
+  ],
+};
+
 function renderWithRouter(bookId = 'book-001') {
   return render(
     <MemoryRouter initialEntries={[`/hooks?bookId=${bookId}`]}>
@@ -108,6 +117,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue([]);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -118,6 +128,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -134,6 +145,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -150,6 +162,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -181,6 +194,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
     vi.mocked(api.createHook).mockResolvedValue({
       id: 'hook-005',
       description: '新伏笔',
@@ -220,6 +234,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -246,6 +261,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
     vi.mocked(api.declareHookIntent).mockResolvedValue({
       hookId: 'hook-001',
       success: true,
@@ -286,6 +302,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
     vi.mocked(api.wakeHook).mockResolvedValue({
       hookId: 'hook-003',
       success: true,
@@ -324,6 +341,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -335,14 +353,18 @@ describe('HookPanel Page', () => {
     fireEvent.click(screen.getByText('时间轴'));
 
     await waitFor(() => {
-      expect(screen.getByText('第1章')).toBeTruthy();
+      expect(screen.getByText('全局热力小地图')).toBeTruthy();
     });
+    expect(screen.getByText('局部放大镜')).toBeTruthy();
+    expect(screen.getByText('生命周期轨')).toBeTruthy();
+    expect(screen.getByText('唤醒排班轨')).toBeTruthy();
   });
 
   it('filters hooks by status', async () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 
@@ -363,6 +385,7 @@ describe('HookPanel Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
     vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
     vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
 
     renderWithRouter();
 

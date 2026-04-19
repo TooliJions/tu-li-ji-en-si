@@ -5,6 +5,7 @@ import {
   FileText,
   LayoutDashboard,
   GitBranch,
+  Map,
   Server,
   BarChart3,
   Settings,
@@ -13,9 +14,10 @@ import {
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
+  { to: '/chapters', icon: FileText, label: '书籍与章节' },
   { to: '/writing', icon: PenTool, label: '写作' },
-  { to: '/chapters', icon: FileText, label: '章节' },
   { to: '/hooks', icon: GitBranch, label: '伏笔' },
+  { to: '/hooks/timeline', icon: Map, label: '双轨时间轴' },
   { to: '/daemon', icon: Server, label: '守护进程' },
   { to: '/analytics', icon: BarChart3, label: '数据分析' },
   { to: '/truth-files', icon: BookOpen, label: '真相文件' },
@@ -46,6 +48,12 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <div className="m-2 rounded-md border border-sidebar-foreground/15 bg-sidebar-foreground/5 p-3 text-[11px] leading-5 text-sidebar-foreground/75">
+        <p className="font-medium text-sidebar-foreground">阶段性入口说明</p>
+        <p className="mt-1">
+          导出独立页与题材独立管理暂未开放；书籍级工具请从“书籍与章节”或书籍详情进入。
+        </p>
+      </div>
     </aside>
   );
 }

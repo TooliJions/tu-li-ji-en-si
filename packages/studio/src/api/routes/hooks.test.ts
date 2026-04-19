@@ -168,6 +168,58 @@ describe('Hooks Route', () => {
       const res = await app.request(`/api/books/${bookId}/hooks/timeline`);
       expect(res.status).toBe(200);
     });
+
+    it('returns density counts and thundering herd alerts from scheduled wakes', async () => {
+      const bookId = await createBook(app);
+      const manifestPath = path.join(
+        getStudioRuntimeRootDir(),
+        bookId,
+        'story',
+        'state',
+        'manifest.json'
+      );
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+        bookId: string;
+        versionToken: number;
+        lastChapterWritten: number;
+        hooks: Array<Record<string, unknown>>;
+        facts: unknown[];
+        characters: unknown[];
+        worldRules: unknown[];
+        updatedAt: string;
+      };
+
+      manifest.lastChapterWritten = 4;
+      manifest.hooks = Array.from({ length: 4 }, (_, index) => ({
+        id: `hook-${index + 1}`,
+        description: `惊群伏笔${index + 1}`,
+        type: 'narrative',
+        status: 'deferred',
+        priority: 'major',
+        plantedChapter: index + 1,
+        wakeAtChapter: 6,
+        relatedCharacters: [],
+        relatedChapters: [index + 1],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+      const res = await app.request(`/api/books/${bookId}/hooks/timeline?fromChapter=1&toChapter=8`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          densityHeatmap: Array<{ chapter: number; count: number }>;
+          thunderingHerdAlerts: Array<{ chapter: number; count: number; message: string }>;
+          thunderingHerdAnimations: Array<{ chapter: number; intensity: number }>;
+        };
+      };
+
+      expect(data.data.densityHeatmap.find((item) => item.chapter === 6)?.count).toBe(4);
+      expect(data.data.thunderingHerdAlerts).toHaveLength(1);
+      expect(data.data.thunderingHerdAlerts[0]).toMatchObject({ chapter: 6, count: 4 });
+      expect(data.data.thunderingHerdAnimations[0]).toMatchObject({ chapter: 6, intensity: 4 });
+    });
   });
 
   describe('GET /api/books/:bookId/hooks/wake-schedule', () => {
@@ -175,6 +227,73 @@ describe('Hooks Route', () => {
       const bookId = await createBook(app);
       const res = await app.request(`/api/books/${bookId}/hooks/wake-schedule`);
       expect(res.status).toBe(200);
+    });
+
+    it('returns pending wakes from deferred and dormant hooks', async () => {
+      const bookId = await createBook(app);
+      const manifestPath = path.join(
+        getStudioRuntimeRootDir(),
+        bookId,
+        'story',
+        'state',
+        'manifest.json'
+      );
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+        bookId: string;
+        versionToken: number;
+        lastChapterWritten: number;
+        hooks: Array<Record<string, unknown>>;
+        facts: unknown[];
+        characters: unknown[];
+        worldRules: unknown[];
+        updatedAt: string;
+      };
+
+      manifest.lastChapterWritten = 4;
+      manifest.hooks = [
+        {
+          id: 'hook-d1',
+          description: '休眠伏笔',
+          type: 'narrative',
+          status: 'dormant',
+          priority: 'minor',
+          plantedChapter: 1,
+          wakeAtChapter: 6,
+          relatedCharacters: [],
+          relatedChapters: [1],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'hook-d2',
+          description: '延期待唤醒伏笔',
+          type: 'narrative',
+          status: 'deferred',
+          priority: 'major',
+          plantedChapter: 2,
+          wakeAtChapter: 7,
+          relatedCharacters: [],
+          relatedChapters: [2],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+      const res = await app.request(`/api/books/${bookId}/hooks/wake-schedule`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          currentChapter: number;
+          pendingWakes: Array<{ hookId: string; wakeAtChapter: number; status: string }>;
+        };
+      };
+
+      expect(data.data.currentChapter).toBe(4);
+      expect(data.data.pendingWakes).toEqual([
+        { hookId: 'hook-d1', description: '休眠伏笔', wakeAtChapter: 6, status: 'dormant' },
+        { hookId: 'hook-d2', description: '延期待唤醒伏笔', wakeAtChapter: 7, status: 'deferred' },
+      ]);
     });
   });
 

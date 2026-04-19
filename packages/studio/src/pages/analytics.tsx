@@ -16,6 +16,7 @@ import {
   fetchAiTrace,
   fetchQualityBaseline,
   fetchBaselineAlert,
+  fetchEmotionalArcs,
   triggerInspirationShuffle,
 } from '../lib/api';
 
@@ -33,7 +34,12 @@ interface AuditRateData {
 
 interface TokenUsageData {
   totalTokens: number;
-  perChapter: Record<string, number>;
+  perChannel: Record<string, number>;
+  perChapter: Array<{
+    chapter: number;
+    totalTokens: number;
+    channels: Record<string, number>;
+  }>;
 }
 
 interface AiTraceData {
@@ -84,6 +90,40 @@ interface InspirationShuffleData {
   generationTime: number;
 }
 
+type EmotionType =
+  | 'joy'
+  | 'anger'
+  | 'sadness'
+  | 'fear'
+  | 'surprise'
+  | 'disgust'
+  | 'trust'
+  | 'anticipation';
+
+interface EmotionalArcData {
+  characters: Array<{
+    name: string;
+    chapters: Array<{
+      chapterNumber: number;
+      emotions: Record<EmotionType, number>;
+      dominantEmotion: EmotionType;
+      summary: string;
+    }>;
+  }>;
+  alerts: Array<{ message: string; severity: string }>;
+}
+
+const EMOTION_LABELS: Record<EmotionType, string> = {
+  joy: '喜悦',
+  anger: '愤怒',
+  sadness: '悲伤',
+  fear: '恐惧',
+  surprise: '惊讶',
+  disgust: '厌恶',
+  trust: '信任',
+  anticipation: '期待',
+};
+
 export default function Analytics() {
   const [searchParams] = useSearchParams();
   const bookId = searchParams.get('bookId') || '';
@@ -95,6 +135,7 @@ export default function Analytics() {
   const [aiTrace, setAiTrace] = useState<AiTraceData | null>(null);
   const [qualityBaseline, setQualityBaseline] = useState<QualityBaselineData | null>(null);
   const [baselineAlert, setBaselineAlert] = useState<BaselineAlertData | null>(null);
+  const [emotionalArcs, setEmotionalArcs] = useState<EmotionalArcData | null>(null);
   const [inspirationResults, setInspirationResults] = useState<InspirationShuffleData | null>(null);
   const [shuffleLoading, setShuffleLoading] = useState(false);
 
@@ -107,14 +148,16 @@ export default function Analytics() {
       fetchAiTrace(bookId),
       fetchQualityBaseline(bookId),
       fetchBaselineAlert(bookId),
+      fetchEmotionalArcs(bookId),
     ])
-      .then(([wc, ar, tu, at, qb, ba]) => {
+      .then(([wc, ar, tu, at, qb, ba, ea]) => {
         setWordCount(wc);
         setAuditRate(ar);
         setTokenUsage(tu);
         setAiTrace(at);
         setQualityBaseline(qb);
         setBaselineAlert(ba);
+        setEmotionalArcs(ea);
       })
       .catch(() => {
         // load failed
@@ -250,31 +293,64 @@ export default function Analytics() {
           <Zap size={18} className="text-yellow-500" />
           <h2 className="text-lg font-semibold">Token 用量</h2>
         </div>
-        <div className="mb-4">
-          <InfoCard label="总计" value={tokenUsage?.totalTokens.toLocaleString() || '0'} />
-        </div>
-        {tokenUsage?.perChapter && (
-          <div className="space-y-2">
-            {Object.entries(tokenUsage.perChapter).map(([agent, tokens]) => {
-              const maxTokens = Math.max(...Object.values(tokenUsage.perChapter), 1);
-              const pct = (tokens / maxTokens) * 100;
-              return (
-                <div key={agent} className="flex items-center gap-3">
-                  <span className="text-sm w-20 text-muted-foreground">{agent}</span>
-                  <div className="flex-1 h-4 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-purple-500 rounded-full transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-sm w-16 text-muted-foreground">
-                    {tokens.toLocaleString()}
-                  </span>
-                </div>
-              );
-            })}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <div className="mb-4">
+              <InfoCard label="总计" value={tokenUsage?.totalTokens.toLocaleString() || '0'} />
+            </div>
+            {tokenUsage?.perChannel && (
+              <div className="space-y-2">
+                {Object.entries(tokenUsage.perChannel).map(([channel, tokens]) => {
+                  const maxTokens = Math.max(...Object.values(tokenUsage.perChannel), 1);
+                  const pct = (tokens / maxTokens) * 100;
+                  return (
+                    <div key={channel} className="flex items-center gap-3">
+                      <span className="text-sm w-20 text-muted-foreground">{channel}</span>
+                      <div className="flex-1 h-4 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-sm w-16 text-muted-foreground">
+                        {tokens.toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+          <div>
+            <p className="text-sm text-muted-foreground mb-3">按章节分布</p>
+            <div className="space-y-2">
+              {tokenUsage?.perChapter?.length ? (
+                tokenUsage.perChapter.map((chapter) => (
+                  <div key={chapter.chapter} className="rounded border bg-secondary/40 p-3">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span>第{chapter.chapter}章</span>
+                      <span className="text-muted-foreground">{chapter.totalTokens.toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(chapter.channels)
+                        .filter(([, tokens]) => tokens > 0)
+                        .map(([channel, tokens]) => (
+                          <span
+                            key={channel}
+                            className="px-2 py-0.5 rounded-full text-xs bg-background text-muted-foreground"
+                          >
+                            {channel} {tokens.toLocaleString()}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">暂无章节 Token 数据</p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* AI Trace Trend */}
@@ -352,6 +428,63 @@ export default function Analytics() {
               {new Date(qualityBaseline.baseline.createdAt).toLocaleString('zh-CN')}
             </p>
           </>
+        )}
+      </div>
+
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingDown size={18} className="text-pink-500" />
+          <h2 className="text-lg font-semibold">情感弧线概览</h2>
+        </div>
+        {emotionalArcs?.characters.length ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {emotionalArcs.characters.map((character) => {
+                const latest = character.chapters.at(-1);
+                return (
+                  <div key={character.name} className="rounded border p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium">{character.name}</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {character.chapters.length} 章
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {latest ? latest.summary : '暂无情绪数据'}
+                    </p>
+                    {latest && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {Object.entries(latest.emotions)
+                          .filter(([, value]) => value >= 0.1)
+                          .sort((left, right) => right[1] - left[1])
+                          .slice(0, 3)
+                          .map(([emotion, value]) => (
+                            <span
+                              key={emotion}
+                              className="px-2 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground"
+                            >
+                              {EMOTION_LABELS[emotion as EmotionType]} {(value * 100).toFixed(0)}%
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {emotionalArcs.alerts.length > 0 && (
+              <div className="rounded border border-orange-300 bg-orange-50 p-4">
+                <p className="font-medium text-orange-800 mb-2">情感弧线告警</p>
+                <div className="space-y-1 text-sm text-orange-700">
+                  {emotionalArcs.alerts.slice(0, 3).map((alert) => (
+                    <p key={alert.message}>{alert.message}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">暂无情感弧线数据</p>
         )}
       </div>
 

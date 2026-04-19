@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyStyleImitation,
   extractStyleFingerprint,
+  fetchBooks,
   fetchEmotionalArcs,
   fetchProjectionStatus,
   fetchStateDiff,
@@ -16,6 +17,19 @@ import {
 describe('studio api client paths', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('uses the books collection endpoint with optional filters', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response);
+
+    await fetchBooks();
+    await fetchBooks({ status: 'active', genre: '玄幻' });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/books');
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/books?status=active&genre=%E7%8E%84%E5%B9%BB');
   });
 
   it('uses book-scoped truth file endpoints', async () => {

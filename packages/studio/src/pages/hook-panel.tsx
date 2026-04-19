@@ -14,11 +14,16 @@ import {
   fetchHooks,
   fetchHookHealth,
   fetchHookTimeline,
+  fetchHookWakeSchedule,
   createHook,
   updateHook,
   declareHookIntent,
   wakeHook,
 } from '../lib/api';
+import HookTimelineWorkspace, {
+  type HookTimelineData,
+  type HookWakeScheduleData,
+} from '../components/hook-timeline-workspace';
 
 interface HookRecord {
   id: string;
@@ -43,18 +48,6 @@ interface HookHealth {
     description: string;
     expectedBy: number;
     currentChapter: number;
-  }[];
-}
-
-interface TimelineData {
-  chapterRange: { from: number; to: number };
-  densityHeatmap: { chapter: number; count: number }[];
-  hooks: {
-    id: string;
-    description: string;
-    plantedChapter: number;
-    status: string;
-    segments: { fromChapter: number; toChapter: number; type: string }[];
   }[];
 }
 
@@ -88,7 +81,8 @@ export default function HookPanel() {
   const [loading, setLoading] = useState(true);
   const [hooks, setHooks] = useState<HookRecord[]>([]);
   const [health, setHealth] = useState<HookHealth | null>(null);
-  const [timeline, setTimeline] = useState<TimelineData | null>(null);
+  const [timeline, setTimeline] = useState<HookTimelineData | null>(null);
+  const [wakeSchedule, setWakeSchedule] = useState<HookWakeScheduleData | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'timeline'>('list');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -106,11 +100,17 @@ export default function HookPanel() {
   const [wakingHook, setWakingHook] = useState<HookRecord | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchHooks(bookId), fetchHookHealth(bookId), fetchHookTimeline(bookId)])
-      .then(([h, he, t]) => {
+    Promise.all([
+      fetchHooks(bookId),
+      fetchHookHealth(bookId),
+      fetchHookTimeline(bookId),
+      fetchHookWakeSchedule(bookId),
+    ])
+      .then(([h, he, t, ws]) => {
         setHooks(h);
         setHealth(he);
         setTimeline(t);
+        setWakeSchedule(ws);
       })
       .catch(() => {
         // load failed
@@ -421,44 +421,23 @@ export default function HookPanel() {
       )}
 
       {/* Timeline Tab */}
-      {activeTab === 'timeline' && timeline && (
+      {activeTab === 'timeline' && timeline && wakeSchedule && (
         <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">伏笔时间轴</h2>
-          <div className="space-y-3">
-            {timeline.densityHeatmap.map((d) => {
-              const maxCount = Math.max(...timeline.densityHeatmap.map((x) => x.count), 1);
-              const pct = (d.count / maxCount) * 100;
-              return (
-                <div key={d.chapter} className="flex items-center gap-3">
-                  <span className="text-sm w-12 text-right text-muted-foreground">
-                    第{d.chapter}章
-                  </span>
-                  <div className="flex-1 h-6 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-400 rounded-full transition-all flex items-center justify-end pr-2"
-                      style={{ width: `${Math.max(pct, 8)}%` }}
-                    >
-                      <span className="text-xs text-white font-medium">{d.count}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {/* Hook timeline entries */}
-          <div className="mt-6 pt-4 border-t">
-            <h3 className="text-sm font-medium mb-3">伏笔分布</h3>
-            <div className="flex flex-wrap gap-2">
-              {timeline.hooks.map((h) => (
-                <span
-                  key={h.id}
-                  className={`px-3 py-1.5 rounded text-xs font-medium ${STATUS_COLORS[h.status]}`}
-                >
-                  {h.description}（第{h.plantedChapter}章）
-                </span>
-              ))}
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">伏笔时间轴</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                时间轴 tab 现在复用独立双轨视图组件，保证与导航页展示一致。
+              </p>
             </div>
+            <Link
+              to={`/hooks/timeline?bookId=${bookId}`}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              打开完整视图 →
+            </Link>
           </div>
+          <HookTimelineWorkspace timeline={timeline} wakeSchedule={wakeSchedule} />
         </div>
       )}
 
