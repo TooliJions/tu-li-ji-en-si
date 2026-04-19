@@ -34,11 +34,23 @@ interface AuditRateData {
 
 interface TokenUsageData {
   totalTokens: number;
-  perChannel: Record<string, number>;
+  perChannel: {
+    writer: number;
+    auditor: number;
+    planner: number;
+    composer: number;
+    reviser: number;
+  };
   perChapter: Array<{
     chapter: number;
     totalTokens: number;
-    channels: Record<string, number>;
+    channels: {
+      writer: number;
+      auditor: number;
+      planner: number;
+      composer: number;
+      reviser: number;
+    };
   }>;
 }
 
