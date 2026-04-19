@@ -14,7 +14,7 @@ import {
   type BaselineAlertMetric,
 } from '@cybernovelist/core';
 import type { ChapterIndex, Manifest } from '@cybernovelist/core';
-import { getStudioRuntimeRootDir, hasStudioBookRuntime } from '../core-bridge';
+import { getStudioRuntimeRootDir, getStudioLLMProvider, hasStudioBookRuntime } from '../core-bridge';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -25,10 +25,6 @@ function getStateManager(): StateManager {
 function getChapterAuditPath(bookId: string, chapterNumber: number): string {
   const padded = String(chapterNumber).padStart(4, '0');
   return path.join(getStudioRuntimeRootDir(), bookId, 'story', 'state', 'audits', `chapter-${padded}.json`);
-}
-
-function getEmotionalArcsPath(bookId: string): string {
-  return path.join(getStudioRuntimeRootDir(), bookId, 'story', 'state', 'emotional_arcs.md');
 }
 
 function readIndex(bookId: string): ChapterIndex | null {
@@ -299,27 +295,109 @@ export function createAnalyticsRouter(): Hono {
   });
 
   // POST /api/books/:bookId/analytics/inspiration-shuffle
-  router.post('/inspiration-shuffle', (c) => {
+  router.post('/inspiration-shuffle', async (c) => {
     const bookId = c.req.param('bookId')!;
     if (!hasStudioBookRuntime(bookId)) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
 
-    // Requires LLM; currently using deterministic placeholder
+    const index = readIndex(bookId);
+    if (!index || index.chapters.length === 0) {
+      return c.json({
+        data: {
+          alternatives: [],
+          generationTime: 0,
+          available: false,
+          reason: 'no_chapters',
+        },
+      });
+    }
+
+    const latest = index.chapters[index.chapters.length - 1];
+    const latestContent = readChapterContent(bookId, latest.number);
+    if (!latestContent) {
+      return c.json({
+        data: {
+          alternatives: [],
+          generationTime: 0,
+          available: false,
+          reason: 'no_content',
+        },
+      });
+    }
+
+    const styles: Array<{
+      id: string;
+      style: string;
+      label: string;
+      characteristics: string[];
+      promptDirective: string;
+    }> = [
+      {
+        id: 'A',
+        style: 'fast_paced',
+        label: '快节奏视角',
+        characteristics: ['紧凑', '短句', '强推进'],
+        promptDirective: '请将章节改写为快节奏、短句为主、强推进情节的版本。',
+      },
+      {
+        id: 'B',
+        style: 'emotional',
+        label: '细腻情感',
+        characteristics: ['情绪深度', '心理刻画', '慢镜头'],
+        promptDirective: '请将章节改写为情感细腻、强化心理刻画的版本。',
+      },
+      {
+        id: 'C',
+        style: 'contemplative',
+        label: '内省冷静',
+        characteristics: ['哲思', '节制', '克制'],
+        promptDirective: '请将章节改写为冷静内省、节制克制、含哲思的版本。',
+      },
+    ];
+
+    const provider = getStudioLLMProvider();
+    const start = Date.now();
+
+    const results = await Promise.all(
+      styles.map(async (s) => {
+        try {
+          const prompt = `你是一位风格改写师。
+${s.promptDirective}
+
+## 原内容（节选）
+${latestContent.substring(0, 2000)}
+
+请直接输出改写后的正文（控制在 500 字内）。`;
+          const resp = await provider.generate({ prompt });
+          return {
+            id: s.id,
+            style: s.style,
+            label: s.label,
+            text: resp.text,
+            wordCount: resp.text.length,
+            characteristics: s.characteristics,
+          };
+        } catch {
+          return {
+            id: s.id,
+            style: s.style,
+            label: s.label,
+            text: '',
+            wordCount: 0,
+            characteristics: s.characteristics,
+          };
+        }
+      })
+    );
+
+    const generationTime = (Date.now() - start) / 1000;
+
     return c.json({
       data: {
-        alternatives: [
-          {
-            id: 'A',
-            style: 'fast_paced',
-            label: '快节奏视角',
-            text: '占位内容 — 需要真实 LLM 接入后生成',
-            wordCount: 0,
-            characteristics: ['占位标签'],
-          },
-        ],
-        generationTime: 0,
-        available: false,
+        alternatives: results,
+        generationTime,
+        available: results.some((r) => r.wordCount > 0),
       },
     });
   });
