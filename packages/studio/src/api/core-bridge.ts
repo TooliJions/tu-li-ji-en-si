@@ -45,6 +45,7 @@ const DEFAULT_RUNTIME_ROOT =
 
 let runtimeRootDir = DEFAULT_RUNTIME_ROOT;
 let pipelineRunner: PipelineRunner | null = null;
+let llmProvider: LLMProvider | null = null;
 
 const daemonRegistry = new Map<string, DaemonScheduler>();
 
@@ -234,6 +235,17 @@ export function getStudioPipelineRunner(): PipelineRunner {
   return pipelineRunner;
 }
 
+export function getStudioLLMProvider(): LLMProvider {
+  if (!llmProvider) {
+    llmProvider = new DeterministicProvider();
+  }
+  return llmProvider;
+}
+
+export function setStudioLLMProviderForTests(provider: LLMProvider | null): void {
+  llmProvider = provider;
+}
+
 export function hasStudioBookRuntime(bookId: string): boolean {
   return fs.existsSync(path.join(getStudioRuntimeRootDir(), bookId, 'book.json'));
 }
@@ -362,6 +374,7 @@ export function resetStudioCoreBridgeForTests(rootDir?: string): void {
   }
   daemonRegistry.clear();
   pipelineRunner = null;
+  llmProvider = null;
 
   if (isManagedTempDir(runtimeRootDir) && fs.existsSync(runtimeRootDir)) {
     fs.rmSync(runtimeRootDir, { recursive: true, force: true });
