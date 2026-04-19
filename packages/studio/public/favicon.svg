@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CyberNovelist">
+  <rect width="64" height="64" rx="14" fill="#111827" />
+  <path d="M18 16h19c7.18 0 13 5.82 13 13v19H31c-7.18 0-13-5.82-13-13V16z" fill="#f59e0b" />
+  <path d="M25 22h14c4.42 0 8 3.58 8 8v12H33c-4.42 0-8-3.58-8-8V22z" fill="#fff7ed" />
+  <path d="M24 18v18c0 5.52 4.48 10 10 10h12" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

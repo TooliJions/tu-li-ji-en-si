@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 
 vi.mock('../lib/api', () => ({
   fetchHooks: vi.fn(),
@@ -15,6 +15,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import HookPanel from './hook-panel';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockHooks = [
   {
@@ -108,16 +109,29 @@ function renderWithRouter(bookId = 'book-001') {
   );
 }
 
+function NavigationHarness() {
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/hooks')}>
+        清空书籍
+      </button>
+      <HookPanel />
+    </>
+  );
+}
+
 describe('HookPanel Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchHooks).mockResolvedValue([]);
-    vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
-    vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
-    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
+    vi.mocked(api.fetchHooks).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchHookHealth).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchHookTimeline).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchHookWakeSchedule).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 
@@ -227,6 +241,72 @@ describe('HookPanel Page', () => {
         chapter: 5,
         priority: 'major',
       });
+    });
+  });
+
+  it('refreshes health and timeline data after mutating hooks', async () => {
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
+    vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
+    vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
+    vi.mocked(api.createHook).mockResolvedValue({
+      id: 'hook-005',
+      description: '刷新验证伏笔',
+      plantedChapter: 6,
+      status: 'open',
+      priority: 'major',
+      lastAdvancedChapter: 6,
+      expectedResolutionWindow: null,
+      healthScore: 100,
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('伏笔管理')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('伏笔描述'), {
+      target: { value: '刷新验证伏笔' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('章节'), { target: { value: '6' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('创建'));
+    });
+
+    await waitFor(() => {
+      expect(api.fetchHookHealth).toHaveBeenCalledTimes(2);
+      expect(api.fetchHookTimeline).toHaveBeenCalledTimes(2);
+      expect(api.fetchHookWakeSchedule).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('clears previously loaded hook data when bookId disappears', async () => {
+    vi.mocked(api.fetchHooks).mockResolvedValue(mockHooks);
+    vi.mocked(api.fetchHookHealth).mockResolvedValue(mockHealth);
+    vi.mocked(api.fetchHookTimeline).mockResolvedValue(mockTimeline);
+    vi.mocked(api.fetchHookWakeSchedule).mockResolvedValue(mockWakeSchedule);
+
+    render(
+      <MemoryRouter initialEntries={['/hooks?bookId=book-001']}>
+        <Routes>
+          <Route path="/hooks" element={<NavigationHarness />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('林晨的身份秘密')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('清空书籍'));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('林晨的身份秘密')).toBeNull();
+      expect(screen.queryByText('健康概览')).toBeNull();
     });
   });
 

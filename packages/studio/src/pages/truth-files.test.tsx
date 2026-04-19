@@ -12,6 +12,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import TruthFiles from './truth-files';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockTruthFilesList = {
   versionToken: 1234567890,
@@ -58,9 +59,26 @@ describe('TruthFiles Page', () => {
     vi.clearAllMocks();
   });
 
+  it('shows empty state when bookId is missing', async () => {
+    render(
+      <MemoryRouter initialEntries={['/truth-files']}>
+        <Routes>
+          <Route path="/truth-files" element={<TruthFiles />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('请选择一本书')).toBeTruthy();
+    });
+
+    expect(api.fetchTruthFiles).not.toHaveBeenCalled();
+    expect(api.fetchProjectionStatus).not.toHaveBeenCalled();
+  });
+
   it('shows loading state', () => {
-    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
-    vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);
+    vi.mocked(api.fetchTruthFiles).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchProjectionStatus).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 
@@ -156,7 +174,7 @@ describe('TruthFiles Page', () => {
     fireEvent.click(screen.getByTitle('编辑'));
 
     // Should show textarea
-    const textarea = screen.getByRole('textbox');
+    const textarea = screen.getAllByRole('textbox')[0];
     expect(textarea).toBeTruthy();
   });
 
@@ -188,7 +206,7 @@ describe('TruthFiles Page', () => {
 
     fireEvent.click(screen.getByTitle('编辑'));
 
-    const textarea = screen.getByRole('textbox');
+    const textarea = screen.getAllByRole('textbox')[0];
     fireEvent.change(textarea, { target: { value: '{ "worldRules": ["新规则"] }' } });
 
     await act(async () => {
@@ -223,10 +241,11 @@ describe('TruthFiles Page', () => {
     });
 
     fireEvent.click(screen.getByTitle('编辑'));
-    expect(screen.getByRole('textbox')).toBeTruthy();
+    expect(screen.getAllByRole('textbox')[0]).toBeTruthy();
 
     fireEvent.click(screen.getByTitle('取消'));
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByLabelText('Markdown 内容')).toBeTruthy();
+    expect(screen.queryByDisplayValue(/"worldRules"/)).toBeNull();
   });
 
   it('shows import markdown section', async () => {
@@ -241,10 +260,11 @@ describe('TruthFiles Page', () => {
 
     // Should have file selector and import button
     expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(screen.getByLabelText('Markdown 内容')).toBeTruthy();
     expect(screen.getByText('导入')).toBeTruthy();
   });
 
-  it('triggers markdown import', async () => {
+  it('passes markdown content to importMarkdown', async () => {
     vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
     vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);
     vi.mocked(api.importMarkdown).mockResolvedValue({
@@ -260,14 +280,91 @@ describe('TruthFiles Page', () => {
 
     // Select a file from dropdown
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'manifest' } });
+    fireEvent.change(screen.getByLabelText('Markdown 内容'), {
+      target: { value: '# 新导入内容\n\n这里是正文。' },
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByText('导入'));
     });
 
     await waitFor(() => {
-      expect(api.importMarkdown).toHaveBeenCalled();
+      expect(api.importMarkdown).toHaveBeenCalledWith(
+        'book-001',
+        'manifest',
+        '# 新导入内容\n\n这里是正文。'
+      );
     });
+  });
+
+  it('refreshes projection status and selected file after importing markdown', async () => {
+    vi.mocked(api.fetchTruthFiles)
+      .mockResolvedValueOnce(mockTruthFilesList)
+      .mockResolvedValueOnce({
+        ...mockTruthFilesList,
+        versionToken: 1234567891,
+      });
+    vi.mocked(api.fetchProjectionStatus)
+      .mockResolvedValueOnce(mockProjectionStatus)
+      .mockResolvedValueOnce({
+        ...mockProjectionStatus,
+        synced: false,
+        discrepancies: ['存在 1 处差异'],
+      });
+    vi.mocked(api.fetchTruthFile)
+      .mockResolvedValueOnce(mockTruthFileContent)
+      .mockResolvedValueOnce({
+        ...mockTruthFileContent,
+        content: {
+          worldRules: ['导入后的规则'],
+          plotTwists: ['新伏笔'],
+          characterSecrets: ['秘密1'],
+        },
+        versionToken: 1234567891,
+      });
+    vi.mocked(api.importMarkdown).mockResolvedValue({
+      parsed: { versionToken: 1234567891, diff: ['新增设定'] },
+      preview: '导入完成',
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
+    });
+
+    const fileButtons = screen.getAllByRole('button');
+    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
+
+    await act(async () => {
+      fireEvent.click(currentFileButton!);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('worldRules')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'current_state' } });
+    fireEvent.change(screen.getByLabelText('Markdown 内容'), {
+      target: { value: '# 导入后的内容\n\n新的规则' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('导入'));
+    });
+
+    await waitFor(() => {
+      expect(api.fetchProjectionStatus).toHaveBeenCalledTimes(2);
+      expect(api.fetchTruthFile).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('未同步')).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === 'PRE' && (element.textContent?.includes('导入后的规则') ?? false)
+      )
+    ).toBeTruthy();
   });
 
   it('shows file size and update time', async () => {

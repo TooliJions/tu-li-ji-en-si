@@ -11,6 +11,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import DaemonControl from './daemon-control';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockIdleStatus = {
   status: 'idle',
@@ -48,8 +49,24 @@ describe('DaemonControl Page', () => {
     vi.clearAllMocks();
   });
 
+  it('shows empty state when bookId is missing', async () => {
+    render(
+      <MemoryRouter initialEntries={['/daemon']}>
+        <Routes>
+          <Route path="/daemon" element={<DaemonControl />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('请选择一本书')).toBeTruthy();
+    });
+
+    expect(api.fetchDaemonStatus).not.toHaveBeenCalled();
+  });
+
   it('shows loading state', () => {
-    vi.mocked(api.fetchDaemonStatus).mockResolvedValue(mockIdleStatus);
+    vi.mocked(api.fetchDaemonStatus).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 

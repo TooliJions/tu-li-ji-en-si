@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Zap, BookOpen, FileEdit, Brain, BarChart3 } from 'lucide-react';
 import {
@@ -6,9 +6,11 @@ import {
   fetchChapters,
   fetchEntityContext,
   fetchMemoryPreview,
+  fetchTruthFiles,
   startFastDraft,
   startWriteNext,
   startWriteDraft,
+  startUpgradeDraft,
   getPipelineStatus,
 } from '../lib/api';
 import ContextPopup from '../components/context-popup';
@@ -45,6 +47,13 @@ interface PipelineStatus {
   currentStage: string;
   progress: Record<string, { status: string; elapsedMs: number }>;
   startedAt: string;
+  result?: {
+    success: boolean;
+    chapterNumber: number;
+    status?: string;
+    warning?: string;
+    warningCode?: 'accept_with_warnings' | 'context_drift';
+  };
 }
 
 interface FastDraftResult {
@@ -79,6 +88,17 @@ interface MemoryPreview {
   }>;
 }
 
+interface TruthFilesSummary {
+  versionToken: number;
+  files: Array<{ name: string; updatedAt: string; size: number }>;
+}
+
+interface DraftModeResult {
+  content: string;
+  number: number;
+  contextVersionToken: number;
+}
+
 const STAGE_LABELS: Record<string, string> = {
   planning: '规划中',
   composing: '构图中',
@@ -107,32 +127,74 @@ export default function Writing() {
   const [writeIntent, setWriteIntent] = useState('');
 
   // Draft mode state
-  const [draftModeResult, setDraftModeResult] = useState<{
-    content: string;
-    number: number;
-  } | null>(null);
+  const [draftModeResult, setDraftModeResult] = useState<DraftModeResult | null>(null);
   const [draftModeLoading, setDraftModeLoading] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradePrompt, setUpgradePrompt] = useState<{ nextVersionToken: number } | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
   const [memoryPreview, setMemoryPreview] = useState<MemoryPreview | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupContext, setPopupContext] = useState<EntityContext | null>(null);
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [contextCache, setContextCache] = useState<Record<string, EntityContext>>({});
+  const pollTimeoutRef = useRef<number | null>(null);
+
+  async function loadWorkspaceData(targetBookId: string) {
+    const [bookData, chaptersData, memoryData, truthFiles] = await Promise.all([
+      fetchBook(targetBookId),
+      fetchChapters(targetBookId),
+      fetchMemoryPreview(targetBookId),
+      fetchTruthFiles(targetBookId) as Promise<TruthFilesSummary>,
+    ]);
+    setBook(bookData);
+    setChapters(chaptersData);
+    setMemoryPreview(memoryData);
+    return {
+      versionToken: truthFiles.versionToken || 0,
+    };
+  }
 
   useEffect(() => {
-    if (!bookId) return;
-    Promise.all([fetchBook(bookId), fetchChapters(bookId), fetchMemoryPreview(bookId)])
-      .then(([bookData, chaptersData, memoryData]) => {
-        setBook(bookData);
-        setChapters(chaptersData);
-        setMemoryPreview(memoryData);
-      })
+    if (!bookId) {
+      if (pollTimeoutRef.current !== null) {
+        window.clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+      setBook(null);
+      setChapters([]);
+      setMemoryPreview(null);
+      setPipeline(null);
+      setDraftResult(null);
+      setDraftModeResult(null);
+      setUpgradePrompt(null);
+      setUpgradeNotice(null);
+      setContextCache({});
+      setPopupContext(null);
+      setPopupVisible(false);
+      setLoading(false);
+      setPipelineLoading(false);
+      setDraftLoading(false);
+      setDraftModeLoading(false);
+      setUpgradeLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    void loadWorkspaceData(bookId)
       .catch(() => setBook(null))
       .finally(() => setLoading(false));
+
+    return () => {
+      if (pollTimeoutRef.current !== null) {
+        window.clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+    };
   }, [bookId]);
 
-  const knownEntityNames = memoryPreview?.memories
-    .filter((memory) => memory.entityType)
-    .map((memory) => memory.text) ?? [];
+  const knownEntityNames =
+    memoryPreview?.memories.filter((memory) => memory.entityType).map((memory) => memory.text) ??
+    [];
   const fastDraftEntities = draftResult
     ? extractFlowEntities(draftResult.content, knownEntityNames)
     : [];
@@ -196,15 +258,30 @@ export default function Writing() {
     try {
       const nextChapter = Math.max(...chapters.map((ch) => ch.number), 0) + 1;
       const result = await startWriteNext(bookId, nextChapter, writeIntent || undefined);
-      // Poll for pipeline status
       const poll = async () => {
-        const status = await getPipelineStatus(bookId, result.pipelineId);
-        setPipeline(status);
-        if (status.status === 'running') {
-          setTimeout(poll, 1000);
+        let shouldContinue = false;
+        try {
+          const status = await getPipelineStatus(bookId, result.pipelineId);
+          setPipeline(status);
+          shouldContinue = status.status === 'running';
+          if (shouldContinue) {
+            pollTimeoutRef.current = window.setTimeout(() => {
+              void poll();
+            }, 1000);
+            return;
+          }
+
+          await loadWorkspaceData(bookId);
+        } catch {
+          // polling failed
+        } finally {
+          if (!shouldContinue) {
+            setPipelineLoading(false);
+            pollTimeoutRef.current = null;
+          }
         }
       };
-      poll();
+      await poll();
     } catch {
       setPipelineLoading(false);
     }
@@ -213,15 +290,90 @@ export default function Writing() {
   async function handleWriteDraft() {
     if (!bookId) return;
     setDraftModeLoading(true);
+    setUpgradeNotice(null);
     try {
       const nextChapter = Math.max(...chapters.map((ch) => ch.number), 0) + 1;
       const result = await startWriteDraft(bookId, nextChapter);
-      setDraftModeResult({ content: result.content, number: result.number });
+      const workspace = await loadWorkspaceData(bookId);
+      setDraftModeResult({
+        content: result.content,
+        number: result.number,
+        contextVersionToken: workspace.versionToken,
+      });
     } catch {
       // failed
     } finally {
       setDraftModeLoading(false);
     }
+  }
+
+  async function runDraftUpgrade() {
+    if (!bookId || !draftModeResult) {
+      return;
+    }
+
+    setUpgradeLoading(true);
+    setUpgradePrompt(null);
+    setUpgradeNotice(null);
+
+    try {
+      const result = await startUpgradeDraft(
+        bookId,
+        draftModeResult.number,
+        writeIntent || undefined
+      );
+      const poll = async () => {
+        let shouldContinue = false;
+        try {
+          const status = await getPipelineStatus(bookId, result.pipelineId);
+          setPipeline(status);
+          shouldContinue = status.status === 'running';
+          if (shouldContinue) {
+            pollTimeoutRef.current = window.setTimeout(() => {
+              void poll();
+            }, 1000);
+            return;
+          }
+
+          await loadWorkspaceData(bookId);
+          setDraftModeResult(null);
+          if (status.result?.warningCode === 'context_drift') {
+            setUpgradeNotice(
+              status.result.warning ?? '检测到世界状态已更新，系统已基于新状态重新润色草稿。'
+            );
+          }
+        } catch {
+          // polling failed
+        } finally {
+          if (!shouldContinue) {
+            setUpgradeLoading(false);
+            pollTimeoutRef.current = null;
+          }
+        }
+      };
+
+      await poll();
+    } catch {
+      setUpgradeLoading(false);
+    }
+  }
+
+  async function handleUpgradeDraft() {
+    if (!bookId || !draftModeResult || upgradeLoading) {
+      return;
+    }
+
+    try {
+      const truthFiles = (await fetchTruthFiles(bookId)) as TruthFilesSummary;
+      if ((truthFiles.versionToken || 0) > draftModeResult.contextVersionToken) {
+        setUpgradePrompt({ nextVersionToken: truthFiles.versionToken || 0 });
+        return;
+      }
+    } catch {
+      // preflight failed, fall through to upgrade attempt
+    }
+
+    await runDraftUpgrade();
   }
 
   if (loading) {
@@ -293,9 +445,15 @@ export default function Writing() {
             : '正在构建记忆透视'}
         </p>
         <div className="mb-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-sky-700">角色 {memoryPreview?.summary.characters ?? 0}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">事实 {memoryPreview?.summary.facts ?? 0}</span>
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">伏笔 {memoryPreview?.summary.hooks ?? 0}</span>
+          <span className="rounded-full bg-sky-50 px-3 py-1 text-sky-700">
+            角色 {memoryPreview?.summary.characters ?? 0}
+          </span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+            事实 {memoryPreview?.summary.facts ?? 0}
+          </span>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">
+            伏笔 {memoryPreview?.summary.hooks ?? 0}
+          </span>
         </div>
         <MemoryWordcloud
           memories={memoryPreview?.memories ?? []}
@@ -307,8 +465,12 @@ export default function Writing() {
           }}
           onMemoryLeave={handleEntityLeave}
         />
-        <p className="text-xs text-muted-foreground mt-2">来源于 manifest 角色 / facts / hooks 真相文件</p>
-        <p className="text-xs text-muted-foreground mt-2">悬停实体可查看上下文；低置信度记忆会显示为红色污染标记</p>
+        <p className="text-xs text-muted-foreground mt-2">
+          来源于 manifest 角色 / facts / hooks 真相文件
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          悬停实体可查看上下文；低置信度记忆会显示为红色污染标记
+        </p>
       </div>
 
       {/* Fast Draft */}
@@ -383,6 +545,11 @@ export default function Writing() {
           <h2 className="text-lg font-semibold">完整创作</h2>
         </div>
         <div className="space-y-3">
+          {upgradeNotice && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {upgradeNotice}
+            </div>
+          )}
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">创作意图（可选）</label>
             <textarea
@@ -476,16 +643,61 @@ export default function Writing() {
                 </p>
               ))}
             </div>
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={handleUpgradeDraft}
+                disabled={upgradeLoading}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+              >
+                {upgradeLoading ? '转正中…' : '转为正式章节（启动审计）'}
+              </button>
+              <span className="text-xs text-muted-foreground">将刷新上下文后完成审计与持久化</span>
+            </div>
           </div>
         )}
       </div>
+
+      {upgradePrompt && draftModeResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-xl border bg-background p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">检测到世界状态已更新</h2>
+            <p className="mt-3 text-sm text-muted-foreground">
+              该草稿生成后，真相文件版本已从 v{draftModeResult.contextVersionToken} 更新到 v
+              {upgradePrompt.nextVersionToken}。
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              是否基于新状态重新润色草稿，并继续转为正式章节？
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setUpgradePrompt(null)}
+                className="px-4 py-1.5 border rounded-md text-sm hover:bg-accent"
+              >
+                暂不转正
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void runDraftUpgrade();
+                }}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
+              >
+                基于新状态重新润色草稿
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ContextPopup
         title={popupContext?.name ?? ''}
         content={
           popupContext
             ? `当前位置：${popupContext.currentLocation}；情绪：${popupContext.emotion}。${
-                popupContext.inventory.length > 0 ? `持有：${popupContext.inventory.join('、')}。` : ''
+                popupContext.inventory.length > 0
+                  ? `持有：${popupContext.inventory.join('、')}。`
+                  : ''
               }`
             : ''
         }

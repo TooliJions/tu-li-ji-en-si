@@ -30,6 +30,23 @@ describe('Books Route', () => {
       expect(data.data).toEqual([]);
       expect(data.total).toBe(0);
     });
+
+    it('keeps runtime books visible after in-memory state resets', async () => {
+      const createRes = await app.request('/api/books', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Persisted Book', genre: '都市', targetWords: 120000 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const created = (await createRes.json()) as { data: { id: string } };
+
+      resetBookStoreForTests();
+
+      const res = await app.request('/api/books');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: Array<{ id: string }>; total: number };
+      expect(data.total).toBe(1);
+      expect(data.data[0]?.id).toBe(created.data.id);
+    });
   });
 
   describe('GET /api/books/:bookId', () => {
@@ -38,6 +55,23 @@ describe('Books Route', () => {
       expect(res.status).toBe(404);
       const data = (await res.json()) as { error: { code: string; message: string } };
       expect(data.error.code).toBe('BOOK_NOT_FOUND');
+    });
+
+    it('reads book details from runtime after in-memory state resets', async () => {
+      const createRes = await app.request('/api/books', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Runtime Detail', genre: '奇幻', targetWords: 180000 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const created = (await createRes.json()) as { data: { id: string; title: string } };
+
+      resetBookStoreForTests();
+
+      const res = await app.request(`/api/books/${created.data.id}`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: { id: string; title: string } };
+      expect(data.data.id).toBe(created.data.id);
+      expect(data.data.title).toBe('Runtime Detail');
     });
   });
 
@@ -225,8 +259,13 @@ describe('Books Route', () => {
 
       const res = await app.request(`/api/books/${bookId}/activity`);
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { data: unknown[] };
+      const data = (await res.json()) as {
+        data: Array<{ type: string; timestamp: string; detail: string }>;
+      };
       expect(Array.isArray(data.data)).toBe(true);
+      expect(data.data.length).toBeGreaterThan(0);
+      expect(data.data[0]?.type).toBe('book_created');
+      expect(data.data[0]?.timestamp).toBeTruthy();
     });
 
     it('returns 404 for non-existent book activity', async () => {
@@ -247,6 +286,8 @@ describe('Books Route', () => {
 
       const res = await app.request(`/api/books/${bookId}/activity?limit=5`);
       expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: unknown[] };
+      expect(data.data.length).toBeLessThanOrEqual(5);
     });
   });
 });

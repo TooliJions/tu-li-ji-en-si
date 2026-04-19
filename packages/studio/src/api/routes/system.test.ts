@@ -74,15 +74,22 @@ describe('System Route', () => {
         data: {
           issues: Array<{ type: string }>;
           reorgSentinels: Array<{ bookId: string }>;
-          qualityBaseline: { status: string; version: number };
-          providerHealth: unknown[];
+          qualityBaseline: { status: string; version: number; sampledBooks: number };
+          providerHealth: Array<{ provider: string; status: string; models: string[] }>;
         };
       };
       expect(data.data.issues.some((issue) => issue.type === 'stale_lock')).toBe(true);
       expect(data.data.reorgSentinels.some((sentinel) => sentinel.bookId === bookId)).toBe(true);
       expect(data.data.qualityBaseline.status).toBeDefined();
       expect(typeof data.data.qualityBaseline.version).toBe('number');
+      expect(data.data.qualityBaseline.sampledBooks).toBe(1);
       expect(Array.isArray(data.data.providerHealth)).toBe(true);
+      expect(data.data.providerHealth).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ provider: 'DashScope', status: 'configured' }),
+          expect.objectContaining({ provider: 'OpenAI', status: 'configured' }),
+        ])
+      );
     });
   });
 
@@ -112,6 +119,14 @@ describe('System Route', () => {
       expect(data.data.fixed).toBeGreaterThan(0);
       expect(data.data.message).toBeDefined();
       expect(fs.existsSync(lockPath)).toBe(false);
+    });
+
+    it('returns localized empty-result message when no zombie locks exist', async () => {
+      const res = await app.request('/api/system/doctor/fix-locks', { method: 'POST' });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: { fixed: number; message: string } };
+      expect(data.data.fixed).toBe(0);
+      expect(data.data.message).toBe('未发现僵尸锁');
     });
   });
 

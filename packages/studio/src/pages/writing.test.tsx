@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 vi.mock('../lib/api', () => ({
   fetchBook: vi.fn(),
   fetchChapters: vi.fn(),
+  fetchTruthFiles: vi.fn(),
   fetchMemoryPreview: vi.fn(),
   fetchEntityContext: vi.fn(),
   startFastDraft: vi.fn(),
@@ -79,6 +80,32 @@ const mockMemoryPreview = {
   ],
 };
 
+const mockTruthFiles = {
+  versionToken: 1,
+  files: [],
+};
+
+const mockCompletedUpgradePipeline = {
+  pipelineId: 'pipeline-upgrade-123',
+  status: 'completed',
+  stages: ['planning', 'composing', 'writing', 'auditing', 'revising', 'persisting'],
+  currentStage: 'persisting',
+  progress: {
+    planning: { status: 'completed', elapsedMs: 1000 },
+    composing: { status: 'completed', elapsedMs: 1000 },
+    writing: { status: 'completed', elapsedMs: 1000 },
+    auditing: { status: 'completed', elapsedMs: 1000 },
+    revising: { status: 'completed', elapsedMs: 1000 },
+    persisting: { status: 'completed', elapsedMs: 1000 },
+  },
+  startedAt: '2026-04-19T00:00:00.000Z',
+  result: {
+    success: true,
+    chapterNumber: 3,
+    status: 'final',
+  },
+};
+
 const mockEntityContext = {
   name: '林晨',
   type: 'character',
@@ -99,9 +126,21 @@ function renderWithRouter(bookId = 'book-001') {
   );
 }
 
+function renderWithoutBookId() {
+  return render(
+    <MemoryRouter initialEntries={['/writing']}>
+      <Routes>
+        <Route path="/writing" element={<Writing />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
 describe('Writing Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
+    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFiles);
   });
 
   it('renders writing page header and book selector', async () => {
@@ -115,6 +154,17 @@ describe('Writing Page', () => {
       expect(screen.getByText('快速试写')).toBeTruthy();
     });
     expect(screen.getByText('完整创作')).toBeTruthy();
+  });
+
+  it('shows empty state instead of hanging on loading when bookId is missing', async () => {
+    renderWithoutBookId();
+
+    await waitFor(() => {
+      expect(screen.getByText('请选择一本书')).toBeTruthy();
+    });
+
+    expect(api.fetchBook).not.toHaveBeenCalled();
+    expect(screen.queryByText('加载中…')).toBeNull();
   });
 
   it('shows fast draft panel with word count input', async () => {
@@ -192,6 +242,67 @@ describe('Writing Page', () => {
     expect(stageElements.length).toBeGreaterThan(0);
   });
 
+  it('refreshes workspace data and clears loading after pipeline finishes', async () => {
+    vi.mocked(api.fetchBook)
+      .mockResolvedValueOnce(mockBook)
+      .mockResolvedValueOnce({ ...mockBook, currentWords: 9000, chapterCount: 3 });
+    vi.mocked(api.fetchChapters)
+      .mockResolvedValueOnce(mockChapters)
+      .mockResolvedValueOnce([
+        ...mockChapters,
+        {
+          number: 3,
+          title: '第三章',
+          content: '新增内容',
+          status: 'published' as const,
+          wordCount: 3000,
+          qualityScore: 82,
+          auditStatus: 'passed',
+        },
+      ]);
+    vi.mocked(api.fetchMemoryPreview)
+      .mockResolvedValueOnce(mockMemoryPreview)
+      .mockResolvedValueOnce({
+        ...mockMemoryPreview,
+        summary: { facts: 3, hooks: 1, characters: 2 },
+      });
+    vi.mocked(api.startWriteNext).mockResolvedValue({
+      pipelineId: 'pipeline-123',
+      status: 'running',
+    });
+    vi.mocked(api.getPipelineStatus).mockResolvedValue({
+      ...mockPipelineStatus,
+      status: 'completed',
+      currentStage: 'persisting',
+      progress: {
+        planning: { status: 'done', elapsedMs: 1000 },
+        composing: { status: 'done', elapsedMs: 1000 },
+        writing: { status: 'done', elapsedMs: 1000 },
+        auditing: { status: 'done', elapsedMs: 1000 },
+        revising: { status: 'done', elapsedMs: 1000 },
+        persisting: { status: 'done', elapsedMs: 1000 },
+      },
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('完整创作')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('开始完整创作'));
+    });
+
+    await waitFor(() => {
+      expect(api.getPipelineStatus).toHaveBeenCalledTimes(1);
+      expect(api.fetchBook).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('开始完整创作')).toBeTruthy();
+      expect(screen.getByText('章节数')).toBeTruthy();
+      expect(screen.getByText('3')).toBeTruthy();
+    });
+  });
+
   it('submits draft mode write', async () => {
     vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
     vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
@@ -218,6 +329,111 @@ describe('Writing Page', () => {
 
     await waitFor(() => {
       expect(api.startWriteDraft).toHaveBeenCalled();
+    });
+  });
+
+  it('shows upgrade action after draft mode completes and upgrades draft to final', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
+    vi.mocked(api.startWriteDraft).mockResolvedValue({
+      number: 3,
+      title: null,
+      content: '【草稿模式】内容',
+      status: 'draft',
+      wordCount: 2000,
+      qualityScore: null,
+    });
+    vi.mocked(api.startUpgradeDraft).mockResolvedValue({
+      pipelineId: 'pipeline-upgrade-123',
+      status: 'running',
+    });
+    vi.mocked(api.getPipelineStatus).mockResolvedValue(mockCompletedUpgradePipeline);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('完整创作')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('草稿模式'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('转为正式章节（启动审计）')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('转为正式章节（启动审计）'));
+    });
+
+    await waitFor(() => {
+      expect(api.startUpgradeDraft).toHaveBeenCalledWith('book-001', 3, undefined);
+    });
+  });
+
+  it('prompts before upgrading when truth files changed after draft generation', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchChapters).mockResolvedValue(mockChapters);
+    vi.mocked(api.fetchMemoryPreview).mockResolvedValue(mockMemoryPreview);
+    vi.mocked(api.fetchTruthFiles)
+      .mockResolvedValueOnce({ versionToken: 1, files: [] })
+      .mockResolvedValueOnce({ versionToken: 1, files: [] })
+      .mockResolvedValueOnce({ versionToken: 2, files: [] });
+    vi.mocked(api.startWriteDraft).mockResolvedValue({
+      number: 3,
+      title: null,
+      content: '【草稿模式】内容',
+      status: 'draft',
+      wordCount: 2000,
+      qualityScore: null,
+    });
+    vi.mocked(api.startUpgradeDraft).mockResolvedValue({
+      pipelineId: 'pipeline-upgrade-123',
+      status: 'running',
+    });
+    vi.mocked(api.getPipelineStatus).mockResolvedValue({
+      ...mockCompletedUpgradePipeline,
+      result: {
+        success: true,
+        chapterNumber: 3,
+        status: 'final',
+        warningCode: 'context_drift',
+        warning: '⚠️ 检测到上下文版本变化 (v2)，已重新对齐',
+      },
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('完整创作')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('草稿模式'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('转为正式章节（启动审计）')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('转为正式章节（启动审计）'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('检测到世界状态已更新')).toBeTruthy();
+    });
+
+    expect(api.startUpgradeDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('基于新状态重新润色草稿'));
+    });
+
+    await waitFor(() => {
+      expect(api.startUpgradeDraft).toHaveBeenCalledWith('book-001', 3, undefined);
     });
   });
 

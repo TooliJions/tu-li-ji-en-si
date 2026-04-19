@@ -38,7 +38,7 @@ export interface WakeDeferredResult {
 
 // ─── Active statuses (participate in scheduling and overdue) ───────
 
-const ACTIVE_STATUSES = new Set<Hook['status']>(['open', 'progressing', 'deferred', 'dormant']);
+const ACTIVE_STATUSES = new Set<Hook['status']>(['open', 'progressing', 'deferred']);
 
 // ─── HookAgenda ──────────────────────────────────────────────────
 /**

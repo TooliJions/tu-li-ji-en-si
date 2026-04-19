@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Activity, GitBranch, Map as MapIcon, Zap } from 'lucide-react';
 import { fetchHookTimeline, fetchHookWakeSchedule } from '../lib/api';
@@ -37,7 +37,9 @@ export default function HookTimelinePage() {
     timeline && wakeSchedule ? getEffectiveToChapter(timeline, wakeSchedule) : 1;
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-muted-foreground">加载中…</div>;
+    return (
+      <div className="flex h-64 items-center justify-center text-muted-foreground">加载中…</div>
+    );
   }
 
   if (!bookId || !timeline || !wakeSchedule) {
@@ -48,29 +50,53 @@ export default function HookTimelinePage() {
     );
   }
 
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Hook Governance</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">伏笔双轨时间轴</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+            伏笔双轨时间轴
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
             把伏笔生命周期、唤醒排班和惊群分流放进同一张时间图里，方便从全局热力到局部章节做连续观察。
           </p>
         </div>
         <div className="flex gap-3">
-          <Link to={`/hooks?bookId=${bookId}`} className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          <Link
+            to={`/hooks?bookId=${bookId}`}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
             返回伏笔面板
           </Link>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={GitBranch} label="活跃排班章节" value={`${effectiveToChapter}`} accent="text-cyan-600" />
-        <MetricCard icon={Activity} label="待唤醒伏笔" value={`${wakeSchedule.pendingWakes.length}`} accent="text-slate-700" />
-        <MetricCard icon={MapIcon} label="每章唤醒上限" value={`${wakeSchedule.maxWakePerChapter}`} accent="text-amber-600" />
-        <MetricCard icon={Zap} label="惊群章节" value={`${timeline.thunderingHerdAlerts.length}`} accent="text-yellow-600" />
+        <MetricCard
+          icon={GitBranch}
+          label="活跃排班章节"
+          value={`${effectiveToChapter}`}
+          accent="text-cyan-600"
+        />
+        <MetricCard
+          icon={Activity}
+          label="待唤醒伏笔"
+          value={`${wakeSchedule.pendingWakes.length}`}
+          accent="text-slate-700"
+        />
+        <MetricCard
+          icon={MapIcon}
+          label="每章唤醒上限"
+          value={`${wakeSchedule.maxWakePerChapter}`}
+          accent="text-amber-600"
+        />
+        <MetricCard
+          icon={Zap}
+          label="惊群章节"
+          value={`${timeline.thunderingHerdAlerts.length}`}
+          accent="text-yellow-600"
+        />
       </div>
 
       <HookTimelineWorkspace timeline={timeline} wakeSchedule={wakeSchedule} />

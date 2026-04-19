@@ -55,10 +55,23 @@ export default function TruthFiles() {
   const [editContent, setEditContent] = useState('');
 
   const [importFile, setImportFile] = useState('current_state');
+  const [markdownContent, setMarkdownContent] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   useEffect(() => {
+    if (!bookId) {
+      setFiles([]);
+      setVersionToken(0);
+      setProjection(null);
+      setSelectedFile(null);
+      setEditing(false);
+      setEditContent('');
+      setImportResult(null);
+      setLoading(false);
+      return;
+    }
+
     Promise.all([fetchTruthFiles(bookId), fetchProjectionStatus(bookId)])
       .then(([list, status]) => {
         setFiles(list.files || []);
@@ -72,6 +85,7 @@ export default function TruthFiles() {
   }, [bookId]);
 
   async function openFile(fileName: string) {
+    if (!bookId) return;
     try {
       const data = await fetchTruthFile(bookId, fileName);
       setSelectedFile(data);
@@ -84,7 +98,7 @@ export default function TruthFiles() {
   }
 
   async function saveFile() {
-    if (!selectedFile) return;
+    if (!bookId || !selectedFile) return;
     try {
       const parsed = JSON.parse(editContent);
       const result = await updateTruthFile(
@@ -106,14 +120,31 @@ export default function TruthFiles() {
   }
 
   async function handleImport() {
+    if (!bookId || !markdownContent.trim()) {
+      return;
+    }
+
     setImportLoading(true);
     try {
-      const result = await importMarkdown(bookId, importFile);
+      const result = await importMarkdown(bookId, importFile, markdownContent);
+      const shouldRefreshSelectedFile = selectedFile?.name === importFile ? importFile : null;
+      const [list, status, refreshedSelectedFile] = await Promise.all([
+        fetchTruthFiles(bookId),
+        fetchProjectionStatus(bookId),
+        shouldRefreshSelectedFile
+          ? fetchTruthFile(bookId, shouldRefreshSelectedFile)
+          : Promise.resolve(null),
+      ]);
       setImportResult(result);
-      // Refresh file list after import
-      const list = await fetchTruthFiles(bookId);
       setFiles(list.files || []);
       setVersionToken(list.versionToken || 0);
+      setProjection(status);
+      if (refreshedSelectedFile) {
+        setSelectedFile(refreshedSelectedFile);
+        setEditContent(JSON.stringify(refreshedSelectedFile.content, null, 2));
+        setEditing(false);
+      }
+      setMarkdownContent('');
     } catch {
       // import failed
     } finally {
@@ -124,6 +155,17 @@ export default function TruthFiles() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">加载中…</div>
+    );
+  }
+
+  if (!bookId) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">请选择一本书</p>
+        <Link to="/" className="text-primary mt-4 inline-block">
+          返回仪表盘
+        </Link>
+      </div>
     );
   }
 
@@ -289,7 +331,7 @@ export default function TruthFiles() {
           <Upload size={18} />
           <h2 className="text-lg font-semibold">导入 Markdown</h2>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="space-y-4">
           <select
             value={importFile}
             onChange={(e) => setImportFile(e.target.value)}
@@ -301,14 +343,32 @@ export default function TruthFiles() {
               </option>
             ))}
           </select>
-          <button
-            onClick={handleImport}
-            disabled={importLoading}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 disabled:opacity-50"
-          >
-            {importLoading ? '导入中…' : '导入'}
-          </button>
-          {importLoading && <RefreshCw size={16} className="animate-spin" />}
+          <div>
+            <label
+              htmlFor="markdown-import-content"
+              className="mb-1 block text-sm text-muted-foreground"
+            >
+              Markdown 内容
+            </label>
+            <textarea
+              id="markdown-import-content"
+              value={markdownContent}
+              onChange={(e) => setMarkdownContent(e.target.value)}
+              placeholder="# 输入要导入的 Markdown\n\n支持将真相文件对应的 Markdown 内容回写到 JSON 真相源。"
+              rows={8}
+              className="w-full rounded border bg-background px-3 py-2 font-mono text-sm resize-y"
+            />
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleImport}
+              disabled={importLoading || !markdownContent.trim()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 disabled:opacity-50"
+            >
+              {importLoading ? '导入中…' : '导入'}
+            </button>
+            {importLoading && <RefreshCw size={16} className="animate-spin" />}
+          </div>
         </div>
         {importResult && (
           <div className="mt-4 p-4 rounded border bg-secondary/50">

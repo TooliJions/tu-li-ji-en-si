@@ -10,6 +10,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import ConfigView from './config-view';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockConfig = {
   defaultProvider: 'DashScope',
@@ -57,7 +58,7 @@ describe('ConfigView Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchConfig).mockResolvedValue(mockConfig);
+    vi.mocked(api.fetchConfig).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 

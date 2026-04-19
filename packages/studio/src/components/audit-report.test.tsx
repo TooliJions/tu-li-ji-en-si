@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import AuditReport from './audit-report';
 
@@ -35,7 +36,7 @@ const mockReport = {
       ],
     },
   ],
-};
+} satisfies ComponentProps<typeof AuditReport>['report'];
 
 describe('AuditReport', () => {
   it('renders overall score', () => {

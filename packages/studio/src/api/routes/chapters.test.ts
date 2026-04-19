@@ -181,10 +181,12 @@ describe('Chapters Route', () => {
         'chapters',
         'chapter-0003.md'
       );
-      const pollutedContent = fs.readFileSync(chapterPath, 'utf-8').replace(
-        'createdAt:',
-        'warningCode: accept_with_warnings\nwarning: 修订次数用尽，已按 accept_with_warnings 降级接受结果\ncreatedAt:'
-      );
+      const pollutedContent = fs
+        .readFileSync(chapterPath, 'utf-8')
+        .replace(
+          'createdAt:',
+          'warningCode: accept_with_warnings\nwarning: 修订次数用尽，已按 accept_with_warnings 降级接受结果\ncreatedAt:'
+        );
       fs.writeFileSync(chapterPath, pollutedContent, 'utf-8');
 
       const res = await app.request(`/api/books/${bookId}/chapters/3`);
@@ -400,8 +402,7 @@ describe('Chapters Route', () => {
       const snapshotId = snapshots
         .slice()
         .sort(
-          (left, right) =>
-            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+          (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
         )
         .find((snapshot) =>
           fs.existsSync(
@@ -441,12 +442,13 @@ describe('Chapters Route', () => {
   });
 
   describe('POST /api/books/:bookId/chapters/:chapterNumber/audit', () => {
-    it('returns audit report for a chapter', async () => {
+    it('builds and persists a content-driven audit report for a chapter', async () => {
       const bookId = await createBook(app);
       await seedChapter(bookId, {
         number: 1,
         title: null,
-        content: 'content',
+        content:
+          '林砚把窗户推开，先听见楼下铁门合拢的回声，再看见雨水沿着台阶慢慢退下去。\n\n他没有急着下结论，只把口袋里的纸条摊平，对照灯下的笔迹，一点点把前后矛盾的地方圈了出来。',
         status: 'published',
         wordCount: 7,
         qualityScore: null,
@@ -463,12 +465,72 @@ describe('Chapters Route', () => {
       });
       expect(res.status).toBe(200);
       const data = (await res.json()) as {
-        data: { overallStatus: string; tiers: Record<string, unknown> };
+        data: {
+          overallStatus: string;
+          tiers: {
+            blocker: { failed: number };
+            warning: { failed: number };
+            suggestion: { failed: number };
+          };
+          radarScores: Array<{ dimension: string; score: number }>;
+        };
       };
       expect(data.data.overallStatus).toBe('passed');
-      expect(data.data.tiers).toHaveProperty('blocker');
-      expect(data.data.tiers).toHaveProperty('warning');
-      expect(data.data.tiers).toHaveProperty('suggestion');
+      expect(data.data.tiers.blocker.failed).toBe(0);
+      expect(data.data.radarScores).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ dimension: 'ai_trace' }),
+          expect.objectContaining({ dimension: 'coherence' }),
+        ])
+      );
+
+      const persisted = await app.request(`/api/books/${bookId}/chapters/1/audit-report`);
+      const persistedData = (await persisted.json()) as {
+        data: { overallStatus: string; radarScores: Array<{ dimension: string; score: number }> };
+      };
+      expect(persistedData.data.overallStatus).toBe('passed');
+      expect(persistedData.data.radarScores).toEqual(data.data.radarScores);
+    });
+
+    it('flags high-risk AI patterns instead of returning a fixed pass result', async () => {
+      const bookId = await createBook(app);
+      await seedChapter(bookId, {
+        number: 2,
+        title: null,
+        content:
+          '夜幕降临，华灯初上，霓虹闪烁。首先我们需要明确的是，他心中涌起莫名的感觉。其次，从宏观角度来看，人生就像一场梦。总而言之，这个故事告诉我们要携手共进。',
+        status: 'published',
+        wordCount: 7,
+        qualityScore: null,
+        aiTraceScore: null,
+        auditStatus: null,
+        auditReport: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const res = await app.request(`/api/books/${bookId}/chapters/2/audit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          overallStatus: string;
+          tiers: {
+            blocker: { failed: number; items: Array<{ rule: string; message: string }> };
+            warning: { failed: number; items: Array<{ rule: string; message: string }> };
+          };
+        };
+      };
+      expect(data.data.overallStatus).toBe('needs_revision');
+      expect(data.data.tiers.blocker.failed + data.data.tiers.warning.failed).toBeGreaterThan(0);
+      expect(
+        [
+          ...data.data.tiers.blocker.items.map((item) => item.rule),
+          ...data.data.tiers.warning.items.map((item) => item.rule),
+        ].length
+      ).toBeGreaterThan(0);
     });
 
     it('returns 404 for non-existent chapter', async () => {
@@ -487,7 +549,8 @@ describe('Chapters Route', () => {
       await seedChapter(bookId, {
         number: 1,
         title: null,
-        content: 'content',
+        content:
+          '林砚把伞挂在门口，先看了一眼鞋印里的泥水，再把桌上的旧票据摊开。\n\n他没有急着判断谁在说谎，而是按时间顺序把每一次出入记录重新排了一遍，终于在最不起眼的一栏里看见了缺口。',
         status: 'published',
         wordCount: 7,
         qualityScore: null,

@@ -71,10 +71,18 @@ export async function fetchChapter(bookId: string, chapterNumber: number) {
   return data.data;
 }
 
-export async function fetchEntityContext(bookId: string, entityName: string, chapterNumber?: number) {
+export async function fetchEntityContext(
+  bookId: string,
+  entityName: string,
+  chapterNumber?: number
+) {
   const suffix =
-    chapterNumber !== undefined ? `?chapterNumber=${encodeURIComponent(String(chapterNumber))}` : '';
-  const res = await fetch(`/api/books/${bookId}/context/${encodeURIComponent(entityName)}${suffix}`);
+    chapterNumber !== undefined
+      ? `?chapterNumber=${encodeURIComponent(String(chapterNumber))}`
+      : '';
+  const res = await fetch(
+    `/api/books/${bookId}/context/${encodeURIComponent(entityName)}${suffix}`
+  );
   if (!res.ok) throw new Error('实体上下文不存在');
   const data = await res.json();
   return data.data;
@@ -156,7 +164,11 @@ export async function startWriteDraft(bookId: string, chapterNumber: number) {
   return data.data;
 }
 
-export async function startUpgradeDraft(bookId: string, chapterNumber: number, userIntent?: string) {
+export async function startUpgradeDraft(
+  bookId: string,
+  chapterNumber: number,
+  userIntent?: string
+) {
   const res = await fetch(`/api/books/${bookId}/pipeline/upgrade-draft`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -263,7 +275,7 @@ export async function fetchProjectionStatus(bookId: string) {
   return data.data;
 }
 
-export async function importMarkdown(bookId: string, fileName: string, markdownContent: string = '# 导入占位') {
+export async function importMarkdown(bookId: string, fileName: string, markdownContent: string) {
   const res = await fetch(`/api/books/${bookId}/state/import-markdown`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

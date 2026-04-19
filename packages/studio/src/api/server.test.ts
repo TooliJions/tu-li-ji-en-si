@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createApp } from './server';
+import { resetBookStoreForTests } from './routes/books';
+import { resetStudioCoreBridgeForTests } from './core-bridge';
 
 describe('Hono Server', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
+    resetBookStoreForTests();
+    resetStudioCoreBridgeForTests();
     app = createApp();
   });
 

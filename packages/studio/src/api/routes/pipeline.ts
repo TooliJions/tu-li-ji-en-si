@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { readStudioBookRuntime, getStudioPipelineRunner, hasStudioBookRuntime } from '../core-bridge';
+import {
+  readStudioBookRuntime,
+  getStudioPipelineRunner,
+  hasStudioBookRuntime,
+} from '../core-bridge';
 import { eventHub } from '../sse';
 
 export const pipelineStore = new Map<
@@ -97,7 +101,11 @@ function finalizePipeline(
   pipeline.result = result;
 
   for (const progress of Object.values(pipeline.progress)) {
-    progress.status = result.success ? 'completed' : progress.status === 'running' ? 'failed' : progress.status;
+    progress.status = result.success
+      ? 'completed'
+      : progress.status === 'running'
+        ? 'failed'
+        : progress.status;
   }
 }
 
@@ -290,6 +298,18 @@ export function createPipelineRouter(): Hono {
       genre: book?.genre ?? 'urban',
       sceneDescription: '草稿模式推进主线',
     });
+
+    if (!draft.success) {
+      return c.json(
+        {
+          error: {
+            code: 'DRAFT_WRITE_FAILED',
+            message: draft.error ?? '草稿模式失败',
+          },
+        },
+        500
+      );
+    }
 
     return c.json({
       data: {

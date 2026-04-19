@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from './server';
 import { pipelineStore } from './routes/pipeline';
+import { resetStudioCoreBridgeForTests } from './core-bridge';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -14,8 +15,9 @@ describe('E2E: Critical User Paths', () => {
   let bookId = '';
 
   beforeAll(() => {
-    app = createApp();
     tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'e2e-'));
+    resetStudioCoreBridgeForTests(tmpDir);
+    app = createApp();
   });
 
   afterAll(() => {

@@ -15,6 +15,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import Analytics from './analytics';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockWordCount = {
   totalWords: 12000,
@@ -141,7 +142,16 @@ const mockEmotionalArcs = {
       chapters: [
         {
           chapterNumber: 1,
-          emotions: { joy: 0.4, anger: 0.1, sadness: 0.1, fear: 0.1, surprise: 0.1, disgust: 0, trust: 0.1, anticipation: 0.1 },
+          emotions: {
+            joy: 0.4,
+            anger: 0.1,
+            sadness: 0.1,
+            fear: 0.1,
+            surprise: 0.1,
+            disgust: 0,
+            trust: 0.1,
+            anticipation: 0.1,
+          },
           deltas: null,
           dominantEmotion: 'joy',
           summary: '喜悦为主(40%)',
@@ -153,7 +163,16 @@ const mockEmotionalArcs = {
       chapters: [
         {
           chapterNumber: 1,
-          emotions: { joy: 0.2, anger: 0.1, sadness: 0.3, fear: 0.1, surprise: 0.1, disgust: 0, trust: 0.1, anticipation: 0.1 },
+          emotions: {
+            joy: 0.2,
+            anger: 0.1,
+            sadness: 0.3,
+            fear: 0.1,
+            surprise: 0.1,
+            disgust: 0,
+            trust: 0.1,
+            anticipation: 0.1,
+          },
           deltas: null,
           dominantEmotion: 'sadness',
           summary: '悲伤为主(30%)',
@@ -189,13 +208,13 @@ describe('Analytics Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchWordCount).mockResolvedValue(mockWordCount);
-    vi.mocked(api.fetchAuditRate).mockResolvedValue(mockAuditRate);
-    vi.mocked(api.fetchTokenUsage).mockResolvedValue(mockTokenUsage);
-    vi.mocked(api.fetchAiTrace).mockResolvedValue(mockAiTrace);
-    vi.mocked(api.fetchQualityBaseline).mockResolvedValue(mockQualityBaseline);
-    vi.mocked(api.fetchBaselineAlert).mockResolvedValue(mockBaselineAlert);
-    vi.mocked(api.fetchEmotionalArcs).mockResolvedValue(mockEmotionalArcs);
+    vi.mocked(api.fetchWordCount).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchAuditRate).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchTokenUsage).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchAiTrace).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchQualityBaseline).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchBaselineAlert).mockReturnValue(pendingPromise());
+    vi.mocked(api.fetchEmotionalArcs).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 

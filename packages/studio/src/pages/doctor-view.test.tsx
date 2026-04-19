@@ -11,6 +11,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import DoctorView from './doctor-view';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockDoctorStatus = {
   issues: [
@@ -28,10 +29,16 @@ const mockDoctorStatus = {
     },
   ],
   reorgSentinels: [],
-  qualityBaseline: { status: 'established', version: 1, aiContamination: 'low' },
+  qualityBaseline: {
+    status: 'established',
+    version: 1,
+    aiContamination: 'low',
+    sampledBooks: 1,
+    sampledChapters: 3,
+  },
   providerHealth: [
-    { provider: 'DashScope', status: 'online', latencyMs: 320 },
-    { provider: 'OpenAI', status: 'online', latencyMs: 450 },
+    { provider: 'DashScope', status: 'configured', models: ['qwen3.6-plus'], bookCount: 1 },
+    { provider: 'OpenAI', status: 'configured', models: ['gpt-4o'], bookCount: 1 },
   ],
 };
 
@@ -73,7 +80,7 @@ describe('DoctorView Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchDoctorStatus).mockResolvedValue(mockDoctorStatus);
+    vi.mocked(api.fetchDoctorStatus).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 
@@ -118,8 +125,9 @@ describe('DoctorView Page', () => {
     });
 
     expect(screen.getAllByText('DashScope').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('online').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/320ms/)).toBeTruthy();
+    expect(screen.getAllByText('已配置').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/模型: qwen3.6-plus/)).toBeTruthy();
+    expect(screen.getAllByText(/关联书籍: 1 本/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows quality baseline status', async () => {
@@ -133,6 +141,7 @@ describe('DoctorView Page', () => {
 
     expect(screen.getByText('质量基线')).toBeTruthy();
     expect(screen.getByText('established')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
   });
 
   it('fixes stale locks', async () => {

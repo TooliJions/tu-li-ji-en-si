@@ -23,18 +23,6 @@ async function createBook(app: ReturnType<typeof createTestApp>) {
   return data.data.id;
 }
 
-async function waitForDaemonState(app: ReturnType<typeof createTestApp>, bookId: string, expected: string) {
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const res = await app.request(`/api/books/${bookId}/daemon`);
-    const data = (await res.json()) as { data: { status: string } };
-    if (data.data.status === expected) {
-      return data.data;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`daemon ${bookId} did not reach ${expected}`);
-}
-
 describe('Daemon Route', () => {
   let app: ReturnType<typeof createTestApp>;
 

@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -39,6 +41,11 @@ export interface StudioRuntimeBookRecord {
 }
 
 const TEMP_RUNTIME_PREFIX = 'cybernovelist-studio-';
+
+type RuntimeDirectoryEntry = {
+  name: string;
+  isDirectory(): boolean;
+};
 
 function resolveDefaultRuntimeRoot(): string {
   const cwd = process.cwd();
@@ -206,9 +213,7 @@ function extractChapterNumber(prompt: string): number {
 }
 
 function extractLineValue(prompt: string, label: string): string | undefined {
-  const line = prompt
-    .split('\n')
-    .find((entry) => entry.trimStart().startsWith(label));
+  const line = prompt.split('\n').find((entry) => entry.trimStart().startsWith(label));
   if (!line) {
     return undefined;
   }
@@ -271,6 +276,28 @@ export function hasStudioBookRuntime(bookId: string): boolean {
   return fs.existsSync(path.join(getStudioRuntimeRootDir(), bookId, 'book.json'));
 }
 
+function syncBookRuntimeWithIndex(book: StudioRuntimeBookRecord): StudioRuntimeBookRecord {
+  const indexPath = path.join(getStudioRuntimeRootDir(), book.id, 'story', 'state', 'index.json');
+  if (!fs.existsSync(indexPath)) {
+    return book;
+  }
+
+  try {
+    const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+      totalWords?: number;
+      totalChapters?: number;
+    };
+    return {
+      ...book,
+      currentWords: typeof index.totalWords === 'number' ? index.totalWords : book.currentWords,
+      chapterCount:
+        typeof index.totalChapters === 'number' ? index.totalChapters : book.chapterCount,
+    };
+  } catch {
+    return book;
+  }
+}
+
 export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void {
   ensureRuntimeRoot();
   const manager = new StateManager(runtimeRootDir);
@@ -322,7 +349,11 @@ export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void
   fs.writeFileSync(placeholderChapter, '', 'utf-8');
 
   const manifest = buildInitialManifest(book.id);
-  ProjectionRenderer.writeProjectionFiles(manifest, manager.getBookPath(book.id, 'story', 'state'), []);
+  ProjectionRenderer.writeProjectionFiles(
+    manifest,
+    manager.getBookPath(book.id, 'story', 'state'),
+    []
+  );
 }
 
 export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
@@ -352,7 +383,8 @@ export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
         targetChapterCount: book.targetChapterCount,
         targetWords: book.targetWords,
         targetWordsPerChapter: book.targetWordsPerChapter,
-        synopsis: typeof currentMeta.synopsis === 'string' ? currentMeta.synopsis : book.brief ?? '',
+        synopsis:
+          typeof currentMeta.synopsis === 'string' ? currentMeta.synopsis : (book.brief ?? ''),
       },
       null,
       2
@@ -373,7 +405,21 @@ export function readStudioBookRuntime(bookId: string): StudioRuntimeBookRecord |
   if (!fs.existsSync(bookPath)) {
     return null;
   }
-  return JSON.parse(fs.readFileSync(bookPath, 'utf-8')) as StudioRuntimeBookRecord;
+  const book = JSON.parse(fs.readFileSync(bookPath, 'utf-8')) as StudioRuntimeBookRecord;
+  return syncBookRuntimeWithIndex(book);
+}
+
+export function listStudioBookRuntimes(): StudioRuntimeBookRecord[] {
+  return fs
+    .readdirSync(getStudioRuntimeRootDir(), { withFileTypes: true })
+    .filter((entry: RuntimeDirectoryEntry) => entry.isDirectory())
+    .map((entry: RuntimeDirectoryEntry) => readStudioBookRuntime(entry.name))
+    .filter(
+      (book: StudioRuntimeBookRecord | null): book is StudioRuntimeBookRecord => book !== null
+    )
+    .sort((left: StudioRuntimeBookRecord, right: StudioRuntimeBookRecord) =>
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
 }
 
 export function setStudioDaemon(bookId: string, daemon: DaemonScheduler): void {

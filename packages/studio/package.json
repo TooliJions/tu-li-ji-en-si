@@ -5,12 +5,13 @@
   "description": "CyberNovelist Studio — Web workstation (React + Hono + SSE)",
   "scripts": {
     "dev": "pnpm build:api && pnpm dev:api & vite",
+    "dev:e2e": "vite --host 127.0.0.1 --port 5173",
     "dev:api": "tsx watch src/api/index.ts",
     "build": "pnpm build:api && tsc --build && vite build",
     "typecheck": "pnpm --filter @cybernovelist/core build && tsc --noEmit && tsc --project tsconfig.api.json --noEmit",
     "build:api": "pnpm --filter @cybernovelist/core build && tsc --project tsconfig.api.json",
     "test": "pnpm --filter @cybernovelist/core build && vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test -c ../../playwright.config.ts",
     "lint": "eslint src/",
     "format": "prettier --write src/"
   },
@@ -36,6 +37,7 @@
     "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.19.17",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

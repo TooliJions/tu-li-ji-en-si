@@ -180,7 +180,7 @@ describe('HookAgenda', () => {
 
       const report = agenda.checkOverdue(hooks, 5);
 
-      expect(report.totalActive).toBe(4);
+      expect(report.totalActive).toBe(3);
     });
 
     it('includes chaptersSincePlanted in report', () => {

@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
+    "types": ["node"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

@@ -23,12 +23,19 @@ import { createStyleRouter } from './routes/style';
 export { eventHub, SSEClient };
 export type { SSEEventType } from './sse';
 
-export function createApp(): Hono {
+interface CreateAppOptions {
+  enableLogger?: boolean;
+}
+
+export function createApp(options: CreateAppOptions = {}): Hono {
   const app = new Hono();
+  const enableLogger = options.enableLogger ?? process.env.VITEST !== 'true';
 
   // Middleware
   app.use('*', cors());
-  app.use('*', logger());
+  if (enableLogger) {
+    app.use('*', logger());
+  }
   app.use('*', prettyJSON());
 
   // Health check

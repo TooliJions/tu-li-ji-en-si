@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import {
-  Play,
-  Pause,
-  Square,
-  AlertTriangle,
-  Terminal,
-  ChevronRight,
-} from 'lucide-react';
+import { Play, Pause, Square, AlertTriangle, Terminal, ChevronRight } from 'lucide-react';
 import { fetchDaemonStatus, startDaemon, pauseDaemon, stopDaemon } from '../lib/api';
 
 interface DaemonStatus {
@@ -64,6 +57,12 @@ export default function DaemonControl() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
+    if (!bookId) {
+      setStatus(null);
+      setLoading(false);
+      return;
+    }
+
     fetchDaemonStatus(bookId)
       .then((data) => setStatus(data))
       .catch(() => {
@@ -73,6 +72,7 @@ export default function DaemonControl() {
   }, [bookId]);
 
   async function handleStart() {
+    if (!bookId) return;
     setActionLoading(true);
     try {
       const result = await startDaemon(bookId, { fromChapter, toChapter, interval });
@@ -85,6 +85,7 @@ export default function DaemonControl() {
   }
 
   async function handlePause() {
+    if (!bookId) return;
     try {
       const result = await pauseDaemon(bookId);
       setStatus(result);
@@ -94,6 +95,7 @@ export default function DaemonControl() {
   }
 
   async function handleStop() {
+    if (!bookId) return;
     try {
       const result = await stopDaemon(bookId);
       setStatus(result);
@@ -103,6 +105,7 @@ export default function DaemonControl() {
   }
 
   async function handleResume() {
+    if (!bookId) return;
     setActionLoading(true);
     try {
       const result = await startDaemon(bookId, {
@@ -121,6 +124,17 @@ export default function DaemonControl() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">加载中…</div>
+    );
+  }
+
+  if (!bookId) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">请选择一本书</p>
+        <Link to="/" className="text-primary mt-4 inline-block">
+          返回仪表盘
+        </Link>
+      </div>
     );
   }
 

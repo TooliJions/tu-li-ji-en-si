@@ -30,12 +30,15 @@ interface QualityBaseline {
   status: string;
   version: number;
   aiContamination: string;
+  sampledBooks?: number;
+  sampledChapters?: number;
 }
 
 interface ProviderHealth {
   provider: string;
   status: string;
-  latencyMs: number;
+  models: string[];
+  bookCount: number;
 }
 
 interface DoctorStatus {
@@ -63,6 +66,21 @@ const SEVERITY_COLORS: Record<string, string> = {
   error: 'bg-red-100 text-red-700',
   info: 'bg-blue-100 text-blue-700',
 };
+
+const PROVIDER_STATUS_COLORS: Record<string, string> = {
+  configured: 'bg-green-100 text-green-700',
+  missing: 'bg-red-100 text-red-700',
+};
+
+function formatProviderStatus(status: string): string {
+  if (status === 'configured') {
+    return '已配置';
+  }
+  if (status === 'missing') {
+    return '缺失';
+  }
+  return status;
+}
 
 export default function DoctorView() {
   const [loading, setLoading] = useState(true);
@@ -235,14 +253,15 @@ export default function DoctorView() {
             >
               <div>
                 <p className="font-medium">{p.provider}</p>
-                <p className="text-xs text-muted-foreground">延迟: {p.latencyMs}ms</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.models.length > 0 ? `模型: ${p.models.join(' / ')}` : '未配置模型'}
+                </p>
+                <p className="text-xs text-muted-foreground">关联书籍: {p.bookCount} 本</p>
               </div>
               <span
-                className={`px-2 py-0.5 rounded text-xs ${
-                  p.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}
+                className={`px-2 py-0.5 rounded text-xs ${PROVIDER_STATUS_COLORS[p.status] ?? 'bg-slate-100 text-slate-700'}`}
               >
-                {p.status}
+                {formatProviderStatus(p.status)}
               </span>
             </div>
           ))}
@@ -268,6 +287,18 @@ export default function DoctorView() {
             <span className="text-muted-foreground">AI 痕迹：</span>
             <span className="font-medium">{doctor.qualityBaseline.aiContamination}</span>
           </div>
+          {typeof doctor.qualityBaseline.sampledBooks === 'number' && (
+            <div>
+              <span className="text-muted-foreground">采样书籍：</span>
+              <span className="font-medium">{doctor.qualityBaseline.sampledBooks}</span>
+            </div>
+          )}
+          {typeof doctor.qualityBaseline.sampledChapters === 'number' && (
+            <div>
+              <span className="text-muted-foreground">采样章节：</span>
+              <span className="font-medium">{doctor.qualityBaseline.sampledChapters}</span>
+            </div>
+          )}
         </div>
       </div>
 

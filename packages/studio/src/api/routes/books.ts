@@ -1,43 +1,22 @@
 import { Hono } from 'hono';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import {
   deleteStudioBookRuntime,
+  getStudioRuntimeRootDir,
   initializeStudioBookRuntime,
+  listStudioBookRuntimes,
+  readStudioBookRuntime,
   resetStudioCoreBridgeForTests,
   updateStudioBookRuntime,
 } from '../core-bridge';
 
-// --- In-memory book store (real implementation uses file system via StateManager) ---
-interface BookRecord {
-  id: string;
-  title: string;
-  genre: string;
-  targetWords: number;
-  targetChapterCount: number;
-  targetWordsPerChapter: number;
-  currentWords: number;
-  chapterCount: number;
-  status: 'active' | 'archived';
-  language: string;
-  platform: string;
-  brief?: string;
-  createdAt: string;
-  updatedAt: string;
-  fanficMode: string | null;
-  promptVersion: string;
-  modelConfig: {
-    useGlobalDefaults: boolean;
-    writer: string;
-    auditor: string;
-    planner: string;
-  };
-}
-
-const bookStore = new Map<string, BookRecord>();
+type BookRecord = NonNullable<ReturnType<typeof readStudioBookRuntime>>;
 
 export function resetBookStoreForTests() {
-  bookStore.clear();
+  // no-op: book routes now read directly from runtime files
 }
 
 const defaultModelConfig = {
@@ -80,7 +59,8 @@ const createBookSchema = z
   .transform((data) => {
     const targetWordsPerChapter = data.targetWordsPerChapter ?? 3000;
     const targetWords =
-      data.targetWords ?? (data.targetChapterCount ? data.targetChapterCount * targetWordsPerChapter : 0);
+      data.targetWords ??
+      (data.targetChapterCount ? data.targetChapterCount * targetWordsPerChapter : 0);
     const targetChapterCount =
       data.targetChapterCount ?? Math.max(1, Math.ceil(targetWords / targetWordsPerChapter));
 
@@ -110,6 +90,92 @@ const updateBookSchema = z.object({
   modelConfig: modelConfigSchema.optional(),
 });
 
+interface BookActivityItem {
+  id: string;
+  type: string;
+  timestamp: string;
+  detail: string;
+  chapterNumber?: number;
+}
+
+function parseActivityLimit(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw ?? '10', 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return 10;
+  }
+  return Math.min(parsed, 50);
+}
+
+function collectBookActivity(bookId: string): BookActivityItem[] {
+  const book = readStudioBookRuntime(bookId);
+  if (!book) {
+    return [];
+  }
+
+  const bookDir = path.join(getStudioRuntimeRootDir(), bookId);
+  const chapterDir = path.join(bookDir, 'story', 'chapters');
+  const auditDir = path.join(bookDir, 'story', 'state', 'audits');
+  const activities: BookActivityItem[] = [
+    {
+      id: `${bookId}:book_created`,
+      type: 'book_created',
+      timestamp: book.createdAt,
+      detail: `已创建《${book.title}》`,
+    },
+  ];
+
+  if (book.updatedAt !== book.createdAt) {
+    activities.push({
+      id: `${bookId}:book_updated`,
+      type: 'book_updated',
+      timestamp: book.updatedAt,
+      detail: `已更新《${book.title}》的基础信息`,
+    });
+  }
+
+  if (fs.existsSync(chapterDir)) {
+    for (const fileName of fs.readdirSync(chapterDir)) {
+      const match = /^chapter-(\d{4})\.md$/.exec(fileName);
+      if (!match || match[1] === '0000') {
+        continue;
+      }
+
+      const chapterNumber = Number.parseInt(match[1], 10);
+      const filePath = path.join(chapterDir, fileName);
+      const stat = fs.statSync(filePath);
+      activities.push({
+        id: `${bookId}:chapter_saved:${chapterNumber}`,
+        type: 'chapter_saved',
+        timestamp: stat.mtime.toISOString(),
+        detail: `第 ${chapterNumber} 章已写入 runtime`,
+        chapterNumber,
+      });
+    }
+  }
+
+  if (fs.existsSync(auditDir)) {
+    for (const fileName of fs.readdirSync(auditDir)) {
+      const match = /^chapter-(\d{4})\.json$/.exec(fileName);
+      if (!match) {
+        continue;
+      }
+
+      const chapterNumber = Number.parseInt(match[1], 10);
+      const filePath = path.join(auditDir, fileName);
+      const stat = fs.statSync(filePath);
+      activities.push({
+        id: `${bookId}:chapter_audited:${chapterNumber}`,
+        type: 'chapter_audited',
+        timestamp: stat.mtime.toISOString(),
+        detail: `第 ${chapterNumber} 章已生成审计报告`,
+        chapterNumber,
+      });
+    }
+  }
+
+  return activities.sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+}
+
 export function createBookRouter(): Hono {
   const router = new Hono();
 
@@ -118,7 +184,7 @@ export function createBookRouter(): Hono {
     const status = c.req.query('status');
     const genre = c.req.query('genre');
 
-    let books = Array.from(bookStore.values());
+    let books = listStudioBookRuntimes();
     if (status && status !== 'all') {
       books = books.filter((b) => b.status === status);
     }
@@ -162,15 +228,14 @@ export function createBookRouter(): Hono {
       modelConfig: result.data.modelConfig,
     };
 
-    bookStore.set(book.id, book);
     initializeStudioBookRuntime(book);
-    return c.json({ data: book }, 201);
+    return c.json({ data: readStudioBookRuntime(book.id) ?? book }, 201);
   });
 
   // GET /api/books/:bookId — get book details
   router.get('/:bookId', (c) => {
     const bookId = c.req.param('bookId');
-    const book = bookStore.get(bookId);
+    const book = readStudioBookRuntime(bookId);
     if (!book) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
@@ -180,7 +245,7 @@ export function createBookRouter(): Hono {
   // PATCH /api/books/:bookId — update book
   router.patch('/:bookId', async (c) => {
     const bookId = c.req.param('bookId');
-    const book = bookStore.get(bookId);
+    const book = readStudioBookRuntime(bookId);
     if (!book) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
@@ -198,31 +263,29 @@ export function createBookRouter(): Hono {
       );
     }
 
-    Object.assign(book, result.data, { updatedAt: new Date().toISOString() });
-    bookStore.set(bookId, book);
-    updateStudioBookRuntime(book);
-    return c.json({ data: book });
+    const updatedBook = { ...book, ...result.data, updatedAt: new Date().toISOString() };
+    updateStudioBookRuntime(updatedBook);
+    return c.json({ data: readStudioBookRuntime(bookId) ?? updatedBook });
   });
 
   // DELETE /api/books/:bookId — delete a book
   router.delete('/:bookId', (c) => {
     const bookId = c.req.param('bookId');
-    if (!bookStore.has(bookId)) {
+    if (!readStudioBookRuntime(bookId)) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
     deleteStudioBookRuntime(bookId);
-    bookStore.delete(bookId);
     return c.body(null, 204);
   });
 
   // GET /api/books/:bookId/activity — recent activity
   router.get('/:bookId/activity', (c) => {
     const bookId = c.req.param('bookId')!;
-    if (!bookStore.has(bookId)) {
+    if (!readStudioBookRuntime(bookId)) {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
-    // Placeholder — real implementation reads from activity log
-    return c.json({ data: [] });
+    const limit = parseActivityLimit(c.req.query('limit'));
+    return c.json({ data: collectBookActivity(bookId).slice(0, limit) });
   });
 
   return router;

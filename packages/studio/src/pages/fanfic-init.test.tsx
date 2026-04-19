@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import FanficInit from './fanfic-init';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockBook = {
   id: 'book-fanfic-001',
@@ -34,7 +35,7 @@ describe('FanficInit Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchBook).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 

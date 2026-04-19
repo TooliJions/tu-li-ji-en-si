@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./components.schema.json",
+  "title": "Studio Components Configuration",
+  "type": "object",
+  "required": ["style", "rsc", "tsx", "tailwind", "aliases"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "style": {
+      "type": "string"
+    },
+    "rsc": {
+      "type": "boolean"
+    },
+    "tsx": {
+      "type": "boolean"
+    },
+    "tailwind": {
+      "type": "object",
+      "required": ["config", "css", "baseColor", "cssVariables"],
+      "properties": {
+        "config": {
+          "type": "string"
+        },
+        "css": {
+          "type": "string"
+        },
+        "baseColor": {
+          "type": "string"
+        },
+        "cssVariables": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "aliases": {
+      "type": "object",
+      "required": ["components", "utils"],
+      "properties": {
+        "components": {
+          "type": "string"
+        },
+        "utils": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

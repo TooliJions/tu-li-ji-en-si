@@ -10,6 +10,7 @@ vi.mock('../lib/api', () => ({
 
 import * as api from '../lib/api';
 import StyleManager from './style-manager';
+import { pendingPromise } from '../test-utils/pending';
 
 const mockBook = {
   id: 'book-style-001',
@@ -45,7 +46,7 @@ describe('StyleManager Page', () => {
   });
 
   it('shows loading state', () => {
-    vi.mocked(api.fetchBook).mockResolvedValue(mockBook);
+    vi.mocked(api.fetchBook).mockReturnValue(pendingPromise());
 
     renderWithRouter();
 

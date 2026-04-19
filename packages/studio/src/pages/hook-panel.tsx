@@ -99,19 +99,31 @@ export default function HookPanel() {
   // Wake confirm
   const [wakingHook, setWakingHook] = useState<HookRecord | null>(null);
 
+  async function reloadHookWorkspace(targetBookId: string) {
+    const [hookList, hookHealth, hookTimeline, hookWakeSchedule] = await Promise.all([
+      fetchHooks(targetBookId),
+      fetchHookHealth(targetBookId),
+      fetchHookTimeline(targetBookId),
+      fetchHookWakeSchedule(targetBookId),
+    ]);
+    setHooks(hookList);
+    setHealth(hookHealth);
+    setTimeline(hookTimeline);
+    setWakeSchedule(hookWakeSchedule);
+  }
+
   useEffect(() => {
-    Promise.all([
-      fetchHooks(bookId),
-      fetchHookHealth(bookId),
-      fetchHookTimeline(bookId),
-      fetchHookWakeSchedule(bookId),
-    ])
-      .then(([h, he, t, ws]) => {
-        setHooks(h);
-        setHealth(he);
-        setTimeline(t);
-        setWakeSchedule(ws);
-      })
+    if (!bookId) {
+      setHooks([]);
+      setHealth(null);
+      setTimeline(null);
+      setWakeSchedule(null);
+      setStatusOpenId(null);
+      setLoading(false);
+      return;
+    }
+
+    void reloadHookWorkspace(bookId)
       .catch(() => {
         // load failed
       })
@@ -120,12 +132,12 @@ export default function HookPanel() {
 
   async function handleCreate() {
     try {
-      const result = await createHook(bookId, {
+      await createHook(bookId, {
         description: newDesc,
         chapter: newChapter,
         priority: newPriority,
       });
-      setHooks((prev) => [...prev, result]);
+      await reloadHookWorkspace(bookId);
       setNewDesc('');
       setNewChapter(1);
     } catch {
@@ -135,8 +147,8 @@ export default function HookPanel() {
 
   async function handleStatusChange(hook: HookRecord, newStatus: string) {
     try {
-      const result = await updateHook(bookId, hook.id, { status: newStatus });
-      setHooks((prev) => prev.map((h) => (h.id === hook.id ? result : h)));
+      await updateHook(bookId, hook.id, { status: newStatus });
+      await reloadHookWorkspace(bookId);
     } catch {
       // update failed
     }
@@ -149,6 +161,7 @@ export default function HookPanel() {
         min: intentMin ? Number(intentMin) : undefined,
         max: intentMax ? Number(intentMax) : undefined,
       });
+      await reloadHookWorkspace(bookId);
       setIntentHook(null);
     } catch {
       // intent failed
@@ -162,7 +175,7 @@ export default function HookPanel() {
     if (!wakingHook) return;
     try {
       await wakeHook(bookId, wakingHook.id, 'open');
-      setHooks((prev) => prev.map((h) => (h.id === wakingHook.id ? { ...h, status: 'open' } : h)));
+      await reloadHookWorkspace(bookId);
       setWakingHook(null);
     } catch {
       // wake failed
