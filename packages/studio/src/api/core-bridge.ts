@@ -39,9 +39,30 @@ export interface StudioRuntimeBookRecord {
 }
 
 const TEMP_RUNTIME_PREFIX = 'cybernovelist-studio-';
+
+function resolveDefaultRuntimeRoot(): string {
+  const cwd = process.cwd();
+  let dir = cwd;
+  const fsRoot = path.parse(dir).root;
+  while (dir !== fsRoot) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { name?: string };
+        if (pkg.name === '@cybernovelist/studio') {
+          return path.join(dir, '.runtime');
+        }
+      } catch {
+        // ignore malformed package.json and keep walking up
+      }
+    }
+    dir = path.dirname(dir);
+  }
+  return path.join(cwd, 'packages', 'studio', '.runtime');
+}
+
 const DEFAULT_RUNTIME_ROOT =
-  process.env.CYBERNOVELIST_STUDIO_RUNTIME_DIR ??
-  path.join(process.cwd(), 'packages', 'studio', '.runtime');
+  process.env.CYBERNOVELIST_STUDIO_RUNTIME_DIR ?? resolveDefaultRuntimeRoot();
 
 let runtimeRootDir = DEFAULT_RUNTIME_ROOT;
 let pipelineRunner: PipelineRunner | null = null;

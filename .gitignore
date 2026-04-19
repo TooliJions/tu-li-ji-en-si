@@ -25,3 +25,6 @@ Thumbs.db
 
 # Coverage
 coverage/
+
+# Studio runtime artifacts (local book state, snapshots, telemetry)
+.runtime/
