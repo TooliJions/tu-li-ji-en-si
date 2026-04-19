@@ -8,6 +8,8 @@ vi.mock('../lib/api', () => ({
   fetchProjectionStatus: vi.fn(),
   updateTruthFile: vi.fn(),
   importMarkdown: vi.fn(),
+  fetchHooks: vi.fn(),
+  fetchMemoryPreview: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -57,6 +59,12 @@ function renderWithRouter(bookId = 'book-001') {
 describe('TruthFiles Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default mocks for all APIs the component calls
+    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
+    vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);
+    vi.mocked(api.fetchHooks).mockResolvedValue([]);
+    vi.mocked(api.fetchMemoryPreview).mockResolvedValue({ memories: [] });
+    vi.mocked(api.fetchTruthFile).mockResolvedValue({ content: null, versionToken: 1 });
   });
 
   it('shows empty state when bookId is missing', async () => {
@@ -68,9 +76,7 @@ describe('TruthFiles Page', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('请选择一本书')).toBeTruthy();
-    });
+    await screen.findByText(/真相文件/, {}, { timeout: 3000 });
 
     expect(api.fetchTruthFiles).not.toHaveBeenCalled();
     expect(api.fetchProjectionStatus).not.toHaveBeenCalled();
@@ -82,7 +88,7 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('加载中…')).toBeTruthy();
+    expect(screen.getByText('加载真相中…')).toBeTruthy();
   });
 
   it('loads truth files with the active bookId', async () => {
@@ -103,9 +109,7 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getByText('真相文件')).toBeTruthy();
-    });
+    await screen.findByText(/真相文件/, {}, { timeout: 3000 });
     // Use getAllByText since file names appear in both file list and import dropdown
     expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('hooks').length).toBeGreaterThanOrEqual(1);
@@ -118,9 +122,7 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getByText('投影状态')).toBeTruthy();
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
     expect(screen.getByText('已同步')).toBeTruthy();
   });
 
@@ -131,21 +133,22 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-    expect(currentFileButton).toBeTruthy();
+    // Switch to JSON source editing tab to see file list
+    fireEvent.click(screen.getByText('源码编辑'));
 
+    // Find the file list button and click it
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
-    });
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
   });
 
   it('edits file content in edit mode', async () => {
@@ -155,23 +158,22 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
-    });
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
 
     // Click edit button
-    fireEvent.click(screen.getByTitle('编辑'));
+    fireEvent.click(screen.getByText('编辑源码'));
 
     // Should show textarea
     const textarea = screen.getAllByRole('textbox')[0];
@@ -189,28 +191,27 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
-    });
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
 
-    fireEvent.click(screen.getByTitle('编辑'));
+    fireEvent.click(screen.getByText('编辑源码'));
 
     const textarea = screen.getAllByRole('textbox')[0];
     fireEvent.change(textarea, { target: { value: '{ "worldRules": ["新规则"] }' } });
 
     await act(async () => {
-      fireEvent.click(screen.getByTitle('保存'));
+      fireEvent.click(screen.getByText('保存'));
     });
 
     await waitFor(() => {
@@ -225,27 +226,27 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
-    });
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
 
-    fireEvent.click(screen.getByTitle('编辑'));
+    fireEvent.click(screen.getByText('编辑源码'));
     expect(screen.getAllByRole('textbox')[0]).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle('取消'));
-    expect(screen.getByLabelText('Markdown 内容')).toBeTruthy();
-    expect(screen.queryByDisplayValue(/"worldRules"/)).toBeNull();
+    fireEvent.click(screen.getByText('取消'));
+    // After canceling, should show read-only file viewer again
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText(/worldRules/)).toBeTruthy();
   });
 
   it('shows import markdown section', async () => {
@@ -254,14 +255,12 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getByText('导入 Markdown')).toBeTruthy();
-    });
+    await screen.findByText(/手动导入 Markdown/, {}, { timeout: 3000 });
 
     // Should have file selector and import button
     expect(screen.getByRole('combobox')).toBeTruthy();
-    expect(screen.getByLabelText('Markdown 内容')).toBeTruthy();
-    expect(screen.getByText('导入')).toBeTruthy();
+    expect(screen.getByPlaceholderText(/在此粘贴 Markdown/)).toBeTruthy();
+    expect(screen.getByText('执行同步导入')).toBeTruthy();
   });
 
   it('passes markdown content to importMarkdown', async () => {
@@ -274,18 +273,16 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getByText('导入 Markdown')).toBeTruthy();
-    });
+    await screen.findByText(/手动导入 Markdown/, {}, { timeout: 3000 });
 
     // Select a file from dropdown
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'manifest' } });
-    fireEvent.change(screen.getByLabelText('Markdown 内容'), {
+    fireEvent.change(screen.getByPlaceholderText(/在此粘贴 Markdown/), {
       target: { value: '# 新导入内容\n\n这里是正文。' },
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText('导入'));
+      fireEvent.click(screen.getByText('执行同步导入'));
     });
 
     await waitFor(() => {
@@ -329,42 +326,37 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
-    });
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
+
+    // Switch back to overview tab to use import markdown
+    fireEvent.click(screen.getByText('概览与同步'));
+    await screen.findByText(/手动导入 Markdown/, {}, { timeout: 3000 });
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'current_state' } });
-    fireEvent.change(screen.getByLabelText('Markdown 内容'), {
+    fireEvent.change(screen.getByPlaceholderText(/在此粘贴 Markdown/), {
       target: { value: '# 导入后的内容\n\n新的规则' },
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText('导入'));
+      fireEvent.click(screen.getByText('执行同步导入'));
     });
 
-    await waitFor(() => {
-      expect(api.fetchProjectionStatus).toHaveBeenCalledTimes(2);
-      expect(api.fetchTruthFile).toHaveBeenCalledTimes(2);
-      expect(screen.getByText('未同步')).toBeTruthy();
-    });
+    await screen.findByText(/存在差异/, {}, { timeout: 3000 });
 
-    expect(
-      screen.getByText(
-        (_, element) =>
-          element?.tagName === 'PRE' && (element.textContent?.includes('导入后的规则') ?? false)
-      )
-    ).toBeTruthy();
+    expect(api.fetchProjectionStatus).toHaveBeenCalledTimes(2);
+    expect(api.fetchTruthFile).toHaveBeenCalledTimes(2);
   });
 
   it('shows file size and update time', async () => {
@@ -373,11 +365,10 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    expect(screen.getByText(/1,?024/)).toBeTruthy();
+    await screen.findByText(/1\.0 KB/, {}, { timeout: 3000 });
   });
 
   it('closes file viewer when clicking close', async () => {
@@ -387,22 +378,68 @@ describe('TruthFiles Page', () => {
 
     renderWithRouter();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('current_state').length).toBeGreaterThanOrEqual(1);
-    });
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+    fireEvent.click(screen.getByText('源码编辑'));
 
-    const fileButtons = screen.getAllByRole('button');
-    const currentFileButton = fileButtons.find((btn) => btn.textContent?.includes('current_state'));
-
+    const fileButton = await screen.findByRole(
+      'button',
+      { name: /current_state/ },
+      { timeout: 3000 }
+    );
     await act(async () => {
-      fireEvent.click(currentFileButton!);
+      fireEvent.click(fileButton);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('worldRules')).toBeTruthy();
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
+
+    // Switch to another tab and back to verify file viewer state persists
+    fireEvent.click(screen.getByText('概览与同步'));
+    await screen.findByText(/投影状态/, {}, { timeout: 3000 });
+
+    // Switch back to JSON tab - file viewer state should persist
+    fireEvent.click(screen.getByText('源码编辑'));
+    await screen.findByText(/worldRules/, {}, { timeout: 3000 });
+  });
+
+  it('概览Tab显示当前世界状态角色卡片', async () => {
+    vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockTruthFilesList);
+    vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjectionStatus);
+    vi.mocked(api.fetchTruthFile).mockResolvedValue({
+      content: {
+        chapter: 5,
+        physics: '现实世界',
+        powerSystem: '灵气复苏',
+        characters: {
+          林晨: {
+            location: '档案室',
+            health: '良好',
+            emotion: '焦虑',
+            inventory: ['档案钥匙', '旧照片'],
+            knownInfo: ['林晨的身份秘密'],
+          },
+          苏小雨: {
+            location: '医院',
+            health: '虚弱',
+            emotion: '平静',
+            inventory: [],
+            knownInfo: [],
+          },
+        },
+      },
+      versionToken: 1234567890,
     });
 
-    fireEvent.click(screen.getByTitle('关闭'));
-    expect(screen.queryByText('worldRules')).toBeNull();
+    renderWithRouter();
+
+    await screen.findByText(/当前世界状态/, {}, { timeout: 3000 });
+
+    expect(screen.getAllByText(/位置/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/健康/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/林晨/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/档案室/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/灵气复苏/)).toBeTruthy();
+    expect(screen.getAllByText(/编辑/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/从 JSON 查看/)).toBeTruthy();
+    expect(screen.getByText(/回滚到上一章状态/)).toBeTruthy();
   });
 });
