@@ -62,7 +62,11 @@ export class TelemetryLogger {
   read(bookId: string, chapterNumber: number): ChapterTelemetry | null {
     const filePath = this.getChapterPath(bookId, chapterNumber);
     if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ChapterTelemetry;
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ChapterTelemetry;
+    } catch {
+      return null;
+    }
   }
 
   listBookTelemetry(bookId: string): ChapterTelemetry[] {
@@ -75,7 +79,14 @@ export class TelemetryLogger {
       .sort();
 
     return files
-      .map((name) => JSON.parse(fs.readFileSync(path.join(dir, name), 'utf-8')) as ChapterTelemetry)
+      .map((name) => {
+        try {
+          return JSON.parse(fs.readFileSync(path.join(dir, name), 'utf-8')) as ChapterTelemetry;
+        } catch {
+          return null;
+        }
+      })
+      .filter((item): item is ChapterTelemetry => item !== null)
       .sort((a, b) => a.chapterNumber - b.chapterNumber);
   }
 
@@ -95,6 +106,8 @@ export class TelemetryLogger {
   private writeFile(bookId: string, chapterNumber: number, telemetry: ChapterTelemetry): void {
     const filePath = this.getChapterPath(bookId, chapterNumber);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(telemetry, null, 2), 'utf-8');
+    const tmpPath = `${filePath}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(telemetry, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, filePath);
   }
 }

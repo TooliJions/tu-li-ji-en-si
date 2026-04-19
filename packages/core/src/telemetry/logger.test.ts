@@ -89,4 +89,24 @@ describe('TelemetryLogger', () => {
     const logger = new TelemetryLogger(root);
     expect(logger.listBookTelemetry('book-empty')).toEqual([]);
   });
+
+  it('read() 对损坏 JSON 返回 null 而不抛出', () => {
+    const logger = new TelemetryLogger(root);
+    const dir = path.join(root, 'book-001', 'story', 'state', 'telemetry');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'chapter-0001.json'), '{ not valid json', 'utf-8');
+    expect(logger.read('book-001', 1)).toBeNull();
+  });
+
+  it('listBookTelemetry() 跳过损坏 JSON 不中断其他章节', () => {
+    const logger = new TelemetryLogger(root);
+    logger.record('book-001', 1, 'writer', { promptTokens: 10, completionTokens: 5, totalTokens: 15 });
+    const dir = path.join(root, 'book-001', 'story', 'state', 'telemetry');
+    fs.writeFileSync(path.join(dir, 'chapter-0002.json'), '{ broken', 'utf-8');
+    logger.record('book-001', 3, 'writer', { promptTokens: 20, completionTokens: 10, totalTokens: 30 });
+
+    const all = logger.listBookTelemetry('book-001');
+    expect(all.length).toBe(2);
+    expect(all.map((x) => x.chapterNumber)).toEqual([1, 3]);
+  });
 });
