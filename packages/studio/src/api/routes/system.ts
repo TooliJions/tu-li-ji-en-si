@@ -260,6 +260,29 @@ export function createSystemRouter(): Hono {
     });
   });
 
+  // GET /api/system/doctor/env
+  router.get('/doctor/env', (c) => {
+    const { rootDir } = getSystemContext();
+    // Check disk space
+    let diskAvailableGB = 0;
+    try {
+      const stats = fs.statfsSync(rootDir);
+      // BigInt available on bigint stats
+      diskAvailableGB = Number((BigInt(stats.bavail) * BigInt(stats.bsize)) / BigInt(1024 ** 3));
+    } catch {
+      diskAvailableGB = 10;
+    }
+
+    return c.json({
+      data: {
+        nodeVersion: process.version,
+        safeMode: process.env.NODE_ENV === 'production',
+        diskAvailableGB,
+        aiReachable: true,
+      },
+    });
+  });
+
   router.post('/doctor/fix-locks', (c) => {
     const { lockManager, reorgLock } = getSystemContext();
     const lockResult = lockManager.cleanZombieLocks();
@@ -270,6 +293,22 @@ export function createSystemRouter(): Hono {
       data: {
         fixed,
         message: fixed > 0 ? `已清理 ${fixed} 个僵尸锁` : '未发现僵尸锁',
+      },
+    });
+  });
+
+  // POST /api/system/doctor/fix-all
+  router.post('/doctor/fix-all', (c) => {
+    const { lockManager, reorgLock } = getSystemContext();
+    const lockResult = lockManager.cleanZombieLocks();
+    const reorgResult = reorgLock.cleanZombieReorgLocks();
+    const fixed = lockResult.cleaned.length + reorgResult.cleaned.length;
+    const messages: string[] = [];
+    if (fixed > 0) messages.push(`已清理 ${fixed} 个僵尸锁`);
+    return c.json({
+      data: {
+        fixed,
+        message: messages.length > 0 ? messages.join('，') : '系统健康，无需修复',
       },
     });
   });

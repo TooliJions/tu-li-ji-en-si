@@ -66,7 +66,11 @@ export async function fetchChapterSnapshots(bookId: string, chapterNumber: numbe
 
 export async function fetchChapter(bookId: string, chapterNumber: number) {
   const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}`);
-  if (!res.ok) throw new Error('章节不存在');
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    const msg = errBody?.error?.message || `获取章节 ${chapterNumber} 失败`;
+    throw new Error(msg);
+  }
   const data = await res.json();
   return data.data;
 }
