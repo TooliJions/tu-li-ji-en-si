@@ -131,6 +131,7 @@ export default function ChapterReader() {
   const [popupContext, setPopupContext] = useState<EntityContext | null>(null);
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [contextCache, setContextCache] = useState<Record<string, EntityContext>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const chNum = chapterNumber ? parseInt(chapterNumber, 10) : 0;
 
@@ -153,8 +154,11 @@ export default function ChapterReader() {
       const updated = await updateChapter(bookId, chNum, editContent);
       setChapter(updated);
       setEditMode(false);
-    } catch {
-      // save failed
+      setSaveError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '保存失败，请重试';
+      console.error('[chapter-reader] save failed:', msg);
+      setSaveError(msg);
     }
   }
 
@@ -163,8 +167,12 @@ export default function ChapterReader() {
     try {
       const report = await fetchAuditReport(bookId, chNum);
       setAuditReport(report);
-    } catch {
-      // audit load failed
+      setSaveError(null);
+    } catch (err) {
+      console.error(
+        '[chapter-reader] load audit failed:',
+        err instanceof Error ? err.message : 'unknown'
+      );
     }
   }
 
@@ -173,8 +181,11 @@ export default function ChapterReader() {
     try {
       const report = await runAudit(bookId, chNum);
       setAuditReport(report);
-    } catch {
-      // audit run failed
+      setSaveError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '审计失败，请重试';
+      console.error('[chapter-reader] run audit failed:', msg);
+      setSaveError(msg);
     }
   }
 
@@ -407,6 +418,19 @@ export default function ChapterReader() {
               >
                 <Zap size={14} />
                 心流模式
+              </button>
+            </div>
+          )}
+
+          {/* Error banner */}
+          {saveError && (
+            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm flex items-center justify-between">
+              <span>{saveError}</span>
+              <button
+                onClick={() => setSaveError(null)}
+                className="ml-2 text-red-400 hover:text-red-600"
+              >
+                <X size={14} />
               </button>
             </div>
           )}

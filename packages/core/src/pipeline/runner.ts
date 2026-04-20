@@ -313,10 +313,17 @@ export class PipelineRunner {
       );
 
       // 7. 持久化
-      this.#persistChapter(audited.content!, input.bookId, input.chapterNumber, input.title, 'final', {
-        warning: audited.warning,
-        warningCode: audited.warningCode,
-      });
+      this.#persistChapter(
+        audited.content!,
+        input.bookId,
+        input.chapterNumber,
+        input.title,
+        'final',
+        {
+          warning: audited.warning,
+          warningCode: audited.warningCode,
+        }
+      );
 
       // 8. 更新状态
       this.#updateStateAfterChapter(
@@ -470,20 +477,22 @@ export class PipelineRunner {
       };
     }
 
-    // 读取草稿内容
+    // 读取草稿内容，用正则精确匹配开头 frontmatter（避免正文中的 --- 误截断）
     const rawContent = fs.readFileSync(chapterPath, 'utf-8');
-    const draftContent = rawContent.includes('---\n')
-      ? rawContent.split('---\n').slice(2).join('---\n').trim()
+    const frontmatterMatch = rawContent.match(/^---\n[\s\S]*?\n---\n?/);
+    const draftContent = frontmatterMatch
+      ? rawContent.slice(frontmatterMatch[0].length).trim()
       : rawContent;
 
     // 获取书籍元数据
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as { genre: string; title: string };
 
-    // 检测版本漂移
+    // 检测版本漂移：此草稿之后是否已有新章节写入
     const manifest = this.stateStore.loadManifest(input.bookId);
+    const chaptersAhead = manifest.lastChapterWritten - input.chapterNumber;
     const driftWarning =
-      manifest.versionToken > 1
-        ? `⚠️ 检测到上下文版本变化 (v${manifest.versionToken})，已重新对齐`
+      chaptersAhead > 0
+        ? `⚠️ 检测到上下文漂移：草稿写作后已写入 ${chaptersAhead} 章新内容，已重新对齐`
         : undefined;
 
     // 获取锁
@@ -565,7 +574,7 @@ export class PipelineRunner {
     bookId: string,
     chapterNumber: number,
     channel: TelemetryChannel,
-    usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined,
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
   ): void {
     if (!usage) return;
     this.telemetryLogger.record(bookId, chapterNumber, channel, usage);
@@ -760,17 +769,24 @@ ${content}
     warningCode?: 'accept_with_warnings';
   }> {
     let currentContent = chapterContent;
+    let previousContent = chapterContent;
+    let previousScore = -1;
     const auditorUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     const reviserUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     for (let attempt = 0; attempt <= this.maxRevisionRetries; attempt++) {
       const auditResult = await this.#auditChapter(currentContent, genre, input.chapterNumber);
-      // auditResult.usage 目前不存在（generateJSON 不返回 usage），guard 会跳过累加
-      const auditUsage = (auditResult as unknown as { usage?: AgentResult['usage'] }).usage;
-      if (auditUsage) {
-        auditorUsage.promptTokens += auditUsage.promptTokens;
-        auditorUsage.completionTokens += auditUsage.completionTokens;
-        auditorUsage.totalTokens += auditUsage.totalTokens;
+      const auditUsage = auditResult.usage;
+      auditorUsage.promptTokens += auditUsage.promptTokens;
+      auditorUsage.completionTokens += auditUsage.completionTokens;
+      auditorUsage.totalTokens += auditUsage.totalTokens;
+
+      const currentScore = auditResult.overallScore ?? 0;
+
+      // 污染检测：若修订后质量下降，回滚到修订前版本
+      if (attempt > 0 && currentScore < previousScore) {
+        currentContent = previousContent;
+        break;
       }
 
       if (auditResult.status === 'pass' || auditResult.issues.length === 0) {
@@ -787,6 +803,9 @@ ${content}
       }
 
       if (attempt < this.maxRevisionRetries) {
+        previousContent = currentContent;
+        previousScore = currentScore;
+
         // 尝试修订
         const revisePrompt = `请根据以下审计问题修订章节内容：
 
@@ -800,9 +819,11 @@ ${currentContent}
 
         const reviseResult = await this.provider.generate({ prompt: revisePrompt });
         currentContent = reviseResult.text;
-        reviserUsage.promptTokens += reviseResult.usage.promptTokens;
-        reviserUsage.completionTokens += reviseResult.usage.completionTokens;
-        reviserUsage.totalTokens += reviseResult.usage.totalTokens;
+        if (reviseResult.usage) {
+          reviserUsage.promptTokens += reviseResult.usage.promptTokens;
+          reviserUsage.completionTokens += reviseResult.usage.completionTokens;
+          reviserUsage.totalTokens += reviseResult.usage.totalTokens;
+        }
       }
     }
 
@@ -834,6 +855,7 @@ ${currentContent}
     issues: Array<{ severity: string; description: string }>;
     overallScore: number;
     summary: string;
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
   }> {
     const prompt = `你是一位专业的网络小说质量审计师。请对以下章节进行质量检测。
 
@@ -860,7 +882,20 @@ ${content.substring(0, 5000)}
   "summary": "审计总结"
 }`;
 
-    return this.provider.generateJSON({ prompt });
+    const result = await this.provider.generateJSONWithMeta<{
+      status: 'pass' | 'fail';
+      issues: Array<{ severity: string; description: string }>;
+      overallScore: number;
+      summary: string;
+    }>({ prompt });
+
+    return {
+      status: result.data.status,
+      issues: result.data.issues,
+      overallScore: result.data.overallScore,
+      summary: result.data.summary,
+      usage: result.usage,
+    };
   }
 
   async #extractMemory(
@@ -1065,7 +1100,9 @@ ${content.substring(0, 3000)}
     if (!Array.isArray(value)) {
       return [];
     }
-    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    return value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0
+    );
   }
 
   #normalizeChapterArray(value: unknown, fallbackChapter: number): number[] {
@@ -1082,7 +1119,10 @@ ${content.substring(0, 3000)}
     return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
   }
 
-  #findChapterEntry(chapters: ChapterIndexEntry[], chapterNumber: number): ChapterIndexEntry | undefined {
+  #findChapterEntry(
+    chapters: ChapterIndexEntry[],
+    chapterNumber: number
+  ): ChapterIndexEntry | undefined {
     return chapters.find((chapter) => {
       const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
       return chapter.number === chapterNumber || legacyChapter.chapterNumber === chapterNumber;

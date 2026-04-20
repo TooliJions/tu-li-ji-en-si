@@ -1,4 +1,4 @@
-import { LLMProvider, LLMConfig, LLMRequest, LLMResponse } from './provider';
+import { LLMProvider, LLMConfig, LLMRequest, LLMResponse, LLMResponseWithJSON } from './provider';
 import { OpenAICompatibleProvider } from './provider';
 
 // ─── Routing Config ────────────────────────────────────────────
@@ -78,7 +78,7 @@ export class RoutedLLMProvider extends LLMProvider {
    */
   resolveProvider(
     agentName?: string
-  ): { provider: OpenAICompatibleProvider; model: string } | null {
+  ): { provider: OpenAICompatibleProvider; model: string; providerName: string } | null {
     // Find agent-specific route
     const route = this.routing.agentRouting.find(
       (r) => r.agent.toLowerCase() === (agentName ?? '').toLowerCase()
@@ -90,7 +90,7 @@ export class RoutedLLMProvider extends LLMProvider {
     const provider = this.providers.get(targetProvider);
 
     if (provider && !this.isInCooldown(targetProvider)) {
-      return { provider, model };
+      return { provider, model, providerName: targetProvider };
     }
 
     // Fallback: find any available provider sorted by reputation
@@ -136,14 +136,19 @@ export class RoutedLLMProvider extends LLMProvider {
     try {
       const effectiveProvider = this.createProviderForModel(provider, model);
       const result = await effectiveProvider.generate(requestWithOverrides);
-      this.recordSuccess(resolved.provider.constructor.name);
+      this.recordSuccess(resolved.providerName);
       return result;
     } catch (error) {
-      this.recordFailure(resolved.provider.constructor.name);
-      // Try fallback
-      const fallback = this.findFallbackProvider(resolved.provider.constructor.name);
+      this.recordFailure(resolved.providerName);
+      const fallback = this.findFallbackProvider(resolved.providerName);
       if (fallback) {
-        return fallback.provider.generate(requestWithOverrides);
+        try {
+          const result = await fallback.provider.generate(requestWithOverrides);
+          this.recordSuccess(fallback.providerName);
+          return result;
+        } catch {
+          this.recordFailure(fallback.providerName);
+        }
       }
       throw error;
     }
@@ -167,13 +172,55 @@ export class RoutedLLMProvider extends LLMProvider {
     try {
       const effectiveProvider = this.createProviderForModel(provider, model);
       const result = await effectiveProvider.generateJSON<T>(requestWithOverrides);
-      this.recordSuccess(resolved.provider.constructor.name);
+      this.recordSuccess(resolved.providerName);
       return result;
     } catch (error) {
-      this.recordFailure(resolved.provider.constructor.name);
-      const fallback = this.findFallbackProvider(resolved.provider.constructor.name);
+      this.recordFailure(resolved.providerName);
+      const fallback = this.findFallbackProvider(resolved.providerName);
       if (fallback) {
-        return fallback.provider.generateJSON<T>(requestWithOverrides);
+        try {
+          const result = await fallback.provider.generateJSON<T>(requestWithOverrides);
+          this.recordSuccess(fallback.providerName);
+          return result;
+        } catch {
+          this.recordFailure(fallback.providerName);
+        }
+      }
+      throw error;
+    }
+  }
+
+  async generateJSONWithMeta<T>(request: LLMRequest): Promise<LLMResponseWithJSON<T>> {
+    const resolved = this.resolveProvider(request.agentName);
+    if (!resolved) {
+      throw new Error('No available LLM provider — all providers are in cooldown');
+    }
+
+    const { provider, model } = resolved;
+    const agentConfig = this.getAgentConfig(request.agentName);
+
+    const requestWithOverrides: LLMRequest = {
+      ...request,
+      temperature: request.temperature ?? agentConfig.temperature ?? 0.2,
+      maxTokens: request.maxTokens ?? agentConfig.maxTokens,
+    };
+
+    try {
+      const effectiveProvider = this.createProviderForModel(provider, model);
+      const result = await effectiveProvider.generateJSONWithMeta<T>(requestWithOverrides);
+      this.recordSuccess(resolved.providerName);
+      return result;
+    } catch (error) {
+      this.recordFailure(resolved.providerName);
+      const fallback = this.findFallbackProvider(resolved.providerName);
+      if (fallback) {
+        const fallbackConfig = this.routing.providers.find((e) => e.name === fallback.providerName);
+        if (fallbackConfig?.config) {
+          const fallbackProvider = new OpenAICompatibleProvider(fallbackConfig.config);
+          const result = await fallbackProvider.generateJSONWithMeta<T>(requestWithOverrides);
+          this.recordSuccess(fallback.providerName);
+          return result;
+        }
       }
       throw error;
     }
@@ -221,7 +268,7 @@ export class RoutedLLMProvider extends LLMProvider {
 
   private findFallbackProvider(
     exclude?: string
-  ): { provider: OpenAICompatibleProvider; model: string } | null {
+  ): { provider: OpenAICompatibleProvider; model: string; providerName: string } | null {
     const available = this.routing.providers
       .filter(
         (e) => e.name !== exclude && e.status !== 'disconnected' && !this.isInCooldown(e.name)
@@ -238,6 +285,7 @@ export class RoutedLLMProvider extends LLMProvider {
     return {
       provider: this.providers.get(chosen.name)!,
       model: chosen.config.model,
+      providerName: chosen.name,
     };
   }
 

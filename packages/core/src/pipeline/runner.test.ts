@@ -49,13 +49,16 @@ import * as fs from 'fs';
 function createMockProvider(): LLMProvider & {
   generate: ReturnType<typeof vi.fn>;
   generateJSON: ReturnType<typeof vi.fn>;
+  generateJSONWithMeta: ReturnType<typeof vi.fn>;
 } {
   return {
     generate: vi.fn(),
     generateJSON: vi.fn(),
+    generateJSONWithMeta: vi.fn(),
   } as unknown as LLMProvider & {
     generate: ReturnType<typeof vi.fn>;
     generateJSON: ReturnType<typeof vi.fn>;
+    generateJSONWithMeta: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -490,11 +493,15 @@ describe('PipelineRunner', () => {
         model: 'test-model',
       });
 
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 85,
-        status: 'pass',
-        summary: '质量良好',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 85,
+          status: 'pass',
+          summary: '质量良好',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test-model',
       });
 
       const result = await runner.writeNextChapter({
@@ -533,22 +540,30 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [{ severity: 'blocking', description: '问题' }],
-        overallScore: 40,
-        status: 'fail',
-        summary: '失败',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [{ severity: 'blocking', description: '问题' }],
+          overallScore: 40,
+          status: 'fail',
+          summary: '失败',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
       mockProvider.generate.mockResolvedValueOnce({
         text: '修订稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 80,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 80,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
 
       const result = await runner.writeNextChapter({
@@ -587,11 +602,15 @@ describe('PipelineRunner', () => {
       });
 
       for (let i = 0; i < 3; i++) {
-        mockProvider.generateJSON.mockResolvedValueOnce({
-          issues: [{ severity: 'blocking', description: `问题 ${i}` }],
-          overallScore: 30 + i * 5,
-          status: 'fail',
-          summary: '失败',
+        mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+          data: {
+            issues: [{ severity: 'blocking', description: `问题 ${i}` }],
+            overallScore: 30 + i * 5,
+            status: 'fail',
+            summary: '失败',
+          },
+          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+          model: 'test',
         });
         mockProvider.generate.mockResolvedValueOnce({
           text: `修订稿 ${i}`,
@@ -654,11 +673,15 @@ describe('PipelineRunner', () => {
 
       // 3 audit failures (max retries + 1) — all fail
       for (let i = 0; i < 3; i++) {
-        mockProvider.generateJSON.mockResolvedValueOnce({
-          issues: [{ severity: 'blocking', description: `问题 ${i}` }],
-          overallScore: 30,
-          status: 'fail',
-          summary: '失败',
+        mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+          data: {
+            issues: [{ severity: 'blocking', description: `问题 ${i}` }],
+            overallScore: 30,
+            status: 'fail',
+            summary: '失败',
+          },
+          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+          model: 'test',
         });
         mockProvider.generate.mockResolvedValueOnce({
           text: `修订稿 ${i}`,
@@ -703,11 +726,15 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 80,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 80,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
       // Memory extraction throws
       mockProvider.generateJSON.mockRejectedValueOnce(new Error('memory extract failed'));
@@ -748,16 +775,18 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 85,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 85,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
       mockProvider.generateJSON.mockResolvedValueOnce({
-        facts: [
-          { content: '林风获得黑色玉佩', category: 'plot', confidence: 'high' },
-        ],
+        facts: [{ content: '林风获得黑色玉佩', category: 'plot', confidence: 'high' }],
         newHooks: [
           {
             id: 'hook-black-jade',
@@ -833,11 +862,15 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 80,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 80,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
       mockProvider.generateJSON.mockResolvedValueOnce({
         facts: [],
@@ -941,11 +974,15 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 300, completionTokens: 200, totalTokens: 500 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 85,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 85,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
 
       const result = await runnerWithSpy.writeNextChapter({
@@ -964,13 +1001,9 @@ describe('PipelineRunner', () => {
       expect(channels).toContain('composer');
 
       const writerCall = calls.find((call) => call[2] === 'writer');
-      expect(writerCall?.[3]).toEqual(
-        expect.objectContaining({ totalTokens: 900 })
-      );
+      expect(writerCall?.[3]).toEqual(expect.objectContaining({ totalTokens: 900 }));
       const composerCall = calls.find((call) => call[2] === 'composer');
-      expect(composerCall?.[3]).toEqual(
-        expect.objectContaining({ totalTokens: 500 })
-      );
+      expect(composerCall?.[3]).toEqual(expect.objectContaining({ totalTokens: 500 }));
     });
 
     it('records reviser channel telemetry when revision loop runs', async () => {
@@ -1011,22 +1044,30 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [{ severity: 'blocking', description: '需要修订' }],
-        overallScore: 40,
-        status: 'fail',
-        summary: '需修订',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [{ severity: 'blocking', description: '需要修订' }],
+          overallScore: 40,
+          status: 'fail',
+          summary: '需修订',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
       mockProvider.generate.mockResolvedValueOnce({
         text: '修订稿',
         usage: { promptTokens: 120, completionTokens: 80, totalTokens: 200 },
         model: 'test',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        issues: [],
-        overallScore: 80,
-        status: 'pass',
-        summary: '通过',
+      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
+        data: {
+          issues: [],
+          overallScore: 80,
+          status: 'pass',
+          summary: '通过',
+        },
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test',
       });
 
       const result = await runnerWithSpy.writeNextChapter({
@@ -1042,9 +1083,7 @@ describe('PipelineRunner', () => {
       const channels = recordFn.mock.calls.map((call) => call[2] as string);
       expect(channels).toContain('reviser');
       const reviserCall = recordFn.mock.calls.find((call) => call[2] === 'reviser');
-      expect(reviserCall?.[3]).toEqual(
-        expect.objectContaining({ totalTokens: 200 })
-      );
+      expect(reviserCall?.[3]).toEqual(expect.objectContaining({ totalTokens: 200 }));
     });
 
     it('records writer telemetry on writeDraft', async () => {
@@ -1078,9 +1117,7 @@ describe('PipelineRunner', () => {
       const writerCall = recordFn.mock.calls.find((call) => call[2] === 'writer');
       expect(writerCall).toBeDefined();
       expect(writerCall?.[1]).toBe(7);
-      expect(writerCall?.[3]).toEqual(
-        expect.objectContaining({ totalTokens: 150 })
-      );
+      expect(writerCall?.[3]).toEqual(expect.objectContaining({ totalTokens: 150 }));
     });
 
     it('returns error when composeChapter throws unexpected exception', async () => {
@@ -1185,7 +1222,9 @@ describe('PipelineRunner', () => {
       });
 
       const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
-      const indexWrite = writeCalls.find((call: unknown[]) => String(call[0]).includes('index.json'));
+      const indexWrite = writeCalls.find((call: unknown[]) =>
+        String(call[0]).includes('index.json')
+      );
       expect(indexWrite).toBeDefined();
 
       const payload = JSON.parse(String(indexWrite![1])) as {

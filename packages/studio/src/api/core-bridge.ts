@@ -12,6 +12,7 @@ import {
   RoutedLLMProvider,
   type LLMRequest,
   type LLMResponse,
+  type LLMResponseWithJSON,
   type Manifest,
   type DaemonScheduler,
 } from '@cybernovelist/core';
@@ -98,6 +99,16 @@ class DeterministicProvider extends LLMProvider {
 
   async generateJSON<T>(request: LLMRequest): Promise<T> {
     return this.#buildJsonResponse(request.prompt) as T;
+  }
+
+  async generateJSONWithMeta<T>(request: LLMRequest): Promise<LLMResponseWithJSON<T>> {
+    const data = this.#buildJsonResponse(request.prompt) as T;
+    const text = JSON.stringify(data);
+    return {
+      data,
+      usage: estimateUsage(request.prompt, text),
+      model: this.config.model,
+    };
   }
 
   #buildTextResponse(prompt: string): string {
