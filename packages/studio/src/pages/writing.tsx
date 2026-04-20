@@ -535,16 +535,6 @@ export default function Writing() {
           <span className="text-foreground font-medium">写作工作台</span>
         </div>
         <div className="flex items-center gap-2">
-          {flowContent && (
-            <button
-              onClick={() => setFlowMode(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border hover:bg-accent"
-              title="进入心流模式"
-            >
-              <Zap size={14} />
-              心流模式
-            </button>
-          )}
           <Link
             to={`/book/${bookId}`}
             className="text-sm text-muted-foreground hover:text-foreground"
@@ -555,7 +545,22 @@ export default function Writing() {
       </div>
 
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">写作工作台</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">
+            正文创作 | 第{Math.max(...chapters.map((ch) => ch.number), 0) + 1}章 ·{' '}
+            {chapters.find((ch) => ch.number === Math.max(...chapters.map((c) => c.number), 0) + 1)
+              ?.title || '未命名'}
+          </h1>
+          {flowContent && (
+            <button
+              onClick={() => setFlowMode(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border hover:bg-accent"
+              title="进入心流模式"
+            >
+              🌙 心流模式
+            </button>
+          )}
+        </div>
         <p className="text-muted-foreground">
           在这里您可以快速试写、管理草稿并启动完整的创作流水线。
         </p>
@@ -619,6 +624,9 @@ export default function Writing() {
               <Zap className="text-yellow-500" size={20} />
               <h2 className="text-lg font-semibold">快速试写</h2>
             </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              仅 1 次 LLM 调用，首段 &lt;15s 返回，不持久化
+            </p>
             <div className="flex flex-col sm:flex-row gap-4 items-end mb-6">
               <div className="w-full sm:w-24">
                 <label className="text-xs text-muted-foreground mb-1 block">目标字数</label>
@@ -683,6 +691,9 @@ export default function Writing() {
               <BookOpen className="text-primary" size={20} />
               <h2 className="text-lg font-semibold">完整创作</h2>
             </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              草稿 → 审计 → 修订 → 持久化（约 60-120s）
+            </p>
             <div className="space-y-4">
               {upgradeNotice && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
