@@ -2,7 +2,11 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './sidebar';
 import Header from './header';
 
-export default function AppLayout() {
+interface AppLayoutProps {
+  rightPanel?: React.ReactNode;
+}
+
+export default function AppLayout({ rightPanel }: AppLayoutProps) {
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -12,6 +16,15 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      {/* 右侧面板 - 320px 固定宽度 */}
+      {rightPanel && (
+        <aside
+          className="border-l bg-card overflow-auto"
+          style={{ width: 320, minWidth: 320, maxWidth: 320 }}
+        >
+          {rightPanel}
+        </aside>
+      )}
     </div>
   );
 }
