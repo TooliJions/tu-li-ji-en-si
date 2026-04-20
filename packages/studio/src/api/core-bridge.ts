@@ -9,6 +9,7 @@ import {
   StateManager,
   RuntimeStateStore,
   ProjectionRenderer,
+  RoutedLLMProvider,
   type LLMRequest,
   type LLMResponse,
   type Manifest,
@@ -253,17 +254,63 @@ export function getStudioRuntimeRootDir(): string {
 export function getStudioPipelineRunner(): PipelineRunner {
   ensureRuntimeRoot();
   if (!pipelineRunner) {
+    const provider = buildLLMProvider();
     pipelineRunner = new PipelineRunner({
       rootDir: runtimeRootDir,
-      provider: new DeterministicProvider(),
+      provider,
     });
   }
   return pipelineRunner;
 }
 
+function buildLLMProvider(): LLMProvider {
+  // Try loading config from disk (same path as config router uses)
+  const cfgPath = process.env.CONFIG_PATH
+    ? path.resolve(process.env.CONFIG_PATH)
+    : path.join(process.cwd(), '.cybernovelist-config.json');
+
+  try {
+    if (fs.existsSync(cfgPath)) {
+      const raw = fs.readFileSync(cfgPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed.providers && parsed.providers.length > 0) {
+        // Filter providers that have apiKey configured
+        const configuredProviders = parsed.providers.filter(
+          (p: { apiKey: string; baseUrl: string; name: string }) => p.apiKey && p.baseUrl
+        );
+
+        if (configuredProviders.length > 0) {
+          const routingConfig = {
+            defaultProvider: parsed.defaultProvider || configuredProviders[0].name,
+            defaultModel: parsed.defaultModel || configuredProviders[0].name,
+            agentRouting: parsed.agentRouting || [],
+            providers: configuredProviders.map(
+              (p: { name: string; apiKey: string; baseUrl: string }) => ({
+                name: p.name,
+                config: {
+                  apiKey: p.apiKey,
+                  baseURL: p.baseUrl,
+                  model: p.name,
+                },
+                status: 'connected' as const,
+              })
+            ),
+          };
+          return new RoutedLLMProvider(routingConfig);
+        }
+      }
+    }
+  } catch {
+    // fall through to deterministic provider
+  }
+
+  // Fallback: no API keys configured, use deterministic mock
+  return new DeterministicProvider();
+}
+
 export function getStudioLLMProvider(): LLMProvider {
   if (!llmProvider) {
-    llmProvider = new DeterministicProvider();
+    llmProvider = buildLLMProvider();
   }
   return llmProvider;
 }
