@@ -326,227 +326,215 @@ export default function ChapterReader() {
   }
 
   const pollution = getChapterPollutionState(chapter);
+  const prevChapter = chNum > 1 ? { number: chNum - 1 } : null;
+  const nextChapter = chapter.number < 1000 ? { number: chNum + 1 } : null;
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">{chapter.title || `第 ${chapter.number} 章`}</h1>
-          {chapter.status === 'draft' && (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
-              草稿
-            </span>
-          )}
-          {pollution.isPolluted && (
-            <PollutionBadge
-              level={pollution.level}
-              contaminationScore={pollution.contaminationScore}
-              source={pollution.source}
-            />
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={openRollbackDial}
-            className="p-1.5 rounded-md hover:bg-accent"
-            title="回滚到快照"
-          >
-            <RotateCcw size={16} />
-          </button>
-          <button
-            onClick={() => setEditMode(!editMode)}
-            className="p-1.5 rounded-md hover:bg-accent"
-            title="编辑"
-          >
-            {editMode ? <X size={16} /> : <Pencil size={16} />}
-          </button>
-          <button
-            onClick={() => {
-              setShowAudit(!showAudit);
-              if (!showAudit && !auditReport) handleLoadAudit();
-            }}
-            className="p-1.5 rounded-md hover:bg-accent"
-            title="审计报告"
-          >
-            <FileSearch size={16} />
-          </button>
-          <button
-            onClick={() => setFlowMode(true)}
-            className="p-1.5 rounded-md hover:bg-accent"
-            title="心流模式"
-          >
-            <Zap size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Metadata */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <span>{chapter.wordCount.toLocaleString()} 字</span>
-        <span>更新于 {new Date(chapter.updatedAt).toLocaleString('zh-CN')}</span>
-      </div>
-
-      {/* Edit controls */}
-      {editMode && (
-        <div className="flex gap-2">
-          <button
-            onClick={handleSave}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
-            title="保存"
-          >
-            <Check size={14} />
-            保存
-          </button>
-          <button
-            onClick={() => {
-              setEditMode(false);
-              setEditContent(chapter.content);
-            }}
-            className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
-            title="取消"
-          >
-            <X size={14} />
-            取消
-          </button>
-        </div>
-      )}
-
-      {/* Pollution warning banner */}
-      {pollution.isPolluted && (
-        <div
-          className="rounded-lg border border-orange-300 bg-orange-50 p-4"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
-          }}
+      {/* Top navigation */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          disabled={!prevChapter}
+          onClick={() =>
+            prevChapter && (window.location.href = `/book/${bookId}/chapter/${prevChapter.number}`)
+          }
+          className={`inline-flex items-center gap-1 text-sm ${prevChapter ? 'text-muted-foreground hover:text-foreground' : 'text-gray-300 cursor-not-allowed'}`}
         >
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="text-orange-600 mt-0.5" />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <PollutionBadge
-                  level={pollution.level}
-                  contaminationScore={pollution.contaminationScore}
-                  source={pollution.source}
-                />
+          ◀ 上一章
+        </button>
+        <h1 className="text-lg font-semibold">
+          第{chapter.number}章 · {chapter.title}
+        </h1>
+        <button
+          disabled={!nextChapter}
+          onClick={() =>
+            nextChapter && (window.location.href = `/book/${bookId}/chapter/${nextChapter.number}`)
+          }
+          className={`inline-flex items-center gap-1 text-sm ${nextChapter ? 'text-muted-foreground hover:text-foreground' : 'text-gray-300 cursor-not-allowed'}`}
+        >
+          下一章 ▶
+        </button>
+      </div>
+
+      {/* Two-column layout */}
+      <div className="flex gap-4">
+        {/* Left sidebar */}
+        <aside className="w-64 border-r pr-4 space-y-4 flex-shrink-0">
+          <h2 className="font-semibold">第{chapter.number}章</h2>
+          <div className="text-sm text-gray-500">字数：{chapter.wordCount.toLocaleString()}</div>
+          <div className="text-sm text-gray-500">状态：{chapter.status}</div>
+          {chapter.qualityScore !== null && (
+            <div className="text-sm text-gray-500">质量分：{chapter.qualityScore}</div>
+          )}
+          <div className="text-sm text-gray-500">
+            更新于 {new Date(chapter.updatedAt).toLocaleString('zh-CN')}
+          </div>
+        </aside>
+
+        {/* Right content */}
+        <div className="flex-1 min-w-0">
+          {/* Edit controls */}
+          {editMode && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
+                title="保存"
+              >
+                <Check size={14} />
+                保存
+              </button>
+              <button
+                onClick={() => {
+                  setEditMode(false);
+                  setEditContent(chapter.content);
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="取消"
+              >
+                <X size={14} />
+                取消
+              </button>
+            </div>
+          )}
+
+          {/* Pollution warning banner */}
+          {pollution.isPolluted && (
+            <div
+              className="rounded-lg border border-orange-300 bg-orange-50 p-4"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-orange-600 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <PollutionBadge
+                      level={pollution.level}
+                      contaminationScore={pollution.contaminationScore}
+                      source={pollution.source}
+                    />
+                  </div>
+                  <p className="text-sm font-medium text-orange-800">污染隔离已启用</p>
+                  <p className="text-sm text-orange-700 mt-1">{pollution.message}</p>
+                  <div className="mt-3">
+                    <button
+                      onClick={openRollbackDial}
+                      className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white/80 px-3 py-1.5 text-sm text-orange-800 hover:bg-white"
+                    >
+                      <RotateCcw size={14} />
+                      回滚到此
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm font-medium text-orange-800">污染隔离已启用</p>
-              <p className="text-sm text-orange-700 mt-1">{pollution.message}</p>
-              <div className="mt-3">
-                <button
-                  onClick={openRollbackDial}
-                  className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white/80 px-3 py-1.5 text-sm text-orange-800 hover:bg-white"
-                >
-                  <RotateCcw size={14} />
-                  回滚到此
+            </div>
+          )}
+
+          {/* Content */}
+          <div className="rounded-lg border bg-card p-6">
+            {editMode ? (
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full min-h-[400px] p-4 font-mono text-sm leading-relaxed bg-transparent border-0 focus:outline-none resize-y"
+              />
+            ) : (
+              <div className="prose prose-sm max-w-none">
+                {chapter.content.split('\n').map((line, i) => (
+                  <p key={i} className="text-base leading-relaxed mb-2 text-foreground">
+                    {line || '\u00A0'}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Audit Report Panel */}
+          {showAudit && (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">审计报告</h2>
+                <button onClick={handleRunAudit} className="text-sm text-primary hover:underline">
+                  运行审计
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="rounded-lg border bg-card p-6">
-        {editMode ? (
-          <textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            className="w-full min-h-[400px] p-4 font-mono text-sm leading-relaxed bg-transparent border-0 focus:outline-none resize-y"
-          />
-        ) : (
-          <div className="prose prose-sm max-w-none">
-            {chapter.content.split('\n').map((line, i) => (
-              <p key={i} className="text-base leading-relaxed mb-2 text-foreground">
-                {line || '\u00A0'}
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Audit Report Panel */}
-      {showAudit && (
-        <div className="rounded-lg border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">审计报告</h2>
-            <button onClick={handleRunAudit} className="text-sm text-primary hover:underline">
-              运行审计
-            </button>
-          </div>
-          {auditReport ? (
-            <div className="space-y-4">
-              {/* Overall status */}
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs ${
-                    auditReport.overallStatus === 'passed'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  {auditReport.overallStatus === 'passed' ? '通过' : '需改进'}
-                </span>
-              </div>
-
-              {/* Tier summaries */}
-              <div className="grid grid-cols-3 gap-4">
-                <TierSummary label="阻断级" data={auditReport.tiers.blocker} color="red" />
-                <TierSummary label="警告级" data={auditReport.tiers.warning} color="amber" />
-                <TierSummary label="建议级" data={auditReport.tiers.suggestion} color="green" />
-              </div>
-
-              {/* Failed items */}
-              {auditReport.tiers.warning.failed > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-amber-700">警告项</h3>
-                  {auditReport.tiers.warning.items.map((item, i) => (
-                    <div
-                      key={i}
-                      className="text-sm p-3 rounded bg-amber-50 border border-amber-200"
+              {auditReport ? (
+                <div className="space-y-4">
+                  {/* Overall status */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs ${
+                        auditReport.overallStatus === 'passed'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}
                     >
-                      <span className="font-medium">{item.rule}</span>
-                      <p className="text-muted-foreground mt-1">{item.message}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      {auditReport.overallStatus === 'passed' ? '通过' : '需改进'}
+                    </span>
+                  </div>
 
-              {/* Radar scores */}
-              {auditReport.radarScores.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center border-t pt-6 mt-6">
-                  <div>
-                    <h3 className="text-sm font-medium mb-4">质量雷达图</h3>
-                    <RadarChart data={auditReport.radarScores} size={240} className="mx-auto" />
+                  {/* Tier summaries */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <TierSummary label="阻断级" data={auditReport.tiers.blocker} color="red" />
+                    <TierSummary label="警告级" data={auditReport.tiers.warning} color="amber" />
+                    <TierSummary label="建议级" data={auditReport.tiers.suggestion} color="green" />
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium mb-4">详细维度评分</h3>
-                    {auditReport.radarScores.map((radar) => (
-                      <div key={radar.dimension} className="flex items-center gap-3">
-                        <span className="text-sm w-20 truncate" title={radar.label}>
-                          {radar.label}
-                        </span>
-                        <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${radar.score * 100}%` }}
-                          />
+
+                  {/* Failed items */}
+                  {auditReport.tiers.warning.failed > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-amber-700">警告项</h3>
+                      {auditReport.tiers.warning.items.map((item, i) => (
+                        <div
+                          key={i}
+                          className="text-sm p-3 rounded bg-amber-50 border border-amber-200"
+                        >
+                          <span className="font-medium">{item.rule}</span>
+                          <p className="text-muted-foreground mt-1">{item.message}</p>
                         </div>
-                        <span className="text-sm text-muted-foreground w-12 text-right">
-                          {(radar.score * 100).toFixed(0)}
-                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Radar scores */}
+                  {auditReport.radarScores.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center border-t pt-6 mt-6">
+                      <div>
+                        <h3 className="text-sm font-medium mb-4">质量雷达图</h3>
+                        <RadarChart data={auditReport.radarScores} size={240} className="mx-auto" />
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium mb-4">详细维度评分</h3>
+                        {auditReport.radarScores.map((radar) => (
+                          <div key={radar.dimension} className="flex items-center gap-3">
+                            <span className="text-sm w-20 truncate" title={radar.label}>
+                              {radar.label}
+                            </span>
+                            <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full transition-all"
+                                style={{ width: `${radar.score * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-muted-foreground w-12 text-right">
+                              {(radar.score * 100).toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">暂无审计报告</p>
               )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">暂无审计报告</p>
           )}
         </div>
-      )}
+      </div>
 
       {/* Chapter Navigation */}
       <div className="flex items-center justify-between">
