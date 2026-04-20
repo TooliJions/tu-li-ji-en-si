@@ -1,5 +1,7 @@
 // ─── Types ──────────────────────────────────────────────────────
 
+import { evalCondition } from './safe-condition-eval';
+
 export interface CompiledRule {
   id: string;
   type: 'hook' | 'fact' | 'character' | 'world-rule' | 'custom';
@@ -171,14 +173,7 @@ export class RuleStackCompiler {
   // ── Private helpers ───────────────────────────────────────────
 
   #buildMatcher(condition: string): (item: Record<string, unknown>) => boolean {
-    return (item: Record<string, unknown>) => {
-      try {
-        const fn = new Function('item', `return (${condition});`);
-        return !!fn(item);
-      } catch {
-        return false;
-      }
-    };
+    return (item: Record<string, unknown>) => evalCondition(condition, item);
   }
 
   #errorResult(input: RuleStackInput, error: string): RuleStackResult {

@@ -20,6 +20,15 @@ export class StateManager {
    * 不传 subPath 时返回目录，传了则拼接。
    */
   getBookPath(bookId: string, ...subPath: string[]): string {
+    // 防止路径穿越：拒绝包含目录分隔符或父目录引用的 bookId
+    if (
+      /[\\/]/.test(bookId) ||
+      bookId === '..' ||
+      bookId.startsWith('..\\') ||
+      bookId.startsWith('../')
+    ) {
+      throw new Error(`非法的 bookId: ${bookId}`);
+    }
     const base = path.join(this.rootDir, bookId);
     if (subPath.length === 0) return base;
     return path.join(base, ...subPath);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -117,6 +117,7 @@ interface AuditReport {
 
 export default function ChapterReader() {
   const { bookId, chapterNumber } = useParams<{ bookId: string; chapterNumber: string }>();
+  const navigate = useNavigate();
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -335,21 +336,18 @@ export default function ChapterReader() {
       <div className="flex items-center justify-between mb-4">
         <button
           disabled={!prevChapter}
-          onClick={() =>
-            prevChapter && (window.location.href = `/book/${bookId}/chapter/${prevChapter.number}`)
-          }
+          onClick={() => prevChapter && navigate(`/book/${bookId}/chapter/${prevChapter.number}`)}
           className={`inline-flex items-center gap-1 text-sm ${prevChapter ? 'text-muted-foreground hover:text-foreground' : 'text-gray-300 cursor-not-allowed'}`}
         >
           ◀ 上一章
         </button>
         <h1 className="text-lg font-semibold">
-          第{chapter.number}章 · {chapter.title}
+          <span className="text-muted-foreground font-normal">第{chapter.number}章 · </span>
+          {chapter.title}
         </h1>
         <button
           disabled={!nextChapter}
-          onClick={() =>
-            nextChapter && (window.location.href = `/book/${bookId}/chapter/${nextChapter.number}`)
-          }
+          onClick={() => nextChapter && navigate(`/book/${bookId}/chapter/${nextChapter.number}`)}
           className={`inline-flex items-center gap-1 text-sm ${nextChapter ? 'text-muted-foreground hover:text-foreground' : 'text-gray-300 cursor-not-allowed'}`}
         >
           下一章 ▶
@@ -361,8 +359,15 @@ export default function ChapterReader() {
         {/* Left sidebar */}
         <aside className="w-64 border-r pr-4 space-y-4 flex-shrink-0">
           <h2 className="font-semibold">第{chapter.number}章</h2>
-          <div className="text-sm text-gray-500">字数：{chapter.wordCount.toLocaleString()}</div>
-          <div className="text-sm text-gray-500">状态：{chapter.status}</div>
+          <div className="text-sm text-gray-500">字数：{chapter.wordCount.toLocaleString()} 字</div>
+          <div className="text-sm text-gray-500">
+            状态：
+            {chapter.status === 'draft'
+              ? '草稿'
+              : chapter.status === 'published'
+                ? '完成'
+                : chapter.status}
+          </div>
           {chapter.qualityScore !== null && (
             <div className="text-sm text-gray-500">质量分：{chapter.qualityScore}</div>
           )}
@@ -373,9 +378,42 @@ export default function ChapterReader() {
 
         {/* Right content */}
         <div className="flex-1 min-w-0">
+          {/* Action toolbar */}
+          {!editMode && (
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setEditMode(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="编辑"
+              >
+                <Pencil size={14} />
+                编辑
+              </button>
+              <button
+                onClick={() => {
+                  setShowAudit(!showAudit);
+                  if (!showAudit && !auditReport) handleLoadAudit();
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="审计报告"
+              >
+                <FileSearch size={14} />
+                审计报告
+              </button>
+              <button
+                onClick={() => setFlowMode(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="心流模式"
+              >
+                <Zap size={14} />
+                心流模式
+              </button>
+            </div>
+          )}
+
           {/* Edit controls */}
           {editMode && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-3">
               <button
                 onClick={handleSave}
                 className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
@@ -416,6 +454,9 @@ export default function ChapterReader() {
                       contaminationScore={pollution.contaminationScore}
                       source={pollution.source}
                     />
+                    {chapter.warningCode === 'accept_with_warnings' && (
+                      <span className="text-xs text-amber-700 font-medium">⚠ 强制通过</span>
+                    )}
                   </div>
                   <p className="text-sm font-medium text-orange-800">污染隔离已启用</p>
                   <p className="text-sm text-orange-700 mt-1">{pollution.message}</p>

@@ -1,5 +1,6 @@
 import type { AgentResult } from '../agents/base';
 import type { Manifest, Hook, Fact, Character, WorldRule } from '../models/state';
+import { evalCondition } from './safe-condition-eval';
 
 // ─── Config ──────────────────────────────────────────────────────
 
@@ -217,12 +218,6 @@ export class ContextGovernor {
   }
 
   #evalCondition(condition: string, item: Record<string, unknown>): boolean {
-    try {
-      // 简单条件求值：支持 ===、includes 等基础操作
-      const fn = new Function('item', `return (${condition});`);
-      return !!fn(item);
-    } catch {
-      return false;
-    }
+    return evalCondition(condition, item);
   }
 }
