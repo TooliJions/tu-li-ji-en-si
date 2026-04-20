@@ -65,30 +65,52 @@ describe('Config Route', () => {
   });
 
   describe('POST /api/config/test-provider', () => {
-    it('tests provider connection', async () => {
+    it('returns error when apiKey is missing', async () => {
       const res = await app.request('/api/config/test-provider', {
         method: 'POST',
-        body: JSON.stringify({ provider: 'DashScope' }),
+        body: JSON.stringify({ name: 'DashScope', baseUrl: 'https://example.com' }),
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
       const data = (await res.json()) as {
-        data: { provider: string; connected: boolean; latencyMs: number };
+        data: { success: boolean; error: string; provider: string };
       };
+      expect(data.data.success).toBe(false);
+      expect(data.data.error).toContain('apiKey');
       expect(data.data.provider).toBe('DashScope');
-      expect(data.data.connected).toBe(true);
-      expect(typeof data.data.latencyMs).toBe('number');
     });
 
-    it('uses default provider name when not specified', async () => {
+    it('returns error when baseUrl is missing', async () => {
       const res = await app.request('/api/config/test-provider', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ name: 'DashScope', apiKey: 'sk-test' }),
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { data: { provider: string } };
-      expect(data.data.provider).toBe('Unknown');
+      const data = (await res.json()) as {
+        data: { success: boolean; error: string };
+      };
+      expect(data.data.success).toBe(false);
+      expect(data.data.error).toContain('baseUrl');
+    });
+
+    it('returns error for invalid credentials', async () => {
+      const res = await app.request('/api/config/test-provider', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'BadProvider',
+          apiKey: 'invalid',
+          baseUrl: 'https://invalid.example.com',
+          model: 'qwen3.6-plus',
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: { success: boolean; latencyMs: number };
+      };
+      expect(data.data.success).toBe(false);
+      expect(typeof data.data.latencyMs).toBe('number');
     });
   });
 });

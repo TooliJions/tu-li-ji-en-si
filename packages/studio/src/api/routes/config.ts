@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import OpenAI from 'openai';
 
 interface ConfigState {
   defaultProvider: string;
@@ -36,13 +37,54 @@ export function createConfigRouter(): Hono {
   // POST /api/config/test-provider
   router.post('/test-provider', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    return c.json({
-      data: {
-        provider: body.provider || 'Unknown',
-        connected: true,
-        latencyMs: Math.floor(Math.random() * 500) + 100,
-      },
-    });
+    const { apiKey, baseUrl, model } = body;
+
+    if (!apiKey || !baseUrl) {
+      return c.json({
+        data: {
+          success: false,
+          error: '缺少 apiKey 或 baseUrl',
+          provider: body.name || body.provider || 'Unknown',
+        },
+      });
+    }
+
+    const testModel = model || 'qwen3.6-plus';
+    const startTime = Date.now();
+
+    try {
+      const client = new OpenAI({
+        apiKey,
+        baseURL: baseUrl,
+        timeout: 15000,
+      });
+
+      await client.chat.completions.create({
+        model: testModel,
+        messages: [{ role: 'user', content: 'Hi' }],
+        max_tokens: 5,
+      });
+
+      const latencyMs = Date.now() - startTime;
+      return c.json({
+        data: {
+          success: true,
+          latencyMs,
+          provider: body.name || body.provider || 'Unknown',
+        },
+      });
+    } catch (err: unknown) {
+      const latencyMs = Date.now() - startTime;
+      const message = err instanceof Error ? err.message : '连接失败';
+      return c.json({
+        data: {
+          success: false,
+          latencyMs,
+          error: message,
+          provider: body.name || body.provider || 'Unknown',
+        },
+      });
+    }
   });
 
   return router;
