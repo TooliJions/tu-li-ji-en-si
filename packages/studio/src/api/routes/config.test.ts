@@ -1,5 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Hono } from 'hono';
+
+const TEST_CONFIG_PATH = path.join(process.cwd(), '.cybernovelist-config.test.json');
+
+// Set config path before importing the router module
+process.env.CONFIG_PATH = TEST_CONFIG_PATH;
+
 import { createConfigRouter } from './config';
 
 function createTestApp() {
@@ -7,6 +15,15 @@ function createTestApp() {
   app.route('/api/config', createConfigRouter());
   return app;
 }
+
+// Clean up test config after all tests
+afterAll(() => {
+  try {
+    fs.rmSync(TEST_CONFIG_PATH, { force: true });
+  } catch {
+    // ignore
+  }
+});
 
 describe('Config Route', () => {
   let app: ReturnType<typeof createTestApp>;

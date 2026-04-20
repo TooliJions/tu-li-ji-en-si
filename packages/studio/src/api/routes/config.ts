@@ -1,14 +1,33 @@
 import { Hono } from 'hono';
+import fs from 'node:fs';
+import path from 'node:path';
 import OpenAI from 'openai';
+
+interface ProviderEntry {
+  name: string;
+  status: string;
+  apiKey: string;
+  baseUrl: string;
+}
+
+interface AgentRouteEntry {
+  agent: string;
+  model: string;
+  provider: string;
+  temperature: number;
+}
 
 interface ConfigState {
   defaultProvider: string;
   defaultModel: string;
-  agentRouting: Array<{ agent: string; model: string; provider: string; temperature: number }>;
-  providers: Array<{ name: string; status: string }>;
+  agentRouting: AgentRouteEntry[];
+  providers: ProviderEntry[];
+  notifications: { telegramToken: string; chatId: string };
 }
 
-let config: ConfigState = {
+const DEFAULT_CONFIG_PATH = '.cybernovelist-config.json';
+
+const defaultConfig: ConfigState = {
   defaultProvider: 'DashScope',
   defaultModel: 'qwen3.6-plus',
   agentRouting: [
@@ -16,12 +35,53 @@ let config: ConfigState = {
     { agent: 'Auditor', model: 'gpt-4o', provider: 'OpenAI', temperature: 0.2 },
   ],
   providers: [
-    { name: 'DashScope', status: 'connected' },
-    { name: 'OpenAI', status: 'connected' },
+    {
+      name: 'DashScope',
+      status: 'disconnected',
+      apiKey: '',
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    },
+    {
+      name: 'OpenAI',
+      status: 'disconnected',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+    },
+    {
+      name: 'Gemini',
+      status: 'disconnected',
+      apiKey: '',
+      baseUrl: 'https://generativelanguage.googleapis.com',
+    },
   ],
+  notifications: { telegramToken: '', chatId: '' },
 };
 
+function loadConfig(): ConfigState {
+  try {
+    const cfgPath = process.env.CONFIG_PATH
+      ? path.resolve(process.env.CONFIG_PATH)
+      : path.join(process.cwd(), DEFAULT_CONFIG_PATH);
+    if (fs.existsSync(cfgPath)) {
+      const raw = fs.readFileSync(cfgPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { ...defaultConfig, ...parsed };
+    }
+  } catch {
+    // use defaults
+  }
+  return { ...defaultConfig };
+}
+
+function saveConfig(cfg: ConfigState) {
+  const cfgPath = process.env.CONFIG_PATH
+    ? path.resolve(process.env.CONFIG_PATH)
+    : path.join(process.cwd(), DEFAULT_CONFIG_PATH);
+  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf-8');
+}
+
 export function createConfigRouter(): Hono {
+  let config = loadConfig();
   const router = new Hono();
 
   // GET /api/config
@@ -31,6 +91,7 @@ export function createConfigRouter(): Hono {
   router.put('/', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     config = { ...config, ...body };
+    saveConfig(config);
     return c.json({ data: config });
   });
 
