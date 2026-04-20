@@ -59,10 +59,8 @@ export default function ConfigView() {
 
   // Notification config
   const [notifications, setNotifications] = useState({
-    telegram: false,
-    feishu: false,
-    webhook: false,
-    webhookUrl: '',
+    telegramToken: '',
+    chatId: '',
   });
 
   useEffect(() => {
@@ -163,19 +161,19 @@ export default function ConfigView() {
         </Link>
       </div>
 
-      {/* Global Settings */}
+      {/* Global Model Config */}
       <div className="rounded-lg border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <Settings size={18} />
-          <h2 className="text-lg font-semibold">全局设置</h2>
+          <h2 className="text-lg font-semibold">全局模型配置</h2>
         </div>
-        <div className="flex flex-wrap gap-4 items-end">
+        <div className="space-y-3 max-w-2xl">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">默认 Provider</label>
             <select
               value={config.defaultProvider}
               onChange={(e) => handleDefaultProviderChange(e.target.value)}
-              className="px-3 py-2 rounded border bg-background text-sm"
+              className="w-full px-3 py-2 rounded border bg-background text-sm"
             >
               {config.providers.map((p) => (
                 <option key={p.name} value={p.name}>
@@ -184,30 +182,98 @@ export default function ConfigView() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">默认模型</label>
-            <select
-              value={config.defaultModel}
-              onChange={(e) => handleDefaultModelChange(e.target.value)}
-              aria-label="默认模型"
-              className="px-3 py-2 rounded border bg-background text-sm"
+          {/* Show selected provider details */}
+          {config.providers
+            .filter((p) => p.name === config.defaultProvider)
+            .map((p) => (
+              <div key={p.name} className="space-y-2">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">API Key</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={p.apiKey}
+                      readOnly
+                      className="flex-1 px-3 py-2 rounded border bg-background text-sm font-mono"
+                    />
+                    <button
+                      title="测试连接"
+                      onClick={() => handleTestProvider(p)}
+                      className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap"
+                    >
+                      测试连接
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">默认模型</label>
+                  <select
+                    value={config.defaultModel}
+                    onChange={(e) => handleDefaultModelChange(e.target.value)}
+                    aria-label="默认模型"
+                    className="w-full px-3 py-2 rounded border bg-background text-sm"
+                  >
+                    {config.providers
+                      .filter((pp) => pp.status === 'connected')
+                      .map((pp) => (
+                        <option key={pp.name} value={pp.name}>
+                          {pp.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Base URL</label>
+                  <input
+                    value={p.baseUrl}
+                    readOnly
+                    className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
+                  />
+                </div>
+              </div>
+            ))}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => handleSave(config)}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
             >
-              {config.providers
-                .filter((p) => p.status === 'connected')
-                .map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-            </select>
+              <Save size={14} />
+              保存配置
+            </button>
+            <button
+              onClick={() => {
+                if (!config) return;
+                setConfig({
+                  ...config,
+                  defaultProvider: 'DashScope',
+                  defaultModel: 'DashScope',
+                });
+              }}
+              className="px-4 py-2 border rounded text-sm hover:bg-accent"
+            >
+              重置为默认
+            </button>
           </div>
-          <button
-            onClick={() => handleSave(config)}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
-          >
-            <Save size={14} />
-            保存配置
-          </button>
+          {/* Test result for default provider */}
+          {testResult && (
+            <div
+              className={`text-xs px-3 py-1.5 rounded flex items-center gap-1 ${
+                testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}
+            >
+              {testResult.success ? (
+                <>
+                  <CheckCircle size={12} />
+                  连接成功 ({testResult.latencyMs}ms)
+                </>
+              ) : (
+                <>
+                  <XCircle size={12} />
+                  连接失败: {testResult.error}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -326,64 +392,39 @@ export default function ConfigView() {
           <Bell size={18} />
           <h2 className="text-lg font-semibold">通知配置</h2>
         </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-2 border-b last:border-0">
-            <div>
-              <p className="font-medium text-sm">Telegram</p>
-              <p className="text-xs text-muted-foreground">通过 Telegram Bot 推送流水线状态</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifications.telegram}
-                onChange={(e) => setNotifications({ ...notifications, telegram: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-            </label>
+        <div className="space-y-3 max-w-lg">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Telegram Bot Token</label>
+            <input
+              value={notifications.telegramToken}
+              onChange={(e) =>
+                setNotifications({ ...notifications, telegramToken: e.target.value })
+              }
+              placeholder="Bot Token"
+              className="w-full px-3 py-2 rounded border bg-background text-sm"
+            />
           </div>
-          <div className="flex items-center justify-between py-2 border-b last:border-0">
-            <div>
-              <p className="font-medium text-sm">飞书</p>
-              <p className="text-xs text-muted-foreground">通过飞书 Webhook 推送消息</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifications.feishu}
-                onChange={(e) => setNotifications({ ...notifications, feishu: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-            </label>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b last:border-0">
-            <div>
-              <p className="font-medium text-sm">自定义 Webhook</p>
-              <p className="text-xs text-muted-foreground">通用 HTTP Webhook 推送</p>
-            </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Chat ID</label>
             <div className="flex items-center gap-2">
-              {notifications.webhook && (
-                <input
-                  value={notifications.webhookUrl}
-                  onChange={(e) =>
-                    setNotifications({ ...notifications, webhookUrl: e.target.value })
-                  }
-                  placeholder="https://example.com/webhook"
-                  className="px-2 py-1 rounded border bg-background text-xs w-48"
-                />
-              )}
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifications.webhook}
-                  onChange={(e) =>
-                    setNotifications({ ...notifications, webhook: e.target.checked })
-                  }
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
+              <input
+                value={notifications.chatId}
+                onChange={(e) => setNotifications({ ...notifications, chatId: e.target.value })}
+                placeholder="Chat ID"
+                className="flex-1 px-3 py-2 rounded border bg-background text-sm"
+              />
+              <button
+                onClick={() => {
+                  console.log(
+                    'Testing Telegram push:',
+                    notifications.telegramToken,
+                    notifications.chatId
+                  );
+                }}
+                className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap"
+              >
+                测试推送
+              </button>
             </div>
           </div>
         </div>
@@ -393,7 +434,7 @@ export default function ConfigView() {
       <div className="rounded-lg border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <Zap size={18} />
-          <h2 className="text-lg font-semibold">备用 Provider（故障切换）</h2>
+          <h2 className="text-lg font-semibold">备用 Provider (故障切换)</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -401,7 +442,7 @@ export default function ConfigView() {
               <tr className="border-b">
                 <th className="text-left py-2 px-3 font-medium">Provider</th>
                 <th className="text-left py-2 px-3 font-medium">API Key</th>
-                <th className="text-left py-2 px-3 font-medium">Base URL</th>
+                <th className="text-left py-2 px-3 font-medium">模型</th>
                 <th className="text-left py-2 px-3 font-medium">状态</th>
               </tr>
             </thead>
@@ -409,12 +450,10 @@ export default function ConfigView() {
               {config.providers.map((p) => (
                 <tr key={p.name} className="border-b last:border-0">
                   <td className="py-2 px-3 font-medium">{p.name}</td>
-                  <td className="py-2 px-3 text-muted-foreground">
-                    {p.apiKey ? '•'.repeat(8) + p.apiKey.slice(-4) : 'N/A'}
+                  <td className="py-2 px-3 text-muted-foreground font-mono">
+                    {p.apiKey ? '•'.repeat(13) : 'N/A'}
                   </td>
-                  <td className="py-2 px-3 text-muted-foreground truncate max-w-[200px]">
-                    {p.baseUrl || '-'}
-                  </td>
+                  <td className="py-2 px-3 text-muted-foreground">{p.name}</td>
                   <td className="py-2 px-3">
                     <span
                       className={`px-2 py-0.5 rounded text-xs ${
@@ -423,7 +462,7 @@ export default function ConfigView() {
                           : 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {p.status === 'connected' ? '可用' : '不可用'}
+                      {p.status === 'connected' ? '● 在线' : '○ 离线'}
                     </span>
                   </td>
                 </tr>

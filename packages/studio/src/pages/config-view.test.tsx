@@ -290,7 +290,7 @@ describe('ConfigView Page', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/连接成功|320ms/)).toBeTruthy();
+      expect(screen.getAllByText(/连接成功.*320ms/).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -311,7 +311,7 @@ describe('ConfigView Page', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/连接失败|Invalid API key/)).toBeTruthy();
+      expect(screen.getAllByText(/连接失败.*Invalid API key/).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -322,9 +322,9 @@ describe('ConfigView Page', () => {
 
     await screen.findByText(/通知配置/, {}, { timeout: 3000 });
 
-    expect(screen.getByText('Telegram')).toBeTruthy();
-    expect(screen.getByText('飞书')).toBeTruthy();
-    expect(screen.getByText('自定义 Webhook')).toBeTruthy();
+    expect(screen.getByText('Telegram Bot Token')).toBeTruthy();
+    expect(screen.getByText('Chat ID')).toBeTruthy();
+    expect(screen.getByText('测试推送')).toBeTruthy();
   });
 
   it('显示备用Provider状态表格', async () => {
@@ -334,30 +334,32 @@ describe('ConfigView Page', () => {
 
     await screen.findByText(/备用 Provider/, {}, { timeout: 3000 });
 
-    expect(screen.getByText('Provider')).toBeTruthy();
-    expect(screen.getByText('API Key')).toBeTruthy();
-    expect(screen.getByText('Base URL')).toBeTruthy();
-    expect(screen.getByText('状态')).toBeTruthy();
+    expect(screen.getAllByText('Provider').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('API Key').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('模型').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('状态').length).toBeGreaterThanOrEqual(1);
     // Data rows
     expect(screen.getAllByText('DashScope').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('OpenAI').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('可以切换通知开关', async () => {
+  it('可以输入通知配置', async () => {
     vi.mocked(api.fetchConfig).mockResolvedValue(mockConfig);
 
     renderWithRouter();
 
     await screen.findByText(/通知配置/, {}, { timeout: 3000 });
 
-    // Checkboxes are visually hidden (sr-only), but still accessible
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes.length).toBeGreaterThanOrEqual(3);
+    const tokenInput = screen.getByPlaceholderText('Bot Token');
+    expect(tokenInput).toBeTruthy();
+
+    const chatIdInput = screen.getByPlaceholderText('Chat ID');
+    expect(chatIdInput).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(checkboxes[0]);
+      fireEvent.change(tokenInput, { target: { value: '123456:ABC-DEF' } });
     });
 
-    expect((checkboxes[0] as HTMLInputElement).checked).toBe(true);
+    expect((tokenInput as HTMLInputElement).value).toBe('123456:ABC-DEF');
   });
 });
