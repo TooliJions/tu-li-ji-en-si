@@ -6,15 +6,14 @@ import {
   GitMerge,
   Scissors,
   RotateCcw,
-  Eye,
   MoreHorizontal,
-  Sparkles,
-  Palette,
-  Heart,
-  History,
-  Trash2,
   Play,
   Stethoscope,
+  Trash2,
+  Palette,
+  Sparkles,
+  Heart,
+  Clock,
 } from 'lucide-react';
 import {
   fetchBook,
@@ -25,7 +24,6 @@ import {
   rollbackChapter,
   deleteChapter,
 } from '../lib/api';
-import PollutionBadge from '../components/pollution-badge';
 import TimeDial from '../components/time-dial';
 
 interface Book {
@@ -231,41 +229,16 @@ export default function BookDetail() {
     );
   }
 
-  const progress = Math.min((book.currentWords / book.targetWords) * 100, 100);
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{book.title}</h1>
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-medium ${
-            book.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-          }`}
-        >
-          {book.status === 'active' ? '创作中' : '已归档'}
-        </span>
-      </div>
-
-      {/* Book Info */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <InfoCard label="类型" value={book.genre} />
-        <InfoCard label="已写" value={`${book.currentWords.toLocaleString()} 字`} />
-        <InfoCard label="目标" value={`${book.targetWords.toLocaleString()} 字`} />
-        <InfoCard label="章节" value={`${book.chapterCount}/${book.targetChapterCount}`} />
-      </div>
-
-      {/* Progress */}
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex justify-between text-sm mb-2">
-          <span>写作进度</span>
-          <span className="font-medium">{progress.toFixed(1)}%</span>
-        </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all"
-            style={{ width: `${progress}%` }}
-          />
+      {/* Header - single line */}
+      <div className="mb-2">
+        <div className="text-xl font-semibold">
+          {book.title}
+          <span className="text-gray-400 font-normal text-base ml-2">
+            | {book.genre} | {book.chapterCount}/{book.targetChapterCount} 章 |{' '}
+            {book.currentWords.toLocaleString()} 字
+          </span>
         </div>
       </div>
 
@@ -318,7 +291,7 @@ export default function BookDetail() {
             to={`/book/${bookId}/prompts`}
             className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
           >
-            <History size={14} />
+            <Clock size={14} />
             提示词版本
           </Link>
           <Link
@@ -338,10 +311,10 @@ export default function BookDetail() {
         </div>
       </div>
 
-      {/* Chapter List */}
+      {/* Chapter List - Table format */}
       <div className="rounded-lg border bg-card">
         <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">章节列表 ({chapters.length} 章)</h2>
+          <h2 className="text-lg font-semibold">章节列表</h2>
         </div>
         {chapters.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
@@ -349,116 +322,136 @@ export default function BookDetail() {
             <p>还没有章节，开始创作后章节会出现在这里</p>
           </div>
         ) : (
-          <div className="divide-y">
-            {chapters.map((ch) => {
-              const pollution = getChapterPollutionState(ch);
-              return (
-                <div
-                  key={ch.number}
-                  className={`flex items-center justify-between p-4 hover:bg-accent/50 group ${
-                    pollution.isPolluted ? 'border-l-4 border-l-orange-500' : ''
-                  }`}
-                  style={
-                    pollution.isPolluted
-                      ? {
-                          backgroundImage:
-                            'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">
-                      {ch.number}
-                    </span>
-                    <div>
-                      <p className="font-medium">{ch.title || `第 ${ch.number} 章`}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {ch.wordCount.toLocaleString()} 字
-                        {ch.status === 'draft' && <span className="ml-2 text-amber-600">草稿</span>}
-                        {ch.auditStatus === 'passed' && (
-                          <span className="ml-2 text-green-600">已审计</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {pollution.isPolluted && (
-                      <PollutionBadge
-                        level={pollution.level}
-                        contaminationScore={pollution.contaminationScore}
-                        source={pollution.source}
-                      />
-                    )}
-                    <Link
-                      to={`/book/${bookId}/chapter/${ch.number}`}
-                      className="p-1.5 rounded-md hover:bg-accent"
-                      title="阅读"
-                    >
-                      <Eye size={16} />
-                    </Link>
-                    {/* Action menu */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setActionMenu(actionMenu === ch.number ? null : ch.number)}
-                        className="p-1.5 rounded-md hover:bg-accent"
-                        title="更多操作"
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b text-left text-sm text-gray-500">
+                <th className="py-2 px-3 text-center">章号</th>
+                <th className="py-2 px-3">标题</th>
+                <th className="py-2 px-3">状态</th>
+                <th className="py-2 px-3">字数</th>
+                <th className="py-2 px-3 text-center">质量分</th>
+                <th className="py-2 px-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chapters.map((ch) => {
+                const pollution = getChapterPollutionState(ch);
+                const statusText =
+                  ch.status === 'draft' ? '○ 草稿' : ch.status === 'published' ? '✓ 完成' : '-';
+                return (
+                  <tr
+                    key={ch.number}
+                    className={`border-b hover:bg-gray-50 ${
+                      pollution.isPolluted ? 'border-2 border-orange-400' : ''
+                    }`}
+                    style={
+                      pollution.isPolluted
+                        ? {
+                            backgroundImage:
+                              'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+                          }
+                        : undefined
+                    }
+                  >
+                    <td className="py-2 px-3 text-center">{ch.number}</td>
+                    <td className="py-2 px-3">
+                      <Link
+                        to={`/book/${bookId}/chapter/${ch.number}`}
+                        className="hover:text-blue-600"
                       >
-                        <MoreHorizontal size={16} />
-                      </button>
-                      {actionMenu === ch.number && (
-                        <div
-                          className="absolute right-0 top-8 w-48 rounded-md border bg-popover shadow-lg z-10 py-1"
-                          onClick={(e) => e.stopPropagation()}
+                        {ch.title || '(未创作)'}
+                      </Link>
+                      {pollution.isPolluted && (
+                        <span className="ml-2 text-[10px] text-orange-600 font-medium border border-orange-300 px-1 rounded">
+                          污染隔离
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-sm">{statusText}</td>
+                    <td className="py-2 px-3 text-sm">{ch.wordCount?.toLocaleString() || '-'}</td>
+                    <td className="py-2 px-3 text-center text-sm">{ch.qualityScore ?? '-'}</td>
+                    <td className="py-2 px-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/book/${bookId}/chapter/${ch.number}`}
+                          className="hover:text-blue-600"
                         >
-                          <Link
-                            to={`/book/${bookId}/chapter/${ch.number}`}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
-                          >
-                            <Pencil size={14} />
-                            编辑/修改
-                          </Link>
-                          <button
-                            onClick={() => {
-                              const prev = chapters.find((c) => c.number === ch.number - 1);
-                              if (prev) handleMerge(ch.number - 1, ch.number);
-                            }}
-                            disabled={ch.number <= 1}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent disabled:opacity-40"
-                          >
-                            <GitMerge size={14} />
-                            与上一章合并
-                          </button>
-                          <button
-                            onClick={() => handleSplit(ch.number)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
-                          >
-                            <Scissors size={14} />
-                            拆分为两章
-                          </button>
+                          编辑
+                        </Link>
+                        {ch.status === 'published' && (
                           <button
                             onClick={() => openRollbackDial(ch.number)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                            className="hover:text-blue-600"
                           >
-                            <RotateCcw size={14} />
-                            回滚到快照
+                            回滚
                           </button>
-                          <div className="my-1 border-t" />
+                        )}
+                        <div className="relative">
                           <button
-                            onClick={() => handleDelete(ch.number)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                            onClick={() =>
+                              setActionMenu(actionMenu === ch.number ? null : ch.number)
+                            }
+                            className="hover:text-gray-600"
+                            title="更多操作"
                           >
-                            <Trash2 size={14} />
-                            删除章节
+                            <MoreHorizontal size={14} />
                           </button>
+                          {actionMenu === ch.number && (
+                            <div
+                              className="absolute left-0 top-6 w-48 rounded-md border bg-popover shadow-lg z-10 py-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Link
+                                to={`/book/${bookId}/chapter/${ch.number}`}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <Pencil size={14} />
+                                编辑章节
+                              </Link>
+                              {ch.number > 1 && (
+                                <button
+                                  onClick={() => {
+                                    const prev = chapters.find((c) => c.number === ch.number - 1);
+                                    if (prev) handleMerge(ch.number - 1, ch.number);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                                >
+                                  <GitMerge size={14} />
+                                  合并到上一章
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleSplit(ch.number)}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <Scissors size={14} />
+                                从此处拆分
+                              </button>
+                              <button
+                                onClick={() => openRollbackDial(ch.number)}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <RotateCcw size={14} />
+                                回滚到此章
+                              </button>
+                              <div className="my-1 border-t" />
+                              <button
+                                onClick={() => handleDelete(ch.number)}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 size={14} />
+                                删除章节
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -466,10 +459,12 @@ export default function BookDetail() {
       {(() => {
         const published = chapters.filter((c) => c.status === 'published').length;
         const draft = chapters.filter((c) => c.status === 'draft').length;
+        const editing = chapters.filter((c) => c.status === 'published' && c.wordCount > 0).length;
         const unpublished = Math.max(book.targetChapterCount - chapters.length, 0);
         return (
-          <div className="text-sm text-muted-foreground border-t pt-4">
-            统计: 已完成 {published} 章 | 草稿 {draft} 章 | 未创作 {unpublished} 章
+          <div className="mt-4 text-sm text-gray-500">
+            统计: 已完成 {published} 章 | 草稿 {draft} 章 | 编辑中 {editing} 章 | 未创作{' '}
+            {unpublished} 章
           </div>
         );
       })()}
