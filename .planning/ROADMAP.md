@@ -7,7 +7,7 @@
 ## Phases
 
 - [x] **Phase 1: 基础设施** — Monorepo 搭建、LLM Provider 抽象、Zod Schemas、测试配置
-- [ ] **Phase 2: 状态层** — StateManager、RuntimeStateStore、SQLite 时序库、快照回滚
+- [x] **Phase 2: 状态层** — StateManager、RuntimeStateStore、SQLite 时序库、快照回滚
 - [ ] **Phase 3: 核心 Agent** — OutlinePlanner、CharacterDesigner、IntentDirector、ContextCard、ScenePolisher 等 22 个 Agent
 - [ ] **Phase 4: 流水线编排** — PipelineRunner、修订循环、原子事务、章节拆分合并
 - [ ] **Phase 5: 伏笔治理** — HookPolicy、HookAgenda、HookGovernance、HookArbiter、HookLifecycle
@@ -157,7 +157,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 基础设施 | 1/1 | Complete | 2026-04-21 |
-| 2. 状态层 | 0/5 | Not started | - |
+| 2. 状态层 | 1/1 | Complete | 2026-04-21 |
 | 3. 核心 Agent | 0/6 | Not started | - |
 | 4. 流水线编排 | 0/8 | Not started | - |
 | 5. 伏笔治理 | 0/6 | Not started | - |
