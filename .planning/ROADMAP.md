@@ -8,11 +8,11 @@
 
 - [x] **Phase 1: 基础设施** — Monorepo 搭建、LLM Provider 抽象、Zod Schemas、测试配置
 - [x] **Phase 2: 状态层** — StateManager、RuntimeStateStore、SQLite 时序库、快照回滚
-- [ ] **Phase 3: 核心 Agent** — OutlinePlanner、CharacterDesigner、IntentDirector、ContextCard、ScenePolisher 等 22 个 Agent
-- [ ] **Phase 4: 流水线编排** — PipelineRunner、修订循环、原子事务、章节拆分合并
-- [ ] **Phase 5: 伏笔治理** — HookPolicy、HookAgenda、HookGovernance、HookArbiter、HookLifecycle
-- [ ] **Phase 6: 质量层** — 33 维审计、AI 痕迹检测、修复策略、降级路径
-- [ ] **Phase 6 补: 守护进程** — Daemon 调度、SmartInterval、QuotaGuard
+- [x] **Phase 3: 核心 Agent** — OutlinePlanner、CharacterDesigner、IntentDirector、ContextCard、ScenePolisher 等 22 个 Agent
+- [x] **Phase 4: 流水线编排** — PipelineRunner、修订循环、原子事务、章节拆分合并
+- [x] **Phase 5: 伏笔治理** — HookPolicy、HookAgenda、HookGovernance、HookArbiter、HookLifecycle
+- [x] **Phase 6: 质量层** — 33 维审计、AI 痕迹检测、修复策略、降级路径
+- [x] **Phase 6 补: 守护进程** — Daemon 调度、SmartInterval、QuotaGuard
 - [ ] **Phase 7: Studio 工作台** — Web UI、Hono API、SSE 推送、核心页面
 - [ ] **Phase 8: 导出与通知** — EPUB/TXT 导出、路径安全、通知推送
 - [ ] **Phase 9: 异常交互** — 状态脱节翻译、污染隔离视觉、时间回溯拨盘
@@ -158,11 +158,11 @@
 |-------|----------------|--------|-----------|
 | 1. 基础设施 | 1/1 | Complete | 2026-04-21 |
 | 2. 状态层 | 1/1 | Complete | 2026-04-21 |
-| 3. 核心 Agent | 0/6 | Not started | - |
-| 4. 流水线编排 | 0/8 | Not started | - |
-| 5. 伏笔治理 | 0/6 | Not started | - |
-| 6. 质量层 | 0/8 | Not started | - |
-| 6 补. 守护进程 | 0/3 | Not started | - |
+| 3. 核心 Agent | 1/1 | Complete | 2026-04-21 |
+| 4. 流水线编排 | 1/1 | Complete | 2026-04-21 |
+| 5. 伏笔治理 | 1/1 | Complete | 2026-04-21 |
+| 6. 质量层 | 1/1 | Complete | 2026-04-21 |
+| 6 补. 守护进程 | 1/1 | Complete | 2026-04-21 |
 | 7. Studio 工作台 | 0/4 | Not started | - |
 | 8. 导出与通知 | 0/3 | Not started | - |
 | 9. 异常交互 | 0/3 | Not started | - |
