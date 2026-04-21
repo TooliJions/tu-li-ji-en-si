@@ -64,13 +64,15 @@ export class QualityBaseline {
     this.#driftRateThreshold = config.driftRateThreshold ?? 0.3;
   }
 
-  addChapter(score: ChapterQualityScore): void {
+  addChapter(score: ChapterQualityScore, degraded = false): void {
     if (score.overallScore < 0 || score.overallScore > 100) {
       throw new Error(`overallScore must be in [0,100], got ${score.overallScore}`);
     }
     if (this.#chapters.some((c) => c.chapterNumber === score.chapterNumber)) {
       throw new Error(`Chapter ${score.chapterNumber} already exists`);
     }
+    // PRD-034a: 降级章节（accept_with_warnings）不参与基线漂移检测
+    if (degraded) return;
     this.#chapters.push(score);
     this.#chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
     this.#tryEstablishBaseline();

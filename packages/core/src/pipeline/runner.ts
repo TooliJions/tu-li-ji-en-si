@@ -1,8 +1,10 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 import { applyRuntimeStateDelta } from '../state/reducer';
 import { OpenAICompatibleProvider, LLMProvider, type LLMConfig } from '../llm/provider';
+import { ScenePolisher } from '../agents/scene-polisher';
 import type { AgentResult } from '../agents/base';
 import type { ChapterIndexEntry } from '../models/chapter';
 import type { Delta, Manifest } from '../models/state';
@@ -210,6 +212,7 @@ export class PipelineRunner {
       keyEvents: string[];
       targetWordCount: number;
       hooks: string[];
+      acts: Array<{ act: '建置' | '对抗' | '解决'; description: string; keyPoints: string[] }>;
     }>({ prompt: outlinePrompt });
 
     // 调用 ChapterPlanner
@@ -279,6 +282,10 @@ export class PipelineRunner {
       // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
       this.#trackUsage(input.bookId, input.chapterNumber, 'planner', undefined);
 
+      // 1.5. 获取世界规则（PRD-014）
+      const manifestForRules = this.stateStore.loadManifest(input.bookId);
+      const worldRules = manifestForRules.worldRules ?? [];
+
       // 2. 意图定向
       const intent = await this.#directIntent(input, meta.genre, contextCard);
       // planner 频道：generateJSON 暂不返回 usage，传 undefined（不影响流程）
@@ -296,23 +303,35 @@ export class PipelineRunner {
         };
       }
 
-      // 4. 场景润色
+      // 4. 世界规则执行检查（PRD-014）
+      const ruleViolations = await this.#checkWorldRules(
+        draft.content!,
+        input.chapterNumber,
+        worldRules
+      );
+
+      // 5. 场景润色
       const polished = await this.#polishScene(draft.content!, meta.genre, input.chapterNumber);
       this.#trackUsage(input.bookId, input.chapterNumber, 'composer', polished.usage);
 
-      // 5. 质量审计 + 修订循环
-      const audited = await this.#auditAndRevise(polished.content!, input, meta.genre);
+      // 6. 质量审计 + 修订循环（含世界规则违规）
+      const audited = await this.#auditAndRevise(
+        polished.content!,
+        input,
+        meta.genre,
+        ruleViolations
+      );
       this.#trackUsage(input.bookId, input.chapterNumber, 'auditor', audited.auditorUsage);
       this.#trackUsage(input.bookId, input.chapterNumber, 'reviser', audited.reviserUsage);
 
-      // 6. 记忆提取
+      // 7. 记忆提取
       const manifestAfterMemory = await this.#extractMemory(
         audited.content!,
         input.bookId,
         input.chapterNumber
       );
 
-      // 7. 持久化
+      // 8. 持久化
       this.#persistChapter(
         audited.content!,
         input.bookId,
@@ -325,7 +344,7 @@ export class PipelineRunner {
         }
       );
 
-      // 8. 更新状态
+      // 9. 更新状态
       this.#updateStateAfterChapter(
         input.bookId,
         input.chapterNumber,
@@ -416,17 +435,45 @@ export class PipelineRunner {
    */
   async writeFastDraft(input: WriteDraftInput): Promise<ChapterResult> {
     try {
+      // PRD-022a: 先生成初稿，再通过 ScenePolisher 润色
       const prompt = this.#buildDraftPrompt(input);
-      const result = await this.provider.generate({ prompt });
-      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', result.usage);
+      const draftResult = await this.provider.generate({ prompt });
+      this.#trackUsage(input.bookId, input.chapterNumber, 'writer', draftResult.usage);
+
+      // ScenePolisher 润色
+      const polisher = new ScenePolisher(this.provider);
+      const polishedResult = await polisher.execute({
+        bookId: input.bookId,
+        chapterId: input.chapterNumber,
+        promptContext: {
+          input: {
+            draftContent: draftResult.text,
+            chapterNumber: input.chapterNumber,
+            genre: input.genre ?? '',
+          },
+        },
+      });
+
+      const totalUsage = {
+        promptTokens:
+          (draftResult.usage?.promptTokens ?? 0) + (polishedResult.usage?.promptTokens ?? 0),
+        completionTokens:
+          (draftResult.usage?.completionTokens ?? 0) +
+          (polishedResult.usage?.completionTokens ?? 0),
+        totalTokens:
+          (draftResult.usage?.totalTokens ?? 0) + (polishedResult.usage?.totalTokens ?? 0),
+      };
 
       return {
-        success: true,
+        success: polishedResult.success,
         bookId: input.bookId,
         chapterNumber: input.chapterNumber,
-        content: result.text,
+        content: polishedResult.success
+          ? ((polishedResult.data as { polishedContent: string })?.polishedContent ??
+            draftResult.text)
+          : draftResult.text,
         status: 'draft',
-        usage: result.usage,
+        usage: totalUsage,
         persisted: false,
       };
     } catch (error) {
@@ -490,10 +537,32 @@ export class PipelineRunner {
     // 检测版本漂移：此草稿之后是否已有新章节写入
     const manifest = this.stateStore.loadManifest(input.bookId);
     const chaptersAhead = manifest.lastChapterWritten - input.chapterNumber;
-    const driftWarning =
+    let driftWarning =
       chaptersAhead > 0
         ? `⚠️ 检测到上下文漂移：草稿写作后已写入 ${chaptersAhead} 章新内容，已重新对齐`
         : undefined;
+
+    // PRD-024a: 真相文件 versionToken 比对，检测手动修改
+    const truthFilesPath = this.stateManager.getBookPath(input.bookId, 'story', 'state', 'truths');
+    if (fs.existsSync(truthFilesPath)) {
+      const truthFiles = ['characters.json', 'facts.json', 'hooks.json', 'world-rules.json'];
+      for (const file of truthFiles) {
+        const filePath = path.join(truthFilesPath, file);
+        if (fs.existsSync(filePath)) {
+          try {
+            const truthData = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as {
+              versionToken?: number;
+            };
+            if (truthData.versionToken && truthData.versionToken > manifest.versionToken) {
+              driftWarning = `⚠️ 检测到真相文件 ${file} 在草稿之后被手动修改（versionToken: ${truthData.versionToken} > ${manifest.versionToken}），已重新对齐上下文`;
+              break;
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    }
 
     // 获取锁
     this.stateManager.acquireBookLock(input.bookId, 'upgradeDraft');
@@ -587,13 +656,19 @@ export class PipelineRunner {
     genre: string,
     previousChapterSummary: string
   ): string {
-    return `你是一位专业的网络小说大纲规划师。请为以下章节生成大纲。
+    return `你是一位专业的网络小说大纲规划师。请为以下章节生成大纲，采用三幕结构（建置/对抗/解决）。
 
 ## 基本信息
 - **章节**: 第 ${input.chapterNumber} 章
 - **题材**: ${genre}
 - **规划上下文**: ${input.outlineContext}
 - **上一章摘要**: ${previousChapterSummary}
+
+## 三幕结构要求
+每个章节大纲必须包含三幕结构：
+- **建置**（约占 25%）：引入场景、角色、背景设定，建立冲突起点
+- **对抗**（约占 50%）：冲突升级、障碍出现、角色面临挑战
+- **解决**（约占 25%）：冲突收束、角色成长、为下一章留下悬念
 
 请生成章节大纲，包含以下 JSON 格式：
 {
@@ -602,7 +677,12 @@ export class PipelineRunner {
   "summary": "章节概要（1-2句话）",
   "keyEvents": ["关键事件1", "关键事件2"],
   "targetWordCount": 3000,
-  "hooks": ["涉及的伏笔ID"]
+  "hooks": ["涉及的伏笔ID"],
+  "acts": [
+    { "act": "建置", "description": "建置阶段描述", "keyPoints": ["要点1", "要点2"] },
+    { "act": "对抗", "description": "对抗阶段描述", "keyPoints": ["要点1", "要点2"] },
+    { "act": "解决", "description": "解决阶段描述", "keyPoints": ["要点1", "要点2"] }
+  ]
 }`;
   }
 
@@ -703,6 +783,35 @@ ${genre}
     return this.provider.generateJSON({ prompt });
   }
 
+  // PRD-014: 世界规则执行检查
+  async #checkWorldRules(
+    content: string,
+    chapterNumber: number,
+    rules: Array<{ id: string; category: string; rule: string; exceptions: string[] }>
+  ): Promise<string[]> {
+    if (rules.length === 0) return [];
+
+    const prompt = `你是一位世界规则审核员。请检查以下章节内容是否违反了设定的世界规则。
+
+## 世界规则
+${rules.map((r) => `- [${r.category}] ${r.rule}`).join('\n')}
+
+## 章节内容（第${chapterNumber}章）
+${content.slice(0, 3000)}
+
+请逐条检查规则，返回违规列表（JSON 数组格式），如果没有违规返回空数组 []。
+每个违规项格式：{ "ruleId": "规则ID", "violation": "违规描述" }`;
+
+    try {
+      const result = await this.provider.generateJSON<Array<{ ruleId: string; violation: string }>>(
+        { prompt }
+      );
+      return result.map((v) => `[世界规则] ${v.violation}`);
+    } catch {
+      return [];
+    }
+  }
+
   async #generateDraft(
     input: WriteNextChapterInput,
     genre: string,
@@ -759,7 +868,8 @@ ${content}
   async #auditAndRevise(
     chapterContent: string,
     input: WriteNextChapterInput,
-    genre: string
+    genre: string,
+    worldRuleViolations: string[] = []
   ): Promise<{
     content: string;
     auditorUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
@@ -807,10 +917,14 @@ ${content}
         previousScore = currentScore;
 
         // 尝试修订
+        const worldRuleSection =
+          worldRuleViolations.length > 0
+            ? `\n\n## 世界规则违规\n${worldRuleViolations.map((v) => `- ${v}`).join('\n')}`
+            : '';
         const revisePrompt = `请根据以下审计问题修订章节内容：
 
 ## 审计问题
-${auditResult.issues.map((i: { severity: string; description: string }) => `- [${i.severity}] ${i.description}`).join('\n')}
+${auditResult.issues.map((i: { severity: string; description: string }) => `- [${i.severity}] ${i.description}`).join('\n')}${worldRuleSection}
 
 ## 当前内容
 ${currentContent}

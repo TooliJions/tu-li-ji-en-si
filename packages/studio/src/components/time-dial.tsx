@@ -47,8 +47,9 @@ export default function TimeDial({
     if (!isDragging) return;
     const currentAngle = getAngleFromCenter(e.clientX, e.clientY);
     const delta = currentAngle - startAngle.current;
-    // Clamp to 0-360
-    setRotation(Math.max(0, Math.min(360, startRotation.current + delta)));
+    // 只接受逆时针方向（delta < 0）
+    if (delta > 0) return;
+    setRotation(Math.max(0, Math.min(360, startRotation.current + Math.abs(delta))));
   }
 
   function handlePointerUp() {
@@ -91,16 +92,27 @@ export default function TimeDial({
           <div className="relative">
             <Clock size={64} className="mx-auto text-amber-400 shatter-icon" />
             <div className="shatter-pieces">
-              {Array.from({ length: 8 }, (_, i) => (
-                <div
-                  key={i}
-                  className="shatter-piece"
-                  style={{
-                    transform: `rotate(${i * 45}deg) translateY(-30px)`,
-                    animationDelay: `${i * 50}ms`,
-                  }}
-                />
-              ))}
+              {Array.from({ length: 8 }, (_, i) => {
+                const startAngle = i * 45;
+                const endAngle = startAngle + (120 + Math.random() * 180);
+                const flyDist = 60 + Math.random() * 80;
+                const spin = (Math.random() > 0.5 ? 1 : -1) * (180 + Math.random() * 360);
+                return (
+                  <div
+                    key={i}
+                    className="shatter-piece"
+                    style={
+                      {
+                        '--start-angle': `${startAngle}deg`,
+                        '--end-angle': `${endAngle}deg`,
+                        '--fly-distance': `${flyDist}px`,
+                        '--spin': `${spin}deg`,
+                        '--delay': `${i * 50}ms`,
+                      } as React.CSSProperties
+                    }
+                  />
+                );
+              })}
             </div>
           </div>
           <p className="text-lg font-medium text-amber-300 mt-6">时间碎裂中…</p>

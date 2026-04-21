@@ -342,13 +342,14 @@ export default function BookDetail() {
                   <tr
                     key={ch.number}
                     className={`border-b hover:bg-gray-50 ${
-                      pollution.isPolluted ? 'border-2 border-orange-400' : ''
+                      pollution.isPolluted ? 'border-2' : ''
                     }`}
                     style={
                       pollution.isPolluted
                         ? {
+                            borderColor: '#FF8C00',
                             backgroundImage:
-                              'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+                              'repeating-linear-gradient(135deg, rgba(255,140,0,0.08), rgba(255,140,0,0.08) 8px, transparent 8px, transparent 16px)',
                           }
                         : undefined
                     }
@@ -362,7 +363,10 @@ export default function BookDetail() {
                         {ch.title || '(未创作)'}
                       </Link>
                       {pollution.isPolluted && (
-                        <span className="ml-2 text-[10px] text-orange-600 font-medium border border-orange-300 px-1 rounded">
+                        <span
+                          className="ml-2 text-[10px] font-medium px-1 rounded"
+                          style={{ color: '#FF8C00', borderColor: '#FF8C00', border: '1px solid' }}
+                        >
                           污染隔离
                         </span>
                       )}

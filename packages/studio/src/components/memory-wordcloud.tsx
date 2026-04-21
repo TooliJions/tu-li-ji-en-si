@@ -1,6 +1,7 @@
 /**
  * Memory wordcloud — displays extracted memories as sized tags.
- * Font size scales with confidence. Fade-in animation.
+ * Font size scales with confidence. Low confidence words placed at edges,
+ * high confidence centered. PRD-036c.
  */
 export default function MemoryWordcloud({
   memories,
@@ -13,12 +14,15 @@ export default function MemoryWordcloud({
     sourceType?: string;
     entityType?: string | null;
   }[];
-  onMemoryEnter?: (memory: {
-    text: string;
-    confidence: number;
-    sourceType?: string;
-    entityType?: string | null;
-  }, event: React.MouseEvent<HTMLElement>) => void;
+  onMemoryEnter?: (
+    memory: {
+      text: string;
+      confidence: number;
+      sourceType?: string;
+      entityType?: string | null;
+    },
+    event: React.MouseEvent<HTMLElement>
+  ) => void;
   onMemoryLeave?: () => void;
 }) {
   if (memories.length === 0) {
@@ -27,41 +31,69 @@ export default function MemoryWordcloud({
 
   const display = memories.slice(0, 15);
 
-  return (
-    <div className="flex flex-wrap gap-2 animate-in fade-in-0 duration-500">
-      {display.map((m) => {
-        const fontSize = 0.75 + m.confidence * 0.75;
-        const opacity = 0.4 + m.confidence * 0.6;
-        const lowConfidence = m.confidence < 0.45;
-        const sourceLabel =
-          m.sourceType === 'character' ? '角色' : m.sourceType === 'fact' ? '事实' : m.sourceType === 'hook' ? '伏笔' : null;
-        const sourceClass =
-          m.sourceType === 'character'
-            ? 'bg-sky-50 text-sky-700'
-            : m.sourceType === 'hook'
-              ? 'bg-amber-50 text-amber-700'
-              : 'bg-slate-100 text-slate-700';
-        return (
+  // PRD-036c: Group by confidence — low at edges, high centered
+  const low = display.filter((m) => m.confidence < 0.45);
+  const mid = display.filter((m) => m.confidence >= 0.45 && m.confidence < 0.7);
+  const high = display.filter((m) => m.confidence >= 0.7);
+
+  function renderTag(m: (typeof display)[number]) {
+    const fontSize = 0.75 + m.confidence * 0.75;
+    const opacity = 0.4 + m.confidence * 0.6;
+    const lowConfidence = m.confidence < 0.45;
+    const sourceLabel =
+      m.sourceType === 'character'
+        ? '角色'
+        : m.sourceType === 'fact'
+          ? '事实'
+          : m.sourceType === 'hook'
+            ? '伏笔'
+            : null;
+    const sourceClass =
+      m.sourceType === 'character'
+        ? 'bg-sky-50 text-sky-700'
+        : m.sourceType === 'hook'
+          ? 'bg-amber-50 text-amber-700'
+          : 'bg-slate-100 text-slate-700';
+    return (
+      <span
+        key={m.text}
+        className={`inline-block px-2 py-1 rounded-full transition-colors transition-opacity ${
+          lowConfidence
+            ? 'bg-red-100 text-red-700 ring-1 ring-red-300/70'
+            : 'bg-secondary text-secondary-foreground hover:bg-accent'
+        } ${m.entityType ? 'cursor-pointer' : ''}`}
+        style={{ fontSize: `${fontSize}rem`, opacity }}
+        onMouseEnter={(event) => onMemoryEnter?.(m, event)}
+        onMouseLeave={() => onMemoryLeave?.()}
+      >
+        <span>{m.text}</span>
+        {sourceLabel && (
           <span
-            key={m.text}
-            className={`inline-block px-2 py-1 rounded-full transition-colors transition-opacity ${
-              lowConfidence
-                ? 'bg-red-100 text-red-700 ring-1 ring-red-300/70'
-                : 'bg-secondary text-secondary-foreground hover:bg-accent'
-            } ${m.entityType ? 'cursor-pointer' : ''}`}
-            style={{ fontSize: `${fontSize}rem`, opacity }}
-            onMouseEnter={(event) => onMemoryEnter?.(m, event)}
-            onMouseLeave={() => onMemoryLeave?.()}
+            className={`ml-2 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${sourceClass}`}
           >
-            <span>{m.text}</span>
-            {sourceLabel && (
-              <span className={`ml-2 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${sourceClass}`}>
-                {sourceLabel}
-              </span>
-            )}
+            {sourceLabel}
           </span>
-        );
-      })}
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <div className="animate-in fade-in-0 duration-500 space-y-2">
+      {/* Low confidence — left edge */}
+      {low.length > 0 && (
+        <div className="flex flex-wrap gap-2 justify-start">{low.map(renderTag)}</div>
+      )}
+      {/* High confidence — center */}
+      {high.length > 0 && (
+        <div className="flex flex-wrap gap-2 justify-center">{high.map(renderTag)}</div>
+      )}
+      {/* Mid confidence — fills remaining space */}
+      {mid.length > 0 && <div className="flex flex-wrap gap-2">{mid.map(renderTag)}</div>}
+      {/* Low confidence — right edge (second group) */}
+      {low.length > 3 && (
+        <div className="flex flex-wrap gap-2 justify-end">{low.slice(3).map(renderTag)}</div>
+      )}
     </div>
   );
 }

@@ -66,6 +66,10 @@ function buildContentOpf(input: EpubInput, bookId: string): string {
     chapters.length > 0
       ? `\n    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`
       : '';
+  const tocNcxId =
+    chapters.length > 0
+      ? `\n    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`
+      : '';
   const tocRef = chapters.length > 0 ? `\n    <itemref idref="nav"/>` : '';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -78,7 +82,7 @@ function buildContentOpf(input: EpubInput, bookId: string): string {
     <meta property="dcterms:modified">${date}</meta>
   </metadata>
   <manifest>
-${manifestItems}${tocNavId}
+${manifestItems}${tocNavId}${tocNcxId}
   </manifest>
   <spine>
 ${spineItems}${tocRef}
@@ -124,6 +128,35 @@ ${navItems}
 </html>`;
 }
 
+// PRD-070: NCX navigation control file (EPUB 2/3 backward compatibility)
+function buildNcxXml(input: EpubInput, bookId: string): string {
+  const { title, author, chapters } = input;
+  const tocItems = chapters
+    .map((ch, i) => {
+      const href = `chapter-${padNumber(ch.number, 3)}.xhtml`;
+      return `    <navPoint id="navpoint-${i + 1}" playOrder="${i + 1}">
+      <navLabel><text>${escapeXml(ch.title)}</text></navLabel>
+      <content src="${href}"/>
+    </navPoint>`;
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="urn:uuid:${bookId}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle><text>${escapeXml(title)}</text></docTitle>
+  <docAuthor><text>${escapeXml(author)}</text></docAuthor>
+  <navMap>
+${tocItems}
+  </navMap>
+</ncx>`;
+}
+
 // ─── EpubExporter ───────────────────────────────────────────────
 
 /**
@@ -154,6 +187,11 @@ export class EpubExporter {
     // OEBPS/nav.xhtml (navigation document, EPUB 3 requirement)
     if (input.chapters.length > 0) {
       zip.addFile(`${oebpsPath}/nav.xhtml`, Buffer.from(buildNavXhtml(input)));
+    }
+
+    // OEBPS/toc.ncx (NCX navigation control file, PRD-070)
+    if (input.chapters.length > 0) {
+      zip.addFile(`${oebpsPath}/toc.ncx`, Buffer.from(buildNcxXml(input, bookId)));
     }
 
     // Chapter files

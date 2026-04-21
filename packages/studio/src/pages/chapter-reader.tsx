@@ -463,14 +463,16 @@ export default function ChapterReader() {
           {/* Pollution warning banner */}
           {pollution.isPolluted && (
             <div
-              className="rounded-lg border border-orange-300 bg-orange-50 p-4"
+              className="rounded-lg border p-4"
               style={{
+                borderColor: '#FF8C00',
+                backgroundColor: 'rgba(255,140,0,0.05)',
                 backgroundImage:
-                  'repeating-linear-gradient(135deg, rgba(249,115,22,0.08), rgba(249,115,22,0.08) 8px, transparent 8px, transparent 16px)',
+                  'repeating-linear-gradient(135deg, rgba(255,140,0,0.08), rgba(255,140,0,0.08) 8px, transparent 8px, transparent 16px)',
               }}
             >
               <div className="flex items-start gap-3">
-                <AlertTriangle size={20} className="text-orange-600 mt-0.5" />
+                <AlertTriangle size={20} style={{ color: '#FF8C00' }} className="mt-0.5" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <PollutionBadge
@@ -482,12 +484,21 @@ export default function ChapterReader() {
                       <span className="text-xs text-amber-700 font-medium">⚠ 强制通过</span>
                     )}
                   </div>
-                  <p className="text-sm font-medium text-orange-800">污染隔离已启用</p>
-                  <p className="text-sm text-orange-700 mt-1">{pollution.message}</p>
+                  <p className="text-sm font-medium" style={{ color: '#FF8C00' }}>
+                    污染隔离已启用
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: '#CC7000' }}>
+                    {pollution.message}
+                  </p>
                   <div className="mt-3">
                     <button
                       onClick={openRollbackDial}
-                      className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white/80 px-3 py-1.5 text-sm text-orange-800 hover:bg-white"
+                      className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-white"
+                      style={{
+                        borderColor: '#FF8C00',
+                        backgroundColor: 'rgba(255,255,255,0.8)',
+                        color: '#FF8C00',
+                      }}
                     >
                       <RotateCcw size={14} />
                       回滚到此
