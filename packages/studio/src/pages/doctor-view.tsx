@@ -64,6 +64,8 @@ interface StateDiff {
     oldValue: string;
     newValue: string;
     naturalLanguage: string;
+    /** PRD-090: 差异分类 */
+    category?: '角色' | '关系' | '物品' | '事实' | '伏笔';
   }[];
   severity: string;
 }
@@ -95,6 +97,8 @@ export default function DoctorView() {
   const [showDiff, setShowDiff] = useState(false);
   const [diffData, setDiffData] = useState<StateDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [diffCategoryFilter, setDiffCategoryFilter] = useState<string>('all');
+  const [diffSelected, setDiffSelected] = useState<Set<number>>(new Set());
   const [fixResult, setFixResult] = useState<{ success: boolean; message: string } | null>(null);
   const [envInfo, setEnvInfo] = useState<{
     nodeVersion: string;
@@ -435,17 +439,67 @@ export default function DoctorView() {
             ) : diffData ? (
               <div>
                 <p className="text-sm font-medium mb-3">{diffData.summary}</p>
-                <div className="space-y-2">
-                  {diffData.changes.map((c, i) => (
-                    <div key={i} className="rounded border p-3 bg-background text-sm">
-                      <p className="text-muted-foreground">{c.naturalLanguage}</p>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        <span className="line-through text-red-500">{c.oldValue}</span>
-                        {' → '}
-                        <span className="text-green-600">{c.newValue}</span>
-                      </div>
-                    </div>
+
+                {/* PRD-090: 分类筛选 — 单选框 */}
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {['all', '角色', '关系', '物品', '事实', '伏笔'].map((cat) => (
+                    <label key={cat} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="diff-category"
+                        value={cat}
+                        checked={diffCategoryFilter === cat}
+                        onChange={() => setDiffCategoryFilter(cat)}
+                        className="accent-primary"
+                      />
+                      {cat === 'all' ? '全部' : cat}
+                    </label>
                   ))}
+                </div>
+
+                <div className="space-y-2">
+                  {diffData.changes
+                    .filter(
+                      (c) => diffCategoryFilter === 'all' || c.category === diffCategoryFilter
+                    )
+                    .map((c, i) => (
+                      <div
+                        key={i}
+                        className={`rounded border p-3 bg-background text-sm transition-colors ${
+                          diffSelected.has(i) ? 'border-primary bg-primary/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {/* PRD-090: 多选框 */}
+                          <input
+                            type="checkbox"
+                            checked={diffSelected.has(i)}
+                            onChange={() => {
+                              const next = new Set(diffSelected);
+                              if (next.has(i)) next.delete(i);
+                              else next.add(i);
+                              setDiffSelected(next);
+                            }}
+                            className="mt-1 accent-primary"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              {c.category && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                  {c.category}
+                                </span>
+                              )}
+                              <p className="text-muted-foreground">{c.naturalLanguage}</p>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              <span className="line-through text-red-500">{c.oldValue}</span>
+                              {' → '}
+                              <span className="text-green-600">{c.newValue}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                 </div>
                 <span
                   className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${SEVERITY_COLORS[diffData.severity]}`}
