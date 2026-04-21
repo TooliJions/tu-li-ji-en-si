@@ -165,7 +165,7 @@
 | 6 补. 守护进程 | 1/1 | Complete | 2026-04-21 |
 | 7. Studio 工作台 | 0/4 | Not started | - |
 | 8. 导出与通知 | 1/1 | Complete | 2026-04-21 |
-| 9. 异常交互 | 0/3 | Not started | - |
+| 9. 异常交互 | 1/1 | Complete | 2026-04-21 |
 | 10. 测试与优化 | 0/3 | Not started | - |
 
 ## Coverage
