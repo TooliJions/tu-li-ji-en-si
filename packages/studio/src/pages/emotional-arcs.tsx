@@ -73,6 +73,135 @@ const EMOTION_TYPES: EmotionType[] = [
   'anticipation',
 ];
 
+// PRD-015: SVG line chart for emotional arc visualization
+const CHART_EMOTIONS: EmotionType[] = ['joy', 'anger', 'sadness', 'fear', 'anticipation'];
+const CHART_COLORS: Record<EmotionType, string> = {
+  joy: '#facc15',
+  anger: '#ef4444',
+  sadness: '#60a5fa',
+  fear: '#a855f7',
+  anticipation: '#fb923c',
+  surprise: '#ec4899',
+  disgust: '#16a34a',
+  trust: '#34d399',
+};
+
+function EmotionLineChart({ chapters }: { chapters: ChapterEmotion[] }) {
+  if (chapters.length < 2) return null;
+
+  const width = 600;
+  const height = 200;
+  const padding = { top: 20, right: 80, bottom: 30, left: 40 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  const xStep = chartW / Math.max(chapters.length - 1, 1);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+      {/* Grid lines */}
+      {[0, 0.25, 0.5, 0.75, 1].map((v) => {
+        const y = padding.top + chartH - v * chartH;
+        return (
+          <g key={v}>
+            <line
+              x1={padding.left}
+              y1={y}
+              x2={width - padding.right}
+              y2={y}
+              stroke="#e2e8f0"
+              strokeWidth="1"
+            />
+            <text x={padding.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#94a3b8">
+              {Math.round(v * 100)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Chapter labels */}
+      {chapters.map((ch, i) => {
+        if (chapters.length <= 12 || i % Math.ceil(chapters.length / 10) === 0) {
+          const x = padding.left + i * xStep;
+          return (
+            <text
+              key={ch.chapterNumber}
+              x={x}
+              y={height - 5}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#94a3b8"
+            >
+              Ch{ch.chapterNumber}
+            </text>
+          );
+        }
+        return null;
+      })}
+
+      {/* Lines */}
+      {CHART_EMOTIONS.map((emotion) => {
+        const points = chapters.map((ch, i) => {
+          const x = padding.left + i * xStep;
+          const y = padding.top + chartH - ch.emotions[emotion] * chartH;
+          return `${x},${y}`;
+        });
+
+        return (
+          <polyline
+            key={emotion}
+            points={points.join(' ')}
+            fill="none"
+            stroke={CHART_COLORS[emotion]}
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        );
+      })}
+
+      {/* Data points */}
+      {CHART_EMOTIONS.map((emotion) =>
+        chapters.map((ch, i) => {
+          const x = padding.left + i * xStep;
+          const y = padding.top + chartH - ch.emotions[emotion] * chartH;
+          return (
+            <circle
+              key={`${ch.chapterNumber}-${emotion}`}
+              cx={x}
+              cy={y}
+              r="2.5"
+              fill={CHART_COLORS[emotion]}
+              stroke="white"
+              strokeWidth="1"
+            />
+          );
+        })
+      )}
+
+      {/* Legend */}
+      {CHART_EMOTIONS.map((emotion, i) => {
+        const lx = width - padding.right + 10;
+        const ly = padding.top + i * 18;
+        return (
+          <g key={emotion}>
+            <line
+              x1={lx}
+              y1={ly}
+              x2={lx + 16}
+              y2={ly}
+              stroke={CHART_COLORS[emotion]}
+              strokeWidth="2"
+            />
+            <text x={lx + 20} y={ly + 4} fontSize="11" fill="#475569">
+              {EMOTION_LABELS[emotion]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function EmotionalArcs() {
   const { bookId } = useParams<{ bookId: string }>();
   const [loading, setLoading] = useState(true);
@@ -192,65 +321,74 @@ export default function EmotionalArcs() {
 
       {/* Emotion Bars per Chapter */}
       {currentArc && (
-        <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">{currentArc.name} 的情感变化</h2>
-          <div className="space-y-4">
-            {currentArc.chapters.map((ch) => (
-              <div key={ch.chapterNumber} className="border-b pb-3 last:border-b-0 last:pb-0">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="w-12 text-sm font-medium text-muted-foreground">
-                      第{ch.chapterNumber}章
-                    </span>
-                    <span className="text-sm px-2 py-0.5 rounded bg-secondary">{ch.summary}</span>
-                  </div>
-                  {/* Delta indicators */}
-                  {ch.deltas && (
-                    <div className="flex gap-2 text-xs">
-                      {EMOTION_TYPES.filter((t) => Math.abs(ch.deltas![t]) >= 0.15).map((t) => (
-                        <span
-                          key={t}
-                          className={`px-1.5 py-0.5 rounded ${
-                            ch.deltas![t] > 0
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}
-                        >
-                          {EMOTION_LABELS[t]} {ch.deltas![t] > 0 ? '↑' : '↓'}
-                          {Math.abs(ch.deltas![t] * 100).toFixed(0)}%
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Emotion mini-bars */}
-                <div className="flex gap-1 ml-12">
-                  {EMOTION_TYPES.map((type) => {
-                    const pct = ch.emotions[type] * 100;
-                    if (pct < 5) return null;
-                    return (
-                      <div
-                        key={type}
-                        className="flex items-center gap-1"
-                        title={`${EMOTION_LABELS[type]}: ${pct.toFixed(0)}%`}
-                      >
-                        <div className="w-16 h-3 bg-secondary rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${EMOTION_COLORS[type]} rounded-full`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground w-4">
-                          {EMOTION_LABELS[type].charAt(0)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+        <>
+          {/* PRD-015: SVG Line Chart */}
+          <div className="rounded-lg border bg-card p-6">
+            <h2 className="text-lg font-semibold mb-4">{currentArc.name} 的情感弧线</h2>
+            <EmotionLineChart chapters={currentArc.chapters} />
           </div>
-        </div>
+
+          {/* Detail bars */}
+          <div className="rounded-lg border bg-card p-6">
+            <h2 className="text-lg font-semibold mb-4">{currentArc.name} 的情感变化</h2>
+            <div className="space-y-4">
+              {currentArc.chapters.map((ch) => (
+                <div key={ch.chapterNumber} className="border-b pb-3 last:border-b-0 last:pb-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <span className="w-12 text-sm font-medium text-muted-foreground">
+                        第{ch.chapterNumber}章
+                      </span>
+                      <span className="text-sm px-2 py-0.5 rounded bg-secondary">{ch.summary}</span>
+                    </div>
+                    {/* Delta indicators */}
+                    {ch.deltas && (
+                      <div className="flex gap-2 text-xs">
+                        {EMOTION_TYPES.filter((t) => Math.abs(ch.deltas![t]) >= 0.15).map((t) => (
+                          <span
+                            key={t}
+                            className={`px-1.5 py-0.5 rounded ${
+                              ch.deltas![t] > 0
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            {EMOTION_LABELS[t]} {ch.deltas![t] > 0 ? '↑' : '↓'}
+                            {Math.abs(ch.deltas![t] * 100).toFixed(0)}%
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Emotion mini-bars */}
+                  <div className="flex gap-1 ml-12">
+                    {EMOTION_TYPES.map((type) => {
+                      const pct = ch.emotions[type] * 100;
+                      if (pct < 5) return null;
+                      return (
+                        <div
+                          key={type}
+                          className="flex items-center gap-1"
+                          title={`${EMOTION_LABELS[type]}: ${pct.toFixed(0)}%`}
+                        >
+                          <div className="w-16 h-3 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${EMOTION_COLORS[type]} rounded-full`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-4">
+                            {EMOTION_LABELS[type].charAt(0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Navigation */}

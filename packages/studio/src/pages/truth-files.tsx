@@ -15,6 +15,8 @@ import {
   FileText,
   Search,
   Zap,
+  Map as MapIcon,
+  Clock,
 } from 'lucide-react';
 import {
   fetchTruthFiles,
@@ -64,6 +66,28 @@ interface Character {
   sourceType?: string;
 }
 
+interface CharacterRelation {
+  from: string;
+  to: string;
+  type: string;
+  strength: number; // 0-1
+}
+
+interface LocationEntry {
+  name: string;
+  type: string;
+  description: string;
+  faction?: string;
+  firstAppears?: number;
+}
+
+interface TimelineEvent {
+  chapter: number;
+  title: string;
+  description: string;
+  characters: string[];
+}
+
 export default function TruthFiles() {
   const [searchParams] = useSearchParams();
   const bookId = searchParams.get('bookId') || '';
@@ -76,6 +100,9 @@ export default function TruthFiles() {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [worldState, setWorldState] = useState<Record<string, any> | null>(null);
+  const [relations, setRelations] = useState<CharacterRelation[]>([]);
+  const [locations, setLocations] = useState<LocationEntry[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
 
   // Selection
   const [selectedFile, setSelectedFile] = useState<TruthFileContent | null>(null);
@@ -108,6 +135,32 @@ export default function TruthFiles() {
         setHooks(hooksList || []);
         setCharacters(memory.memories.filter((m: any) => m.entityType === 'character') || []);
         setWorldState(ws?.content ?? null);
+
+        // PRD-011: Extract character relations
+        if (ws?.content?.relations) {
+          setRelations(ws.content.relations as CharacterRelation[]);
+        } else if (ws?.content?.characters) {
+          // Infer relations from character data
+          const chars = Object.keys(ws.content.characters);
+          const inferred: CharacterRelation[] = [];
+          for (const c of chars) {
+            const data = ws.content.characters[c] as any;
+            if (data?.relationships) {
+              for (const [target, relType] of Object.entries(data.relationships)) {
+                inferred.push({ from: c, to: target, type: relType as string, strength: 0.5 });
+              }
+            }
+          }
+          setRelations(inferred);
+        }
+
+        // PRD-012: Extract locations and timeline
+        if (ws?.content?.locations) {
+          setLocations(ws.content.locations as LocationEntry[]);
+        }
+        if (ws?.content?.timeline) {
+          setTimeline(ws.content.timeline as TimelineEvent[]);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -178,6 +231,9 @@ export default function TruthFiles() {
     { id: 'overview', label: '概览与同步', icon: Layers },
     { id: 'json', label: '源码编辑', icon: FileJson },
     { id: 'characters', label: '角色矩阵', icon: Users },
+    { id: 'relations', label: '关系图', icon: GitBranch },
+    { id: 'geography', label: '地理', icon: MapIcon },
+    { id: 'timeline', label: '时间线', icon: Clock },
     { id: 'subplots', label: '副线管理', icon: GitBranch },
     { id: 'conflicts', label: '冲突检查', icon: Search },
   ];
@@ -546,6 +602,130 @@ export default function TruthFiles() {
           </div>
         )}
 
+        {/* PRD-011: Character Relationship Network */}
+        {activeTab === 'relations' && (
+          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <GitBranch size={20} className="text-primary" />
+                角色关系网络
+              </h2>
+              <div className="text-xs text-muted-foreground">
+                {characters.length} 角色 · {relations.length} 关系
+              </div>
+            </div>
+            <div className="p-6">
+              {characters.length < 2 ? (
+                <div className="py-12 text-center text-muted-foreground border border-dashed rounded">
+                  至少需要 2 个角色才能展示关系图
+                </div>
+              ) : (
+                <RelationshipGraph characters={characters} relations={relations} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PRD-012: Geography Editor */}
+        {activeTab === 'geography' && (
+          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <MapIcon size={20} className="text-primary" />
+                地理与势力
+              </h2>
+              <div className="text-xs text-muted-foreground">{locations.length} 个地点</div>
+            </div>
+            <div className="p-6">
+              {locations.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground border border-dashed rounded">
+                  暂无地理数据，请在 current_state.json 中添加 locations 字段
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {locations.map((loc, i) => (
+                    <div key={i} className="rounded border p-4 bg-background">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold">{loc.name}</h3>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-secondary">
+                          {loc.type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">{loc.description}</p>
+                      {loc.faction && (
+                        <p className="text-xs">
+                          <span className="text-muted-foreground">势力:</span> {loc.faction}
+                        </p>
+                      )}
+                      {loc.firstAppears && (
+                        <p className="text-xs text-muted-foreground">
+                          首次出现: 第 {loc.firstAppears} 章
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PRD-012: Timeline Editor */}
+        {activeTab === 'timeline' && (
+          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Clock size={20} className="text-primary" />
+                故事时间线
+              </h2>
+              <div className="text-xs text-muted-foreground">{timeline.length} 个事件</div>
+            </div>
+            <div className="p-6">
+              {timeline.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground border border-dashed rounded">
+                  暂无时间线数据，请在 current_state.json 中添加 timeline 字段
+                </div>
+              ) : (
+                <div className="relative pl-8 space-y-4">
+                  {/* Timeline line */}
+                  <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-border" />
+                  {timeline
+                    .sort((a, b) => a.chapter - b.chapter)
+                    .map((evt, i) => (
+                      <div key={i} className="relative">
+                        {/* Timeline dot */}
+                        <div className="absolute -left-8 top-4 w-6 h-6 rounded-full bg-primary border-2 border-background flex items-center justify-center">
+                          <div className="w-2 h-2 rounded-full bg-primary-foreground" />
+                        </div>
+                        <div className="rounded border p-4 bg-background ml-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="font-semibold text-sm">{evt.title}</h3>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                              第 {evt.chapter} 章
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{evt.description}</p>
+                          {evt.characters.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {evt.characters.map((c, j) => (
+                                <span
+                                  key={j}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-secondary"
+                                >
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'subplots' && (
           <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
@@ -667,6 +847,104 @@ export default function TruthFiles() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * PRD-011: Character relationship network visualization — SVG nodes-edges
+ */
+function RelationshipGraph({
+  characters,
+  relations,
+}: {
+  characters: Character[];
+  relations: CharacterRelation[];
+}) {
+  const names = characters.map((c) => c.text);
+  const n = names.length;
+  if (n < 2) return null;
+
+  const width = 600;
+  const height = 400;
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(cx, cy) - 60;
+
+  // Position characters in a circle
+  const positions = names.map((name, i) => {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    return {
+      name,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    };
+  });
+
+  const posMap = new Map(positions.map((p) => [p.name, p]));
+
+  // Relation line strength → stroke width & color
+  const strengthColor = (s: number) => {
+    if (s > 0.7) return '#ef4444';
+    if (s > 0.4) return '#f59e0b';
+    return '#60a5fa';
+  };
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-[500px]">
+      {/* Relationship lines */}
+      {relations.map((rel, i) => {
+        const from = posMap.get(rel.from);
+        const to = posMap.get(rel.to);
+        if (!from || !to) return null;
+        return (
+          <line
+            key={i}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            stroke={strengthColor(rel.strength)}
+            strokeWidth={Math.max(rel.strength * 4, 1)}
+            opacity={0.6}
+          />
+        );
+      })}
+
+      {/* Character nodes */}
+      {positions.map((pos, i) => (
+        <g key={pos.name}>
+          <circle cx={pos.x} cy={pos.y} r={28} fill="#f8fafc" stroke="#3b82f6" strokeWidth={2} />
+          <text
+            x={pos.x}
+            y={pos.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={11}
+            fill="#1e293b"
+            fontWeight={500}
+          >
+            {pos.name}
+          </text>
+        </g>
+      ))}
+
+      {/* Legend */}
+      <g transform={`translate(${width - 100}, 10)`}>
+        <rect width={90} height={60} rx={4} fill="white" stroke="#e2e8f0" />
+        <line x1={10} y1={15} x2={30} y2={15} stroke="#ef4444" strokeWidth={3} />
+        <text x={35} y={19} fontSize={9} fill="#475569">
+          强关系
+        </text>
+        <line x1={10} y1={30} x2={30} y2={30} stroke="#f59e0b" strokeWidth={2} />
+        <text x={35} y={34} fontSize={9} fill="#475569">
+          中关系
+        </text>
+        <line x1={10} y1={45} x2={30} y2={45} stroke="#60a5fa" strokeWidth={1} />
+        <text x={35} y={49} fontSize={9} fill="#475569">
+          弱关系
+        </text>
+      </g>
+    </svg>
   );
 }
 
