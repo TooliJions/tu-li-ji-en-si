@@ -4,7 +4,7 @@
 
 Phase: ALL 11 phases verified complete (v1.0 milestone)
 Status: v1.0 初始版本 — 11/11 phases complete, 58/58 requirements implemented
-Last activity: 2026-04-21 — planning docs restructured to reflect actual codebase state
+Last activity: 2026-04-21 — sidebar test fix + all untracked files committed
 
 ## Progress
 
@@ -15,8 +15,8 @@ Last activity: 2026-04-21 — planning docs restructured to reflect actual codeb
 ## Test Status
 
 - Core engine: 1658/1658 tests passing (85 test files, 91.9% coverage)
-- Studio: 472/475 tests passing (56 test files, 2 failures in sidebar.test.tsx)
-- E2E: 5 Playwright specs (studio-book-lifecycle, studio-features, studio-full-pipeline, studio-ui-interactions)
+- Studio: 474/475 tests passing (56 test files, 1 skipped) — ALL PASS
+- E2E: 5 Playwright specs committed (studio-book-lifecycle, studio-features, studio-full-pipeline, studio-ui-interactions)
 
 ## Code Metrics
 
@@ -25,9 +25,9 @@ Last activity: 2026-04-21 — planning docs restructured to reflect actual codeb
 
 ## Remaining Work
 
-1. Fix 2 failing Studio tests (sidebar.test.tsx — '导入管理' link query)
-2. Commit untracked files (Dockerfile, E2E specs, new components/pages)
-3. E2E test execution verification
+- [x] Fix 2 failing Studio tests (sidebar.test.tsx — fixed, aligned with actual sidebar nav items)
+- [x] Commit untracked files (Dockerfile, E2E specs, new components/pages, CONTEXT files)
+- [ ] E2E test execution verification (5 specs committed, not yet run against live server)
 
 ## Project Reference
 
