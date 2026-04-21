@@ -13,6 +13,7 @@ import {
   type LLMRequest,
   type LLMResponse,
   type LLMResponseWithJSON,
+  type LLMStreamChunk,
   type Manifest,
   type DaemonScheduler,
 } from '@cybernovelist/core';
@@ -109,6 +110,15 @@ class DeterministicProvider extends LLMProvider {
       usage: estimateUsage(request.prompt, text),
       model: this.config.model,
     };
+  }
+
+  async *generateStream(request: LLMRequest): AsyncIterable<LLMStreamChunk> {
+    const text = this.#buildTextResponse(request.prompt);
+    const words = text.split(' ');
+    for (const word of words) {
+      yield { text: word + ' ', done: false };
+    }
+    yield { text: '', done: true };
   }
 
   #buildTextResponse(prompt: string): string {

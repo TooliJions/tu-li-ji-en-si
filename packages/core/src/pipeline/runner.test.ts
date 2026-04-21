@@ -1302,7 +1302,7 @@ describe('PipelineRunner', () => {
         return JSON.stringify({
           bookId: 'test-book',
           versionToken: 2,
-          lastChapterWritten: 0,
+          lastChapterWritten: 2,
           hooks: [],
           facts: [],
           characters: [],
@@ -1326,7 +1326,7 @@ describe('PipelineRunner', () => {
       // Should succeed but include a warning about context drift
       expect(result.success).toBe(true);
       expect(result.warningCode).toBe('context_drift');
-      expect(result.warning).toContain('上下文版本变化');
+      expect(result.warning).toContain('上下文漂移');
       expect(result.error).toBeUndefined();
 
       const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;

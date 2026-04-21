@@ -1,71 +1,26 @@
 import OpenAI from 'openai';
+import {
+  LLMProvider,
+  LLMConfig,
+  LLMRequest,
+  LLMResponse,
+  LLMResponseWithJSON,
+  LLMStreamChunk,
+} from './provider';
 
-export interface LLMConfig {
-  apiKey: string;
-  baseURL: string;
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-export interface LLMRequest {
-  prompt: string;
-  temperature?: number;
-  maxTokens?: number;
-  jsonMode?: boolean;
-  agentName?: string;
-}
-
-export interface LLMResponse {
-  text: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  model: string;
-}
-
-export interface LLMResponseWithJSON<T> {
-  data: T;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  model: string;
-}
-
-export interface LLMStreamChunk {
-  text: string;
-  done: boolean;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-  };
-}
-
-export abstract class LLMProvider {
-  protected config: LLMConfig;
-
-  constructor(config: LLMConfig) {
-    this.config = config;
-  }
-
-  abstract generate(request: LLMRequest): Promise<LLMResponse>;
-  abstract generateJSON<T>(request: LLMRequest): Promise<T>;
-  abstract generateJSONWithMeta<T>(request: LLMRequest): Promise<LLMResponseWithJSON<T>>;
-  abstract generateStream(request: LLMRequest): AsyncIterable<LLMStreamChunk>;
-}
-
-export class OpenAICompatibleProvider extends LLMProvider {
+export class OllamaProvider extends LLMProvider {
   private client: OpenAI;
 
   constructor(config: LLMConfig) {
-    super(config);
+    const mergedConfig: LLMConfig = {
+      ...config,
+      baseURL: config.baseURL || 'http://localhost:11434/v1',
+      apiKey: config.apiKey || 'ollama',
+    };
+    super(mergedConfig);
     this.client = new OpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL,
+      apiKey: mergedConfig.apiKey,
+      baseURL: mergedConfig.baseURL,
     });
   }
 
@@ -92,7 +47,12 @@ export class OpenAICompatibleProvider extends LLMProvider {
   async generateJSON<T>(request: LLMRequest): Promise<T> {
     const completion = await this.client.chat.completions.create({
       model: this.config.model,
-      messages: [{ role: 'user', content: request.prompt }],
+      messages: [
+        {
+          role: 'user',
+          content: request.prompt + '\n\n请仅返回有效的 JSON，不要额外的文本。',
+        },
+      ],
       temperature: request.temperature ?? this.config.temperature ?? 0.2,
       max_tokens: request.maxTokens ?? this.config.maxTokens,
       response_format: { type: 'json_object' },
@@ -103,7 +63,7 @@ export class OpenAICompatibleProvider extends LLMProvider {
       return JSON.parse(text) as T;
     } catch {
       throw new Error(
-        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
+        `Ollama 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
       );
     }
   }
@@ -111,7 +71,12 @@ export class OpenAICompatibleProvider extends LLMProvider {
   async generateJSONWithMeta<T>(request: LLMRequest): Promise<LLMResponseWithJSON<T>> {
     const completion = await this.client.chat.completions.create({
       model: this.config.model,
-      messages: [{ role: 'user', content: request.prompt }],
+      messages: [
+        {
+          role: 'user',
+          content: request.prompt + '\n\n请仅返回有效的 JSON，不要额外的文本。',
+        },
+      ],
       temperature: request.temperature ?? this.config.temperature ?? 0.2,
       max_tokens: request.maxTokens ?? this.config.maxTokens,
       response_format: { type: 'json_object' },
@@ -130,7 +95,7 @@ export class OpenAICompatibleProvider extends LLMProvider {
       };
     } catch {
       throw new Error(
-        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
+        `Ollama 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
       );
     }
   }

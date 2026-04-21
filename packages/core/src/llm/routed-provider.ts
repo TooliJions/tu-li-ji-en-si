@@ -1,7 +1,18 @@
-import { LLMProvider, LLMConfig, LLMRequest, LLMResponse, LLMResponseWithJSON } from './provider';
+import {
+  LLMProvider,
+  LLMConfig,
+  LLMRequest,
+  LLMResponse,
+  LLMResponseWithJSON,
+  LLMStreamChunk,
+} from './provider';
 import { OpenAICompatibleProvider } from './provider';
+import { ClaudeProvider } from './claude-provider';
+import { OllamaProvider } from './ollama-provider';
 
 // ─── Routing Config ────────────────────────────────────────────
+
+export type ProviderType = 'openai' | 'claude' | 'ollama';
 
 export interface AgentRoute {
   agent: string;
@@ -13,6 +24,7 @@ export interface AgentRoute {
 
 export interface ProviderEntry {
   name: string;
+  type?: ProviderType;
   config: LLMConfig;
   status: 'connected' | 'disconnected' | 'degraded';
 }
@@ -45,11 +57,10 @@ const MAX_SCORE = 100;
 
 export class RoutedLLMProvider extends LLMProvider {
   private routing: RoutingConfig;
-  private providers: Map<string, OpenAICompatibleProvider>;
+  private providers: Map<string, LLMProvider>;
   private reputations: Map<string, ProviderReputation>;
 
   constructor(routing: RoutingConfig) {
-    // Use the first provider's config as the base (actual routing overrides per call)
     const firstProvider = routing.providers[0];
     super(firstProvider?.config ?? { apiKey: '', baseURL: '', model: '' });
 
@@ -57,9 +68,8 @@ export class RoutedLLMProvider extends LLMProvider {
     this.providers = new Map();
     this.reputations = new Map();
 
-    // Initialize provider instances and reputations
     for (const entry of routing.providers) {
-      this.providers.set(entry.name, new OpenAICompatibleProvider(entry.config));
+      this.providers.set(entry.name, this.createProvider(entry));
       this.reputations.set(entry.name, {
         name: entry.name,
         score: MAX_SCORE,
@@ -71,6 +81,34 @@ export class RoutedLLMProvider extends LLMProvider {
     }
   }
 
+  private createProvider(entry: ProviderEntry): LLMProvider {
+    const type: ProviderType = entry.type ?? 'openai';
+    switch (type) {
+      case 'claude':
+        return new ClaudeProvider(entry.config);
+      case 'ollama':
+        return new OllamaProvider(entry.config);
+      case 'openai':
+      default:
+        return new OpenAICompatibleProvider(entry.config);
+    }
+  }
+
+  /**
+   * Register a provider instance at runtime.
+   */
+  registerProvider(name: string, provider: LLMProvider): void {
+    this.providers.set(name, provider);
+    this.reputations.set(name, {
+      name,
+      score: MAX_SCORE,
+      failures: 0,
+      successes: 0,
+      lastFailure: null,
+      cooldownUntil: null,
+    });
+  }
+
   /**
    * Resolve the best provider for a given agent name.
    * Checks agent routing config → falls back to default provider.
@@ -78,7 +116,7 @@ export class RoutedLLMProvider extends LLMProvider {
    */
   resolveProvider(
     agentName?: string
-  ): { provider: OpenAICompatibleProvider; model: string; providerName: string } | null {
+  ): { provider: LLMProvider; model: string; providerName: string } | null {
     // Find agent-specific route
     const route = this.routing.agentRouting.find(
       (r) => r.agent.toLowerCase() === (agentName ?? '').toLowerCase()
@@ -216,7 +254,7 @@ export class RoutedLLMProvider extends LLMProvider {
       if (fallback) {
         const fallbackConfig = this.routing.providers.find((e) => e.name === fallback.providerName);
         if (fallbackConfig?.config) {
-          const fallbackProvider = new OpenAICompatibleProvider(fallbackConfig.config);
+          const fallbackProvider = this.createProvider(fallbackConfig);
           const result = await fallbackProvider.generateJSONWithMeta<T>(requestWithOverrides);
           this.recordSuccess(fallback.providerName);
           return result;
@@ -226,16 +264,60 @@ export class RoutedLLMProvider extends LLMProvider {
     }
   }
 
+  async *generateStream(request: LLMRequest): AsyncIterable<LLMStreamChunk> {
+    const resolved = this.resolveProvider(request.agentName);
+    if (!resolved) {
+      throw new Error('No available LLM provider — all providers are in cooldown');
+    }
+
+    const { provider, model } = resolved;
+    const agentConfig = this.getAgentConfig(request.agentName);
+
+    const requestWithOverrides: LLMRequest = {
+      ...request,
+      temperature: request.temperature ?? agentConfig.temperature,
+      maxTokens: request.maxTokens ?? agentConfig.maxTokens,
+    };
+
+    try {
+      const effectiveProvider = this.createProviderForModel(provider, model);
+      for await (const chunk of effectiveProvider.generateStream(requestWithOverrides)) {
+        yield chunk;
+      }
+      this.recordSuccess(resolved.providerName);
+    } catch (error) {
+      this.recordFailure(resolved.providerName);
+      const fallback = this.findFallbackProvider(resolved.providerName);
+      if (fallback) {
+        try {
+          const effectiveProvider = this.createProviderForModel(fallback.provider, model);
+          for await (const chunk of effectiveProvider.generateStream(requestWithOverrides)) {
+            yield chunk;
+          }
+          this.recordSuccess(fallback.providerName);
+        } catch {
+          this.recordFailure(fallback.providerName);
+        }
+      }
+      throw error;
+    }
+  }
+
   // ─── Internal Helpers ────────────────────────────────────────
 
-  private createProviderForModel(
-    baseProvider: OpenAICompatibleProvider,
-    model: string
-  ): OpenAICompatibleProvider {
-    // Reuse the base provider's config by looking up the routing entry
+  private createProviderForModel(baseProvider: LLMProvider, model: string): LLMProvider {
     const entry = this.routing.providers.find((e) => this.providers.get(e.name) === baseProvider);
     const baseConfig = entry?.config ?? this.config;
-    return new OpenAICompatibleProvider({ ...baseConfig, model });
+    const type: ProviderType = entry?.type ?? 'openai';
+    switch (type) {
+      case 'claude':
+        return new ClaudeProvider({ ...baseConfig, model });
+      case 'ollama':
+        return new OllamaProvider({ ...baseConfig, model });
+      case 'openai':
+      default:
+        return new OpenAICompatibleProvider({ ...baseConfig, model });
+    }
   }
 
   private isInCooldown(providerName: string): boolean {
@@ -268,7 +350,7 @@ export class RoutedLLMProvider extends LLMProvider {
 
   private findFallbackProvider(
     exclude?: string
-  ): { provider: OpenAICompatibleProvider; model: string; providerName: string } | null {
+  ): { provider: LLMProvider; model: string; providerName: string } | null {
     const available = this.routing.providers
       .filter(
         (e) => e.name !== exclude && e.status !== 'disconnected' && !this.isInCooldown(e.name)
