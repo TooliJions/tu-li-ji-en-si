@@ -76,7 +76,7 @@ test.describe('创作规划流程（PRD-010~015）', () => {
     await page.goto(`/writing-plan?bookId=${bookId}`);
 
     // 验证步骤导航存在
-    await expect(page.getByText('创作步骤')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: '创作规划' })).toBeVisible({ timeout: 5000 });
 
     // 验证至少有一个步骤
     await expect(page.getByText('灵感与设定')).toBeVisible();
@@ -124,10 +124,8 @@ test.describe('章节阅读器与回滚（PRD-063, PRD-092）', () => {
     const chapterLink = page.locator('a[href*="/chapter/"]').first();
     if (await chapterLink.isVisible({ timeout: 5000 })) {
       await chapterLink.click();
-      await page.waitForTimeout(2000);
-
-      // 验证不是 404
-      await expect(page).not.toHaveURL(/404|error/i);
+      // 验证导航到章节页面
+      await expect(page).toHaveURL(/\/book\/book-[^/]+\/chapter\/\d+/);
     }
   });
 

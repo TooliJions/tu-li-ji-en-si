@@ -233,13 +233,13 @@ export default function BookDetail() {
     <div className="space-y-6">
       {/* Header - single line */}
       <div className="mb-2">
-        <div className="text-xl font-semibold">
+        <h1 className="text-xl font-semibold">
           {book.title}
           <span className="text-gray-400 font-normal text-base ml-2">
             | {book.genre} | {book.chapterCount}/{book.targetChapterCount} 章 |{' '}
             {book.currentWords.toLocaleString()} 字
           </span>
-        </div>
+        </h1>
       </div>
 
       {/* Quick Actions */}

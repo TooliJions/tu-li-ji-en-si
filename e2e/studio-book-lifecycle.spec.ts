@@ -17,9 +17,9 @@ test.describe('书籍完整生命周期', () => {
     await page.getByRole('link', { name: '新建书籍' }).click();
     await expect(page.getByRole('heading', { name: '新建书籍' })).toBeVisible();
 
-    // 第一步：填写基本信息（题材使用 radio 按钮）
+    // 第一步：填写基本信息（题材使用 select 下拉框）
     await page.getByLabel('书名').fill(testBookTitle);
-    await page.getByRole('radio', { name: '玄幻' }).check();
+    await page.locator('#book-genre').selectOption('玄幻');
     await page.getByRole('button', { name: '下一步' }).click();
 
     // 第二步：创作设置

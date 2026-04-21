@@ -16,6 +16,7 @@ import DoctorView from '@/pages/doctor-view';
 import FanficInit from '@/pages/fanfic-init';
 import StyleManager from '@/pages/style-manager';
 import EmotionalArcs from '@/pages/emotional-arcs';
+import WritingPlan from '@/pages/writing-plan';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/doctor" element={<DoctorView />} />
         <Route path="/fanfic-init" element={<FanficInit />} />
         <Route path="/style-manager" element={<StyleManager />} />
+        <Route path="/writing-plan" element={<WritingPlan />} />
         <Route path="/book/:bookId/emotional-arcs" element={<EmotionalArcs />} />
       </Route>
     </Routes>

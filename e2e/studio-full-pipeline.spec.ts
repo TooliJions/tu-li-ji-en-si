@@ -20,9 +20,9 @@ test.describe('完整创作流程 E2E', () => {
     await page.getByRole('link', { name: '新建书籍' }).click();
     await expect(page.getByRole('heading', { name: '新建书籍' })).toBeVisible();
 
-    // 3. 填写基本信息（第一步）—— 题材使用 radio 按钮
+    // 3. 填写基本信息（第一步）—— 题材使用 select 下拉框
     await page.getByLabel('书名').fill(TEST_BOOK_TITLE);
-    await page.getByRole('radio', { name: '玄幻' }).check();
+    await page.locator('#book-genre').selectOption('玄幻');
     await page.getByRole('button', { name: '下一步' }).click();
 
     // 4. 填写创作设置（第二步）

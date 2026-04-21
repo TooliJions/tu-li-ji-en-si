@@ -25,8 +25,8 @@ test('studio main path stays reachable after creating a book', async ({ page }) 
 
   await page.getByRole('link', { name: '快速试写' }).click();
   await expect(page).toHaveURL(new RegExp(`/writing\\?bookId=${bookId}$`));
-  await expect(page.getByRole('heading', { name: /写作工作台/ })).toBeVisible();
-  await expect(page.getByText('记忆提取')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+  await expect(page.getByText('记忆透视')).toBeVisible();
 
   await page.goto(`/hooks?bookId=${bookId}`);
   await expect(page.getByRole('heading', { name: '伏笔管理' })).toBeVisible();
