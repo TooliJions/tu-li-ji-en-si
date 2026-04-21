@@ -97,7 +97,7 @@ describe('ChapterReader Page', () => {
     renderWithRouter();
 
     await waitFor(() => {
-      expect(screen.getByText('120 字')).toBeTruthy();
+      expect(screen.getByText(/120 字/)).toBeTruthy();
     });
   });
 
@@ -181,7 +181,7 @@ describe('ChapterReader Page', () => {
     fireEvent.click(screen.getByTitle('审计报告'));
 
     await waitFor(() => {
-      expect(screen.getByText('审计报告')).toBeTruthy();
+      expect(screen.getByText('审计报告', { selector: 'h2' })).toBeTruthy();
     });
     expect(screen.getAllByText('AI 痕迹').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('连贯性').length).toBeGreaterThanOrEqual(1);
@@ -271,7 +271,7 @@ describe('ChapterReader Page', () => {
     renderWithRouter();
 
     await waitFor(() => {
-      expect(screen.getByText('草稿')).toBeTruthy();
+      expect(screen.getByText(/草稿/)).toBeTruthy();
     });
   });
 

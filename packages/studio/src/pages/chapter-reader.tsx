@@ -526,7 +526,7 @@ export default function ChapterReader() {
                   运行审计
                 </button>
               </div>
-              {auditReport ? (
+              {auditReport?.tiers ? (
                 <div className="space-y-4">
                   {/* Overall status */}
                   <div className="flex items-center gap-2">

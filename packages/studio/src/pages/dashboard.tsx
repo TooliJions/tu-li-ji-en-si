@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, PenTool, TrendingUp, AlertCircle, Plus, Activity } from 'lucide-react';
-import { fetchBooks, fetchAiTrace } from '../lib/api';
+import { fetchBooks, fetchAiTrace, deleteBook } from '../lib/api';
 import BaselineChart from '../components/baseline-chart';
 
 interface Book {
@@ -35,6 +35,7 @@ export default function Dashboard() {
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -45,15 +46,21 @@ export default function Dashboard() {
         if (booksData.length > 0) {
           const activeBook = booksData.find((b: Book) => b.status === 'active') || booksData[0];
 
-          const [actRes, traceData] = await Promise.all([
-            fetch(`/api/books/${activeBook.id}/activity`),
-            fetchAiTrace(activeBook.id).catch(() => ({ trend: [], average: 0 })),
-          ]);
-
-          if (actRes.ok) {
-            const actData = await actRes.json();
-            setActivities(actData.data || []);
+          // Fetch activity separately — don't let it break the main flow
+          try {
+            const actRes = await fetch(`/api/books/${activeBook.id}/activity`);
+            if (actRes.ok) {
+              const actData = await actRes.json();
+              setActivities(actData.data || []);
+            }
+          } catch {
+            // Activity fetch failed — non-critical, dashboard still works
           }
+
+          const traceData = await fetchAiTrace(activeBook.id).catch(() => ({
+            trend: [],
+            average: 0,
+          }));
 
           // Map ai-trace trend to chart format (last 7 chapters)
           const last7 = (traceData.trend || []).slice(-7).map((t: any) => ({
@@ -76,6 +83,18 @@ export default function Dashboard() {
   const totalWords = books.reduce((sum, b) => sum + b.currentWords, 0);
   const activeBooks = books.filter((b) => b.status === 'active').length;
 
+  async function handleDeleteBook(bookId: string, e: React.MouseEvent) {
+    e.preventDefault(); // Don't navigate
+    e.stopPropagation();
+    setDeleteError(null);
+    try {
+      await deleteBook(bookId);
+      setBooks((prev) => prev.filter((b) => b.id !== bookId));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : '删除失败');
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -95,6 +114,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {deleteError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 p-4 bg-destructive/10 text-destructive rounded-md"
+        >
+          <AlertCircle size={18} />
+          <span>{deleteError}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">仪表盘</h1>
         <Link
@@ -135,37 +164,45 @@ export default function Dashboard() {
             ) : (
               <div className="divide-y">
                 {books.map((book) => (
-                  <Link
+                  <div
                     key={book.id}
-                    to={`/book/${book.id}`}
-                    className="block p-4 hover:bg-accent transition-colors"
+                    className="flex items-start justify-between group hover:bg-accent transition-colors"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium">{book.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {book.genre} · {book.chapterCount}/{book.targetChapterCount} 章
-                        </p>
+                    <Link to={`/book/${book.id}`} className="block p-4 flex-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium">{book.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {book.genre} · {book.chapterCount}/{book.targetChapterCount} 章
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">
+                            {book.currentWords.toLocaleString()} 字
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(book.updatedAt).toLocaleDateString('zh-CN')}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {book.currentWords.toLocaleString()} 字
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(book.updatedAt).toLocaleDateString('zh-CN')}
-                        </p>
+                      {/* Progress bar */}
+                      <div className="mt-2 h-1.5 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all"
+                          style={{
+                            width: `${Math.min((book.currentWords / book.targetWords) * 100, 100)}%`,
+                          }}
+                        />
                       </div>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="mt-2 h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{
-                          width: `${Math.min((book.currentWords / book.targetWords) * 100, 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </Link>
+                    </Link>
+                    <button
+                      className="p-4 text-muted-foreground opacity-0 group-hover:opacity-100 hover:!opacity-100 hover:text-destructive transition-all"
+                      title="删除书籍"
+                      onClick={(e) => handleDeleteBook(book.id, e)}
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

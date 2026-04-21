@@ -30,6 +30,19 @@ export default defineConfig({
             })
           );
           res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+          // SSE / streaming: pipe body directly to avoid undici text() crash
+          if (response.headers.get('content-type')?.includes('text/event-stream')) {
+            const reader = (response as any).body?.getReader();
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(value);
+              }
+              res.end();
+              return;
+            }
+          }
           res.end(await response.text());
         });
       },

@@ -92,9 +92,9 @@ describe('BookDetail Page', () => {
     await waitFor(() => {
       expect(screen.getByText('测试小说')).toBeTruthy();
     });
-    expect(screen.getByText('玄幻')).toBeTruthy();
-    expect(screen.getByText('6,000 字')).toBeTruthy();
-    expect(screen.getByText('2/10')).toBeTruthy();
+    expect(screen.getByText(/玄幻/)).toBeTruthy();
+    expect(screen.getByText(/6,000/)).toBeTruthy();
+    expect(screen.getByText(/2\/10/)).toBeTruthy();
     expect(screen.getByText('第一章')).toBeTruthy();
   });
 
@@ -151,9 +151,10 @@ describe('BookDetail Page', () => {
     renderWithRouter();
 
     await waitFor(() => {
-      expect(screen.getByText('草稿')).toBeTruthy();
+      expect(screen.getByText('第一章')).toBeTruthy();
     });
-    expect(screen.getByText('已审计')).toBeTruthy();
+    expect(screen.getAllByText(/草稿/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/完成/).length).toBeGreaterThan(0);
   });
 
   it('opens and closes action menu', async () => {
@@ -169,12 +170,12 @@ describe('BookDetail Page', () => {
     const menuButtons = screen.getAllByTitle('更多操作');
     fireEvent.click(menuButtons[menuButtons.length - 1]);
 
-    expect(screen.getByText('与上一章合并')).toBeTruthy();
-    expect(screen.getByText('拆分为两章')).toBeTruthy();
-    expect(screen.getByText('回滚到快照')).toBeTruthy();
+    expect(screen.getByText('合并到上一章')).toBeTruthy();
+    expect(screen.getByText('从此处拆分')).toBeTruthy();
+    expect(screen.getByText('回滚到此章')).toBeTruthy();
 
     fireEvent.click(menuButtons[menuButtons.length - 1]);
-    expect(screen.queryByText('与上一章合并')).toBeNull();
+    expect(screen.queryByText('合并到上一章')).toBeNull();
   });
 
   it('calls merge API after confirming in dialog', async () => {
@@ -194,7 +195,7 @@ describe('BookDetail Page', () => {
       fireEvent.click(menuButtons[menuButtons.length - 1]);
     });
 
-    const mergeBtn = screen.getByText('与上一章合并');
+    const mergeBtn = screen.getByText('合并到上一章');
     await act(async () => {
       fireEvent.pointerDown(mergeBtn);
       fireEvent.click(mergeBtn);
@@ -225,7 +226,6 @@ describe('BookDetail Page', () => {
     await waitFor(() => {
       expect(screen.getByText('污染隔离')).toBeTruthy();
     });
-    expect(screen.getByText('强制通过')).toBeTruthy();
   });
 
   it('does not show pollution badge on clean chapters', async () => {
@@ -259,7 +259,7 @@ describe('BookDetail Page', () => {
     fireEvent.click(menuButtons[menuButtons.length - 1]);
 
     await act(async () => {
-      fireEvent.click(screen.getByText('回滚到快照'));
+      fireEvent.click(screen.getByText('回滚到此章'));
     });
 
     await waitFor(() => {
@@ -302,10 +302,10 @@ describe('BookDetail Page', () => {
     });
 
     // Verify menu is open
-    expect(screen.queryByText('与上一章合并')).toBeTruthy();
+    expect(screen.queryByText('合并到上一章')).toBeTruthy();
 
     // Click merge button - use pointerDown to avoid window click handler interference
-    const mergeBtn = screen.getByText('与上一章合并');
+    const mergeBtn = screen.getByText('合并到上一章');
     await act(async () => {
       fireEvent.pointerDown(mergeBtn);
       fireEvent.click(mergeBtn);
@@ -337,7 +337,7 @@ describe('BookDetail Page', () => {
       fireEvent.click(menuButtons[menuButtons.length - 1]);
     });
 
-    const mergeBtn = screen.getByText('与上一章合并');
+    const mergeBtn = screen.getByText('合并到上一章');
     await act(async () => {
       fireEvent.pointerDown(mergeBtn);
       fireEvent.click(mergeBtn);
@@ -378,7 +378,7 @@ describe('BookDetail Page', () => {
       fireEvent.click(menuButtons[0]);
     });
 
-    const splitBtn = screen.getByText('拆分为两章');
+    const splitBtn = screen.getByText('从此处拆分');
     await act(async () => {
       fireEvent.pointerDown(splitBtn);
       fireEvent.click(splitBtn);

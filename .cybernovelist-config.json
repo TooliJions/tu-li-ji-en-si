@@ -1,0 +1,36 @@
+{
+  "defaultProvider": "DashScope",
+  "defaultModel": "qwen-turbo",
+  "agentRouting": [
+    {
+      "agent": "Writer",
+      "model": "qwen-plus",
+      "provider": "DashScope",
+      "temperature": 0.8
+    },
+    {
+      "agent": "Auditor",
+      "model": "qwen-turbo",
+      "provider": "DashScope",
+      "temperature": 0.2
+    },
+    {
+      "agent": "Planner",
+      "model": "qwen-turbo",
+      "provider": "DashScope",
+      "temperature": 0.7
+    }
+  ],
+  "providers": [
+    {
+      "name": "DashScope",
+      "status": "connected",
+      "apiKey": "",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    }
+  ],
+  "notifications": {
+    "telegramToken": "",
+    "chatId": ""
+  }
+}

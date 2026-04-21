@@ -16,7 +16,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 
-interface Book {
+interface SidebarBook {
   id: string;
   title: string;
   chapterCount: number;
@@ -24,28 +24,31 @@ interface Book {
   status: string;
 }
 
-async function fetchActiveBook(): Promise<Book | null> {
+export interface SidebarProps {
+  currentBook?: SidebarBook;
+}
+
+async function fetchActiveBook(): Promise<SidebarBook | null> {
   const res = await fetch('/api/books?status=active');
   if (!res.ok) return null;
   const data = await res.json();
-  const books = (data.data || []) as Book[];
+  const books = (data.data || []) as SidebarBook[];
   return books.length > 0 ? books[0] : null;
 }
 
 const mainNavItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { to: '/books', icon: BookOpen, label: '我的书籍' },
-  { to: '/writing-plan', icon: PenTool, label: '创作' },
-  { to: '/review', icon: FileCheck, label: '审阅' },
-  { to: '/export', icon: Package, label: '导出' },
+  { to: '/chapters', icon: BookOpen, label: '章节管理' },
+  { to: '/writing', icon: PenTool, label: '创作' },
+  { to: '/hooks', icon: GitBranch, label: '伏笔面板' },
+  { to: '/analytics', icon: BarChart3, label: '数据分析' },
 ];
 
 const secondaryNavItems = [
-  { to: '/topics', icon: Tags, label: '题材管理' },
-  { to: '/style', icon: Palette, label: '文风管理' },
+  { to: '/style-manager', icon: Palette, label: '文风管理' },
   { to: '/truth-files', icon: FolderCheck, label: '真相文件' },
-  { to: '/hooks', icon: GitBranch, label: '伏笔面板' },
-  { to: '/analytics', icon: BarChart3, label: '数据分析' },
+  { to: '/hooks/timeline', icon: GitBranch, label: '伏笔时间线' },
+  { to: '/doctor', icon: Stethoscope, label: '系统诊断' },
 ];
 
 const systemNavItems = [
@@ -78,14 +81,15 @@ function NavItem({
   );
 }
 
-export default function Sidebar() {
-  const [activeBook, setActiveBook] = useState<Book | null>(null);
+export default function Sidebar({ currentBook }: SidebarProps) {
+  const [activeBook, setActiveBook] = useState<SidebarBook | null>(currentBook ?? null);
 
   useEffect(() => {
+    if (currentBook) return; // Use prop if provided
     fetchActiveBook()
       .then(setActiveBook)
       .catch(() => {});
-  }, []);
+  }, [currentBook]);
 
   const progress =
     activeBook && activeBook.targetChapterCount > 0

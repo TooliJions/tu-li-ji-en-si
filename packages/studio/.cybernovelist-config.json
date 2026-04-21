@@ -1,0 +1,70 @@
+{
+  "defaultProvider": "DashScope",
+  "defaultModel": "qwen-turbo-2024-11-01",
+  "agentRouting": [
+    {
+      "agent": "Writer",
+      "model": "qwen-plus",
+      "provider": "DashScope",
+      "temperature": 0.8
+    },
+    {
+      "agent": "Auditor",
+      "model": "qwen-turbo",
+      "provider": "DashScope",
+      "temperature": 0.2
+    },
+    {
+      "agent": "Planner",
+      "model": "qwen-turbo",
+      "provider": "DashScope",
+      "temperature": 0.7
+    },
+    {
+      "agent": "ScenePolisher",
+      "model": "qwen3.6-plus",
+      "provider": "DashScope",
+      "temperature": 0.85
+    },
+    {
+      "agent": "AIGCDetector",
+      "model": "gpt-4o-mini",
+      "provider": "OpenAI",
+      "temperature": 0.1
+    },
+    {
+      "agent": "Reviser",
+      "model": "qwen3.6-plus",
+      "provider": "DashScope",
+      "temperature": 0.7
+    }
+  ],
+  "providers": [
+    {
+      "name": "DashScope",
+      "status": "connected",
+      "apiKey": "sk-078807a1fb8e4a81b10feb67864d4880",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    {
+      "name": "OpenAI",
+      "status": "disconnected",
+      "apiKey": "",
+      "baseUrl": "https://api.openai.com/v1"
+    },
+    {
+      "name": "Gemini",
+      "status": "disconnected",
+      "apiKey": "",
+      "baseUrl": "https://generativelanguage.googleapis.com"
+    }
+  ],
+  "notifications": {
+    "telegramToken": "",
+    "chatId": ""
+  },
+  "llm": {
+    "apiKey": "test-key",
+    "model": "test-model"
+  }
+}

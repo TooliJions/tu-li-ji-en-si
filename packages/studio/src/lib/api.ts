@@ -14,6 +14,13 @@ export async function fetchBooks(params?: { status?: string; genre?: string }) {
   return data.data || [];
 }
 
+export async function deleteBook(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('删除书籍失败');
+  const data = await res.json();
+  return data.data;
+}
+
 export async function fetchBook(bookId: string) {
   const res = await fetch(`/api/books/${bookId}`);
   if (!res.ok) throw new Error('书籍不存在');
@@ -107,7 +114,7 @@ export async function fetchMemoryPreview(bookId: string) {
 }
 
 export async function fetchAuditReport(bookId: string, chapterNumber: number) {
-  const res = await fetch(`/api/books/${bookId}/pipeline/audit-report/${chapterNumber}`);
+  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}/audit-report`);
   if (!res.ok) return null;
   const data = await res.json();
   return data.data;
@@ -125,7 +132,7 @@ export async function updateChapter(bookId: string, chapterNumber: number, conte
 }
 
 export async function runAudit(bookId: string, chapterNumber: number) {
-  const res = await fetch(`/api/books/${bookId}/pipeline/audit/${chapterNumber}`, {
+  const res = await fetch(`/api/books/${bookId}/chapters/${chapterNumber}/audit`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('审计失败');
@@ -582,6 +589,20 @@ export async function setPromptVersion(bookId: string, version: string) {
 export async function fetchPromptDiff(bookId: string, from: string, to: string) {
   const res = await fetch(`/api/books/${bookId}/prompts/diff?from=${from}&to=${to}`);
   if (!res.ok) throw new Error('获取提示词差异失败');
+  const data = await res.json();
+  return data.data;
+}
+
+// Export
+export type ExportFormat = 'markdown' | 'txt' | 'epub';
+
+export async function startExport(bookId: string, format: ExportFormat) {
+  const res = await fetch(`/api/books/${bookId}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format }),
+  });
+  if (!res.ok) throw new Error('启动导出失败');
   const data = await res.json();
   return data.data;
 }

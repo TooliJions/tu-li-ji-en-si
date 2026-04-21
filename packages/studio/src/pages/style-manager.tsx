@@ -32,6 +32,10 @@ export default function StyleManager() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!bookId) {
+      setLoading(false);
+      return;
+    }
     fetchBook(bookId)
       .then((book) => {
         setBookTitle(book.title);

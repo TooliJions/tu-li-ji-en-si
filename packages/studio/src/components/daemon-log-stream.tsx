@@ -11,9 +11,14 @@ export interface DaemonLogEntry {
 interface DaemonLogStreamProps {
   bookId: string;
   levelFilter: 'all' | 'info' | 'warn' | 'error';
+  searchQuery?: string;
 }
 
-export default function DaemonLogStream({ bookId, levelFilter }: DaemonLogStreamProps) {
+export default function DaemonLogStream({
+  bookId,
+  levelFilter,
+  searchQuery,
+}: DaemonLogStreamProps) {
   const [logs, setLogs] = useState<DaemonLogEntry[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -118,7 +123,11 @@ export default function DaemonLogStream({ bookId, levelFilter }: DaemonLogStream
     };
   }, [bookId, parseEvent]);
 
-  const filtered = logs.filter((l) => levelFilter === 'all' || l.level === levelFilter);
+  const filtered = logs.filter((l) => {
+    if (levelFilter !== 'all' && l.level !== levelFilter) return false;
+    if (searchQuery && !l.message.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div
