@@ -17,6 +17,11 @@ import FanficInit from '@/pages/fanfic-init';
 import StyleManager from '@/pages/style-manager';
 import EmotionalArcs from '@/pages/emotional-arcs';
 import WritingPlan from '@/pages/writing-plan';
+import ExportView from '@/pages/export-view';
+import ImportManager from '@/pages/import-manager';
+import LogViewerPage from '@/pages/log-viewer-page';
+import NaturalAgent from '@/pages/natural-agent';
+import PromptVersion from '@/pages/prompt-version';
 
 export default function App() {
   return (
@@ -39,6 +44,11 @@ export default function App() {
         <Route path="/style-manager" element={<StyleManager />} />
         <Route path="/writing-plan" element={<WritingPlan />} />
         <Route path="/book/:bookId/emotional-arcs" element={<EmotionalArcs />} />
+        <Route path="/export" element={<ExportView />} />
+        <Route path="/import" element={<ImportManager />} />
+        <Route path="/logs" element={<LogViewerPage />} />
+        <Route path="/natural-agent" element={<NaturalAgent />} />
+        <Route path="/prompts/:bookId" element={<PromptVersion />} />
       </Route>
     </Routes>
   );

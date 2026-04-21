@@ -14,6 +14,11 @@ import {
   Settings,
   Server,
   Stethoscope,
+  FileDown,
+  FileUp,
+  Terminal,
+  Bot,
+  FileCode,
 } from 'lucide-react';
 
 interface SidebarBook {
@@ -48,13 +53,17 @@ const secondaryNavItems = [
   { to: '/style-manager', icon: Palette, label: '文风管理' },
   { to: '/truth-files', icon: FolderCheck, label: '真相文件' },
   { to: '/hooks/timeline', icon: GitBranch, label: '伏笔时间线' },
-  { to: '/doctor', icon: Stethoscope, label: '系统诊断' },
+  { to: '/export', icon: FileDown, label: '导出' },
+  { to: '/import', icon: FileUp, label: '导入' },
+  { to: '/prompts/:bookId', icon: FileCode, label: '提示词版本' },
 ];
 
 const systemNavItems = [
   { to: '/config', icon: Settings, label: '配置' },
   { to: '/daemon', icon: Server, label: '守护进程' },
   { to: '/doctor', icon: Stethoscope, label: '诊断' },
+  { to: '/logs', icon: Terminal, label: '日志' },
+  { to: '/natural-agent', icon: Bot, label: '自然Agent' },
 ];
 
 function NavItem({
