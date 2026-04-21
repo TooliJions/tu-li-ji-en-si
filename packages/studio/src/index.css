@@ -60,6 +60,39 @@ body {
   }
 }
 
+/* PRD-056b: Thundering herd parabolic motion */
+@keyframes thunder-parab {
+  0% {
+    transform: translate(0, 0) scale(0.3);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translate(0, -20px) scale(0.8);
+  }
+  50% {
+    transform: translate(var(--parab-mid-x, 100px), var(--parab-mid-y, -60px)) scale(1.1);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+    transform: translate(var(--parab-end-x, 200px), var(--parab-end-y, 10px)) scale(0.9);
+  }
+  100% {
+    transform: translate(var(--parab-end-x, 200px), var(--parab-end-y, 10px)) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes thunder-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(234, 179, 8, 0.3); }
+  50% { box-shadow: 0 0 16px rgba(234, 179, 8, 0.8); }
+}
+
+.thunder-card {
+  animation: thunder-parab 600ms ease-out forwards, thunder-glow 1.5s ease-in-out infinite;
+}
+
 .shatter-icon {
   animation: shatter-icon 800ms ease-out forwards;
 }
