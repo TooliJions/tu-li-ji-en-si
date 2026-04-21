@@ -14,7 +14,7 @@
 - [x] **Phase 6: 质量层** — 33 维审计、AI 痕迹检测、修复策略、降级路径
 - [x] **Phase 6 补: 守护进程** — Daemon 调度、SmartInterval、QuotaGuard
 - [ ] **Phase 7: Studio 工作台** — Web UI、Hono API、SSE 推送、核心页面
-- [ ] **Phase 8: 导出与通知** — EPUB/TXT 导出、路径安全、通知推送
+- [x] **Phase 8: 导出与通知** — EPUB/TXT 导出、路径安全、通知推送
 - [ ] **Phase 9: 异常交互** — 状态脱节翻译、污染隔离视觉、时间回溯拨盘
 - [ ] **Phase 10: 测试与优化** — 单元测试、E2E 测试、性能优化
 
@@ -164,7 +164,7 @@
 | 6. 质量层 | 1/1 | Complete | 2026-04-21 |
 | 6 补. 守护进程 | 1/1 | Complete | 2026-04-21 |
 | 7. Studio 工作台 | 0/4 | Not started | - |
-| 8. 导出与通知 | 0/3 | Not started | - |
+| 8. 导出与通知 | 1/1 | Complete | 2026-04-21 |
 | 9. 异常交互 | 0/3 | Not started | - |
 | 10. 测试与优化 | 0/3 | Not started | - |
 
