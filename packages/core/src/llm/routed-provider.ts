@@ -9,10 +9,12 @@ import {
 import { OpenAICompatibleProvider } from './provider';
 import { ClaudeProvider } from './claude-provider';
 import { OllamaProvider } from './ollama-provider';
+import { DashScopeProvider } from './dashscope-provider';
+import { GeminiProvider } from './gemini-provider';
 
 // ─── Routing Config ────────────────────────────────────────────
 
-export type ProviderType = 'openai' | 'claude' | 'ollama';
+export type ProviderType = 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini';
 
 export interface AgentRoute {
   agent: string;
@@ -88,6 +90,10 @@ export class RoutedLLMProvider extends LLMProvider {
         return new ClaudeProvider(entry.config);
       case 'ollama':
         return new OllamaProvider(entry.config);
+      case 'dashscope':
+        return new DashScopeProvider(entry.config);
+      case 'gemini':
+        return new GeminiProvider(entry.config);
       case 'openai':
       default:
         return new OpenAICompatibleProvider(entry.config);
@@ -314,6 +320,10 @@ export class RoutedLLMProvider extends LLMProvider {
         return new ClaudeProvider({ ...baseConfig, model });
       case 'ollama':
         return new OllamaProvider({ ...baseConfig, model });
+      case 'dashscope':
+        return new DashScopeProvider({ ...baseConfig, model });
+      case 'gemini':
+        return new GeminiProvider({ ...baseConfig, model });
       case 'openai':
       default:
         return new OpenAICompatibleProvider({ ...baseConfig, model });

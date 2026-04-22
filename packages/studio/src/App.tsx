@@ -23,6 +23,9 @@ import ImportManager from '@/pages/import-manager';
 import LogViewerPage from '@/pages/log-viewer-page';
 import NaturalAgent from '@/pages/natural-agent';
 import PromptVersion from '@/pages/prompt-version';
+import HookMinimapPage from '@/pages/hook-minimap-page';
+import HookMagnifierPage from '@/pages/hook-magnifier-page';
+import ThunderAnimPage from '@/pages/thunder-anim-page';
 
 export default function App() {
   return (
@@ -37,6 +40,9 @@ export default function App() {
         <Route path="/review" element={<ChaptersPage />} />
         <Route path="/hooks" element={<HookPanel />} />
         <Route path="/hooks/timeline" element={<HookTimelinePage />} />
+        <Route path="/hooks/minimap" element={<HookMinimapPage />} />
+        <Route path="/hooks/magnifier" element={<HookMagnifierPage />} />
+        <Route path="/hooks/thunder" element={<ThunderAnimPage />} />
         <Route path="/daemon" element={<DaemonControl />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/truth-files" element={<TruthFiles />} />

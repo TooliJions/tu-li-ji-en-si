@@ -9,6 +9,9 @@ import type { AgentResult } from '../agents/base';
 import type { ChapterIndexEntry } from '../models/chapter';
 import type { Delta, Manifest } from '../models/state';
 import { TelemetryLogger, type TelemetryChannel } from '../telemetry/logger';
+import { RevisionLoop, type RevisionResult as LoopRevisionResult } from './revision-loop';
+import { ChapterRestructurer } from './restructurer';
+import type { MergeChaptersInput, SplitChapterInput, RestructureResult } from './restructurer';
 
 // ─── Configuration ──────────────────────────────────────────────
 
@@ -96,6 +99,42 @@ export interface ChapterResult {
   };
   persisted?: boolean;
 }
+
+export interface AuditDraftInput {
+  bookId: string;
+  chapterNumber: number;
+  content: string;
+  genre: string;
+}
+
+/** 审计结果条目（runner 内部使用，避免与 models/quality.ts 中的 Zod 推断类型冲突） */
+export interface RunnerAuditIssue {
+  severity: 'blocker' | 'warning' | 'suggestion';
+  dimension: string;
+  description: string;
+}
+
+export interface AuditResult {
+  success: boolean;
+  bookId: string;
+  chapterNumber: number;
+  overallScore: number;
+  overallStatus: 'pass' | 'warning' | 'fail';
+  issues: RunnerAuditIssue[];
+  summary: string;
+  aiTraceScore?: number;
+}
+
+export interface ReviseDraftInput {
+  bookId: string;
+  chapterNumber: number;
+  content: string;
+  genre: string;
+  auditIssues?: RunnerAuditIssue[];
+}
+
+// 复用 restructurer.ts 中已定义的类型，避免导出冲突
+export { MergeChaptersInput, SplitChapterInput, RestructureResult } from './restructurer';
 
 // ─── PipelineRunner ─────────────────────────────────────────────
 
@@ -643,6 +682,257 @@ export class PipelineRunner {
    */
   async writeNextChapter(input: WriteNextChapterInput): Promise<ChapterResult> {
     return this.composeChapter(input);
+  }
+
+  // ── auditDraft ────────────────────────────────────────────────
+
+  /**
+   * 连续性审计：33 维审计 + 9 类 AI 检测。
+   * 独立方法，供外部直接调用或与 reviseDraft 组合使用。
+   */
+  async auditDraft(input: AuditDraftInput): Promise<AuditResult> {
+    try {
+      // 33 维连续性审计
+      const auditReport = await this.#runContinuityAudit(
+        input.content,
+        input.bookId,
+        input.chapterNumber,
+        input.genre
+      );
+
+      // 9 类 AI 检测
+      const aiTrace = await this.#runAIDetection(input.content, input.genre);
+
+      // 合并评分
+      const overallScore = Math.round((auditReport.overallScore + (1 - aiTrace) * 100) / 2);
+      const overallStatus = overallScore >= 80 ? 'pass' : overallScore >= 60 ? 'warning' : 'fail';
+
+      return {
+        success: true,
+        bookId: input.bookId,
+        chapterNumber: input.chapterNumber,
+        overallScore,
+        overallStatus,
+        issues: auditReport.issues,
+        summary: auditReport.summary,
+        aiTraceScore: aiTrace,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        bookId: input.bookId,
+        chapterNumber: input.chapterNumber,
+        overallScore: 0,
+        overallStatus: 'fail',
+        issues: [],
+        summary: `审计失败: ${message}`,
+      };
+    }
+  }
+
+  // ── reviseDraft ───────────────────────────────────────────────
+
+  /**
+   * 按审计结果修订章节：调用 RevisionLoop，含 maxRevisionRetries 和降级路径。
+   */
+  async reviseDraft(input: ReviseDraftInput): Promise<ChapterResult> {
+    try {
+      const loop = new RevisionLoop({
+        provider: this.provider,
+        maxRevisionRetries: this.maxRevisionRetries,
+        fallbackAction: this.fallbackAction,
+      });
+
+      const result = await loop.run({
+        content: input.content,
+        bookId: input.bookId,
+        chapterNumber: input.chapterNumber,
+        genre: input.genre,
+      });
+
+      const success = result.action === 'accepted';
+      const warning =
+        result.action === 'accepted_with_warnings'
+          ? `修订后仍存在问题，已降级接受: ${result.warnings.join('; ')}`
+          : undefined;
+      const warningCode =
+        result.action === 'accepted_with_warnings' ? 'accept_with_warnings' : undefined;
+
+      return {
+        success,
+        bookId: input.bookId,
+        chapterNumber: input.chapterNumber,
+        content: result.content,
+        status: 'final',
+        warning,
+        warningCode,
+        error: result.action === 'paused' ? '修订触发降级暂停，需要人工介入' : undefined,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        bookId: input.bookId,
+        chapterNumber: input.chapterNumber,
+        error: `修订失败: ${message}`,
+      };
+    }
+  }
+
+  // ── mergeChapters / splitChapter ──────────────────────────────
+
+  /**
+   * 合并两个相邻章节：委托给 ChapterRestructurer。
+   */
+  async mergeChapters(input: MergeChaptersInput): Promise<RestructureResult> {
+    try {
+      const restructurer = new ChapterRestructurer({
+        rootDir: this.stateManager.getBookPath(input.bookId).replace(/[^/\\]+$/, ''),
+        provider: this.provider,
+      });
+      return restructurer.mergeChapters(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        operation: 'merge',
+        bookId: input.bookId,
+        resultChapterNumber: input.fromChapter,
+        error: `合并章节失败: ${message}`,
+      };
+    }
+  }
+
+  /**
+   * 拆分章节：委托给 ChapterRestructurer。
+   */
+  async splitChapter(input: SplitChapterInput): Promise<RestructureResult> {
+    try {
+      const restructurer = new ChapterRestructurer({
+        rootDir: this.stateManager.getBookPath(input.bookId).replace(/[^/\\]+$/, ''),
+        provider: this.provider,
+      });
+      return restructurer.splitChapter(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        operation: 'split',
+        bookId: input.bookId,
+        resultChapterNumber: input.chapter,
+        error: `拆分章节失败: ${message}`,
+      };
+    }
+  }
+
+  // ── Internal: Audit Helpers ───────────────────────────────────
+
+  /**
+   * 33 维连续性审计：通过 LLM 对角色一致性、时间线、伏笔推进等维度评分。
+   */
+  async #runContinuityAudit(
+    content: string,
+    bookId: string,
+    chapterNumber: number,
+    genre: string
+  ): Promise<{
+    overallScore: number;
+    overallStatus: string;
+    issues: RunnerAuditIssue[];
+    summary: string;
+  }> {
+    const manifest = this.stateStore.loadManifest(bookId);
+
+    const prompt = `你是一位专业的网络小说质量审计师。请对以下章节进行 33 维连续性审计。
+
+## 章节信息
+- 章节: 第 ${chapterNumber} 章
+- 题材: ${genre}
+
+## 角色设定
+${manifest.characters.map((c) => `- ${c.name}(${c.role}): ${c.traits.join('、')}`).join('\n') || '无角色数据'}
+
+## 活跃伏笔
+${
+  manifest.hooks
+    .filter((h) => ['open', 'progressing'].includes(h.status))
+    .map((h) => `- [${h.priority}] ${h.description}`)
+    .join('\n') || '无活跃伏笔'
+}
+
+## 世界规则
+${manifest.worldRules.map((r) => `- [${r.category}] ${r.rule}`).join('\n') || '无世界规则'}
+
+## 章节内容（前 5000 字）
+${content.slice(0, 5000)}
+
+请以 JSON 格式输出审计报告：
+{
+  "overallScore": 0-100的数字,
+  "overallStatus": "pass|warning|fail",
+  "issues": [{"severity": "blocker|warning|suggestion", "dimension": "审计维度", "description": "问题描述"}],
+  "summary": "一句话总结"
+}`;
+
+    try {
+      const report = await this.provider.generateJSON<{
+        overallScore: number;
+        overallStatus: string;
+        issues: Array<{ severity: string; dimension: string; description: string }>;
+        summary: string;
+      }>({ prompt });
+
+      return {
+        overallScore: report.overallScore ?? 70,
+        overallStatus: report.overallStatus ?? 'warning',
+        issues: (report.issues ?? []).map((i) => ({
+          severity: (i.severity as RunnerAuditIssue['severity']) || 'warning',
+          dimension: i.dimension || 'general',
+          description: i.description,
+        })),
+        summary: report.summary || '审计完成',
+      };
+    } catch {
+      return {
+        overallScore: 70,
+        overallStatus: 'warning',
+        issues: [],
+        summary: '审计调用失败，使用默认评分',
+      };
+    }
+  }
+
+  /**
+   * 9 类 AI 检测：AI 套话、句式单调、元叙事、意象重复等。
+   * 返回 AI 痕迹分数（0-1，越低越好）。
+   */
+  async #runAIDetection(content: string, _genre: string): Promise<number> {
+    const prompt = `你是一位 AI 文本检测专家。请检测以下文本中的人工智能生成痕迹。
+
+## 检测维度
+1. AI 套话模式（"不可否认"、"值得注意的是"等）
+2. 句式单调（句子长度/结构过于一致）
+3. 元叙事（作者直接介入评论）
+4. 意象重复（相同意象反复出现）
+5. 语义重复（同义反复）
+6. 逻辑跳跃（缺乏过渡）
+7. 情感虚假（情感描写不自然）
+8. 描述空洞（缺乏具体细节）
+9. 过渡生硬（场景切换不自然）
+
+## 待检测文本
+${content.slice(0, 5000)}
+
+请返回 0-1 之间的数字表示 AI 痕迹程度（0=完全自然，1=明显 AI 生成）。只返回数字，不要其他内容。`;
+
+    try {
+      const result = await this.provider.generate({ prompt });
+      const score = parseFloat(result.text.trim());
+      return Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0.15;
+    } catch {
+      return 0.15;
+    }
   }
 
   // ── Internal: Telemetry ───────────────────────────────────────

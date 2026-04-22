@@ -5,6 +5,8 @@ export * from './llm/provider';
 export * from './llm/routed-provider';
 export * from './llm/claude-provider';
 export * from './llm/ollama-provider';
+export * from './llm/dashscope-provider';
+export * from './llm/gemini-provider';
 export * from './models/schemas';
 export * from './state/manager';
 export * from './state/runtime-store';

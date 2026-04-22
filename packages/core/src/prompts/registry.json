@@ -10,5 +10,25 @@
       "createdAt": "2025-06-01T00:00:00.000Z",
       "description": "v2 版本：引入 33 维审计、9 类 AI 检测、伏笔治理上下文"
     }
-  }
+  },
+  "agents": [
+    "outline-planner",
+    "character-designer",
+    "chapter-planner",
+    "chapter-executor",
+    "context-card",
+    "scene-polisher",
+    "style-refiner",
+    "intent-director",
+    "memory-extractor",
+    "quality-reviewer",
+    "fact-checker",
+    "entity-auditor",
+    "style-auditor",
+    "title-voice-auditor",
+    "compliance-reviewer",
+    "surgical-rewriter",
+    "hook-auditor",
+    "fatigue-analyzer"
+  ]
 }

@@ -216,11 +216,11 @@ async function buildStoryBootstrap(bookId: string, chapterNumber: number) {
 
   const characterDesign = characterResult.data as CharacterDesignResult;
   const characterNames = characterDesign.characters.map((character) => character.name);
-  const openHooks: Hook[] = dedupeByKey(
+  const openHooks: Hook[] = dedupeByKey<Hook>(
     (worldBootstrap.hooks ?? []).map((description, index) => ({
       id: `hook-bootstrap-${index + 1}`,
       description,
-      type: 'plot',
+      type: 'plot' as const,
       status: 'open' as const,
       priority: index === 0 ? ('major' as const) : ('minor' as const),
       plantedChapter: chapterNumber,
@@ -266,24 +266,25 @@ async function buildStoryBootstrap(bookId: string, chapterNumber: number) {
     [
       ...manifest.hooks,
       ...openHooks,
-      ...chapterPlan.plan.hooks.map((hook, index) => ({
+      ...(chapterPlan.plan.hooks.map((hook, index) => ({
         id: `hook-plan-${index + 1}-${randomUUID().slice(0, 6)}`,
         description: hook.description,
         type: hook.type || 'plot',
         status: 'open' as const,
-        priority:
-          hook.priority === 'critical' || hook.priority === 'major' || hook.priority === 'minor'
-            ? hook.priority
-            : 'major',
+        priority: (hook.priority === 'critical' ||
+        hook.priority === 'major' ||
+        hook.priority === 'minor'
+          ? hook.priority
+          : 'major') as Hook['priority'],
         plantedChapter: chapterNumber,
         relatedCharacters: chapterPlan.plan.characters,
         relatedChapters: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      })),
+      })) as Hook[]),
     ],
     (hook) => hook.description
-  );
+  ) as Hook[];
 
   const nextManifest = {
     ...manifest,

@@ -79,24 +79,11 @@ export class StateManager {
 
   /**
    * 获取书籍排他锁。
-   * 使用 open("wx") 原子创建 .lock 文件，若已存在则检查是否为陈旧锁并清理。
+   * 使用 fs.openSync("wx") 原子创建 .lock 文件。
+   * 仅在 EEXIST 时检查陈旧锁并清理，然后重试。
    */
   acquireBookLock(bookId: string, operation: string): BookLock | null {
     const lockPath = this.getBookPath(bookId, '.lock');
-
-    // 检查陈旧锁逻辑
-    if (fs.existsSync(lockPath)) {
-      try {
-        const content = fs.readFileSync(lockPath, 'utf-8');
-        const lockData = JSON.parse(content) as BookLock;
-        if (lockData.pid && !this.isProcessRunning(lockData.pid)) {
-          fs.unlinkSync(lockPath);
-        }
-      } catch (err) {
-        // 如果锁文件损坏，也进行清理
-        fs.unlinkSync(lockPath);
-      }
-    }
 
     const lockInfo: BookLock = {
       bookId,
@@ -105,17 +92,40 @@ export class StateManager {
       operation,
     };
 
-    try {
-      // "wx" = exclusive create，文件已存在时抛出 EEXIST
+    const tryAcquire = (): BookLock => {
       const fd = fs.openSync(lockPath, 'wx');
       fs.writeFileSync(fd, JSON.stringify(lockInfo, null, 2));
       fs.closeSync(fd);
       return lockInfo;
+    };
+
+    try {
+      return tryAcquire();
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw new Error(`Book "${bookId}" is already locked by another process`);
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw err;
       }
-      throw err;
+
+      // 锁已存在，检查是否为陈旧锁
+      try {
+        const content = fs.readFileSync(lockPath, 'utf-8');
+        const existingLock = JSON.parse(content) as BookLock;
+        if (existingLock.pid && !this.isProcessRunning(existingLock.pid)) {
+          // 进程已不存在，清理陈旧锁并重试
+          fs.unlinkSync(lockPath);
+          return tryAcquire();
+        }
+      } catch {
+        // 锁文件损坏，清理并重试
+        try {
+          fs.unlinkSync(lockPath);
+          return tryAcquire();
+        } catch {
+          // 清理失败，说明有活跃锁
+        }
+      }
+
+      throw new Error(`Book "${bookId}" is already locked by another process`);
     }
   }
 
