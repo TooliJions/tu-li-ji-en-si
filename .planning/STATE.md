@@ -23,11 +23,18 @@ Last activity: 2026-04-21 — sidebar test fix + all untracked files committed
 - Core packages: ~24 agents (12704 lines), 10 pipeline files (8444 lines), 10 governance files (6405 lines), 10 quality files (6927 lines), 4 daemon files (2011 lines), 5 export files (1508 lines)
 - Studio packages: 43 pages + 36 components + 14 API routes (73+ files, ~27724 lines)
 
+## Pending Todos
+
+1. **修复 DeterministicProvider 硬编码模板无视用户灵感** (area: api)
+   - 文件: `packages/studio/src/api/core-bridge.ts:152-280`
+   - 硬编码"校园竞赛"模板覆盖所有题材，用户灵感被完全忽略
+
 ## Remaining Work
 
 - [x] Fix 2 failing Studio tests (sidebar.test.tsx — fixed, aligned with actual sidebar nav items)
 - [x] Commit untracked files (Dockerfile, E2E specs, new components/pages, CONTEXT files)
 - [ ] E2E test execution verification (5 specs committed, not yet run against live server)
+- [ ] Fix DeterministicProvider hardcoded template (see Pending Todos #1)
 
 ## Project Reference
 
