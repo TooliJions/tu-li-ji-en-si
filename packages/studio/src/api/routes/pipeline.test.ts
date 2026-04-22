@@ -514,6 +514,16 @@ describe('Pipeline Route', () => {
       expect(manifest.characters.length).toBeGreaterThan(0);
       expect(manifest.characters.some((character) => Boolean(character.arc))).toBe(true);
       expect(manifest.hooks.length).toBeGreaterThan(0);
+
+      const persistedPlan = manifest.chapterPlans['1'];
+      expect(persistedPlan).toBeTruthy();
+      expect(persistedPlan.worldRules.length).toBeGreaterThan(0);
+      expect(persistedPlan.keyEvents.length).toBeGreaterThanOrEqual(3);
+      expect(
+        persistedPlan.characters.every((name) =>
+          manifest.characters.some((character) => character.name === name)
+        )
+      ).toBe(true);
     });
 
     it.skip('persists a planning brief so downstream write-next consumes the generated outline and growth arc', async () => {

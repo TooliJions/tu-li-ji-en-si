@@ -9,7 +9,10 @@ const getPromptSchema = z.object({
   name: z.string(),
   version: z.enum(['v1', 'v2', 'latest']).optional(),
 });
-const diffSchema = z.object({ from: z.enum(['v1', 'v2']), to: z.enum(['v1', 'v2']) });
+const diffSchema = z.object({
+  from: z.enum(['v1', 'v2', 'latest']),
+  to: z.enum(['v1', 'v2', 'latest']),
+});
 
 function resolvePromptsDir(): string {
   const cwd = process.cwd();
@@ -122,20 +125,6 @@ export function createPromptsRouter(): Hono {
     });
   });
 
-  // GET /api/books/:bookId/prompts/:name
-  router.get('/:name', (c) => {
-    const name = decodeURIComponent(c.req.param('name'));
-    const version = c.req.query('version') || 'latest';
-    const registry = getOrCreateRegistry();
-
-    try {
-      const template = readPromptFile(registry, name, version);
-      return c.json({ data: template });
-    } catch {
-      return c.json({ error: { code: 'PROMPT_NOT_FOUND', message: '提示词不存在' } }, 404);
-    }
-  });
-
   // POST /api/books/:bookId/prompts/set
   router.post('/set', async (c) => {
     const body = await c.req.json().catch(() => ({}));
@@ -194,6 +183,20 @@ export function createPromptsRouter(): Hono {
     return c.json({
       data: { from: result.data.from, to: result.data.to, diffs, diff: mergedDiff },
     });
+  });
+
+  // GET /api/books/:bookId/prompts/:name
+  router.get('/:name', (c) => {
+    const name = decodeURIComponent(c.req.param('name'));
+    const version = c.req.query('version') || 'latest';
+    const registry = getOrCreateRegistry();
+
+    try {
+      const template = readPromptFile(registry, name, version);
+      return c.json({ data: template });
+    } catch {
+      return c.json({ error: { code: 'PROMPT_NOT_FOUND', message: '提示词不存在' } }, 404);
+    }
   });
 
   return router;

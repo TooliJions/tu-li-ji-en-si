@@ -28,6 +28,8 @@ export interface WakeResult {
   totalCandidates: number;
   thunderingHerd?: boolean;
   notification?: string | null;
+  /** 状态变更指令列表，调用者负责应用到实际 hook 对象 */
+  statusChanges: Array<{ hookId: string; newStatus: string; updatedAt: string }>;
 }
 
 export interface WakeDeferredResult {
@@ -200,22 +202,31 @@ export class HookAgenda {
     }));
 
     const smoothingResult = this.smoothing.processWakes(wakeCandidates, currentChapter);
-
-    // 4. Apply state changes to hooks
     const wokenIds = new Set(smoothingResult.woken.map((w) => w.hookId));
+
+    // 4. Build status change instructions (do NOT mutate hooks directly)
+    const statusChanges: WakeResult['statusChanges'] = [];
+    const now = new Date().toISOString();
+
     for (const hook of hooks) {
       if (wokenIds.has(hook.id)) {
-        hook.status = 'open';
-        hook.updatedAt = new Date().toISOString();
+        statusChanges.push({ hookId: hook.id, newStatus: 'open', updatedAt: now });
       }
-      // Deferred hooks already have wakeAtChapter registered in smoothing
     }
 
     // 5. Handle due deferred hooks (from previous chapters)
     for (const hook of hooks) {
       if (dueIds.has(hook.id) && hook.status === 'deferred') {
-        hook.status = 'open';
-        hook.updatedAt = new Date().toISOString();
+        statusChanges.push({ hookId: hook.id, newStatus: 'open', updatedAt: now });
+      }
+    }
+
+    // Apply status changes to hooks (preserving existing behavior for backward compatibility)
+    for (const change of statusChanges) {
+      const hook = hooks.find((h) => h.id === change.hookId);
+      if (hook) {
+        hook.status = change.newStatus as Hook['status'];
+        hook.updatedAt = change.updatedAt;
       }
     }
 
@@ -225,6 +236,7 @@ export class HookAgenda {
       totalCandidates: smoothingResult.totalCandidates,
       thunderingHerd: smoothingResult.thunderingHerd,
       notification: smoothingResult.notification,
+      statusChanges,
     };
   }
 

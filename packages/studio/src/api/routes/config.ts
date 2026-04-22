@@ -34,7 +34,9 @@ const defaultConfig: ConfigState = {
   agentRouting: [
     { agent: 'Writer', model: 'qwen3.6-plus', provider: 'DashScope', temperature: 0.8 },
     { agent: 'Auditor', model: 'gpt-4o', provider: 'OpenAI', temperature: 0.2 },
+    { agent: 'Planner', model: 'qwen3.6-plus', provider: 'DashScope', temperature: 0.7 },
   ],
+
   providers: [
     {
       name: 'DashScope',

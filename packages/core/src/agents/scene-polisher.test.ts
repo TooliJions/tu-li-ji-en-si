@@ -90,7 +90,7 @@ describe('ScenePolisher', () => {
       });
 
       const data = result.data as ScenePolishOutput;
-      expect(data.originalWordCount).toBe(validInput.draftContent.length);
+      expect(data.originalWordCount).toBe(13);
     });
   });
 

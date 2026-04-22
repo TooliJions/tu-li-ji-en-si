@@ -11,16 +11,15 @@ describe('InspirationShuffle', () => {
 
   it('renders three rewrite options', () => {
     render(<InspirationShuffle options={mockOptions} onSelect={() => {}} />);
-    expect(screen.getByText('灵感洗牌')).toBeTruthy();
+    expect(screen.getByText('风格改写')).toBeTruthy();
     expect(
       screen.getAllByRole('button').filter((b) => b.textContent?.includes('采用')).length
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows scores for each option', () => {
+  it('shows word counts for each option', () => {
     render(<InspirationShuffle options={mockOptions} onSelect={() => {}} />);
-    expect(screen.getByText(/85%/)).toBeTruthy();
-    expect(screen.getByText(/72%/)).toBeTruthy();
+    expect(screen.getByText(/字数:/)).toBeTruthy();
   });
 
   it('selects an option', async () => {

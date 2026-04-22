@@ -85,8 +85,13 @@ export class ProjectionRenderer {
         const roleLabel = CHARACTER_ROLE_LABELS[char.role] ?? char.role;
         lines.push(`### ${char.name} [${roleLabel}]`);
         lines.push('');
-        if (char.traits.length > 0) {
-          lines.push(`- **特征**: ${char.traits.join('、')}`);
+        const traits = Array.isArray(char.traits)
+          ? char.traits
+          : typeof char.traits === 'string'
+            ? [char.traits]
+            : [];
+        if (traits.length > 0) {
+          lines.push(`- **特征**: ${traits.join('、')}`);
         }
         if (char.arc) {
           lines.push(`- **角色弧光**: ${char.arc}`);
@@ -94,9 +99,15 @@ export class ProjectionRenderer {
         if (char.firstAppearance) {
           lines.push(`- **首次登场**: 第 ${char.firstAppearance} 章`);
         }
-        if (Object.keys(char.relationships).length > 0) {
+        const relationships =
+          typeof char.relationships === 'object' &&
+          char.relationships !== null &&
+          !Array.isArray(char.relationships)
+            ? char.relationships
+            : {};
+        if (Object.keys(relationships).length > 0) {
           lines.push(`- **关系**:`);
-          for (const [targetId, desc] of Object.entries(char.relationships)) {
+          for (const [targetId, desc] of Object.entries(relationships)) {
             lines.push(`  - ${targetId}: ${desc}`);
           }
         }
@@ -320,10 +331,21 @@ export class ProjectionRenderer {
       lines.push(`## ${character.name}`);
       lines.push('');
       lines.push(`- **角色类型**: ${CHARACTER_ROLE_LABELS[character.role] ?? character.role}`);
-      lines.push(`- **特征**: ${character.traits.length > 0 ? character.traits.join('、') : '待补充'}`);
-      if (Object.keys(character.relationships).length > 0) {
+      const traits = Array.isArray(character.traits)
+        ? character.traits
+        : typeof character.traits === 'string'
+          ? [character.traits]
+          : [];
+      lines.push(`- **特征**: ${traits.length > 0 ? traits.join('、') : '待补充'}`);
+      const relationships =
+        typeof character.relationships === 'object' &&
+        character.relationships !== null &&
+        !Array.isArray(character.relationships)
+          ? character.relationships
+          : {};
+      if (Object.keys(relationships).length > 0) {
         lines.push('- **关系矩阵**:');
-        for (const [targetId, description] of Object.entries(character.relationships)) {
+        for (const [targetId, description] of Object.entries(relationships)) {
           lines.push(`  - ${targetId}: ${description}`);
         }
       } else {

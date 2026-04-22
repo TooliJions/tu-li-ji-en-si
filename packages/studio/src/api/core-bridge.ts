@@ -31,6 +31,7 @@ export interface StudioRuntimeBookRecord {
   language: string;
   platform: string;
   brief?: string;
+  expandedBrief?: string;
   planningBrief?: string;
   createdAt: string;
   updatedAt: string;
@@ -488,11 +489,24 @@ class DeterministicProvider extends LLMProvider {
       };
     }
 
-    if (prompt.includes('意图导演')) {
-      const userIntent = extractSection(prompt, '## 用户意图') || `推进第 ${chapterNumber} 章主线`;
+    if (prompt.includes('意图导演') || prompt.includes('创作指导师')) {
+      const userIntent =
+        extractSection(prompt, '## 用户创作意图') ||
+        extractSection(prompt, '## 用户意图') ||
+        `推进第 ${chapterNumber} 章主线`;
+      const beats = ['线索确认', '短兵相接', '做出抉择'];
+      const focusCharacters = fallbackChars.slice(0, 2);
       return {
+        // 新版 IntentDirector 所需字段
+        narrativeGoal: userIntent,
+        emotionalTone: defaults.mood,
+        keyBeats: beats,
+        focusCharacters,
+        styleNotes: '保持冲突递进与情绪回弹，结尾留下下一章悬念。',
+
+        // 兼容旧版提示词/测试数据
         chapterGoal: userIntent,
-        keyScenes: ['线索确认', '短兵相接', '做出抉择'],
+        keyScenes: beats,
         emotionalArc: defaults.mood,
         hookProgression: [],
       };
@@ -586,8 +600,15 @@ export function getStudioRuntimeRootDir(): string {
   return runtimeRootDir;
 }
 
-export function getStudioPipelineRunner(): PipelineRunner {
+export function getStudioPipelineRunner(bookId?: string): PipelineRunner {
   ensureRuntimeRoot();
+  if (bookId) {
+    return new PipelineRunner({
+      rootDir: runtimeRootDir,
+      provider: buildLLMProvider(readStudioBookRuntime(bookId)),
+    });
+  }
+
   if (!pipelineRunner) {
     const provider = buildLLMProvider();
     pipelineRunner = new PipelineRunner({
@@ -598,52 +619,171 @@ export function getStudioPipelineRunner(): PipelineRunner {
   return pipelineRunner;
 }
 
-function buildLLMProvider(): LLMProvider {
-  // Try loading config from disk (same path as config router uses)
+type StudioConfigProvider = {
+  name: string;
+  apiKey: string;
+  baseUrl: string;
+  model?: string;
+  type?: 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini';
+  status?: string;
+};
+
+type StudioConfigRoute = {
+  agent: string;
+  model: string;
+  provider: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+type StudioConfigState = {
+  defaultProvider?: string;
+  defaultModel?: string;
+  agentRouting?: StudioConfigRoute[];
+  providers?: StudioConfigProvider[];
+};
+
+function loadStudioConfig(): StudioConfigState | null {
   const cfgPath = process.env.CONFIG_PATH
     ? path.resolve(process.env.CONFIG_PATH)
     : path.join(process.cwd(), '.cybernovelist-config.json');
 
   try {
-    if (fs.existsSync(cfgPath)) {
-      const raw = fs.readFileSync(cfgPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed.providers && parsed.providers.length > 0) {
-        // Filter providers that have apiKey configured
-        const configuredProviders = parsed.providers.filter(
-          (p: { apiKey: string; baseUrl: string; name: string }) => p.apiKey && p.baseUrl
-        );
-
-        if (configuredProviders.length > 0) {
-          const routingConfig = {
-            defaultProvider: parsed.defaultProvider || configuredProviders[0].name,
-            defaultModel: parsed.defaultModel || configuredProviders[0].name,
-            agentRouting: parsed.agentRouting || [],
-            providers: configuredProviders.map(
-              (p: { name: string; apiKey: string; baseUrl: string }) => ({
-                name: p.name,
-                config: {
-                  apiKey: p.apiKey,
-                  baseURL: p.baseUrl,
-                  model: p.name,
-                },
-                status: 'connected' as const,
-              })
-            ),
-          };
-          return new RoutedLLMProvider(routingConfig);
-        }
-      }
+    if (!fs.existsSync(cfgPath)) {
+      return null;
     }
+
+    const raw = fs.readFileSync(cfgPath, 'utf-8');
+    return JSON.parse(raw) as StudioConfigState;
   } catch {
-    // fall through to deterministic provider
+    return null;
+  }
+}
+
+function inferProviderType(
+  name: string,
+  baseUrl: string
+): 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini' {
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedBaseUrl = baseUrl.trim().toLowerCase();
+
+  if (normalizedName.includes('claude') || normalizedBaseUrl.includes('anthropic')) {
+    return 'claude';
+  }
+  if (normalizedName.includes('gemini') || normalizedBaseUrl.includes('generativelanguage')) {
+    return 'gemini';
+  }
+  if (normalizedName.includes('dashscope') || normalizedBaseUrl.includes('dashscope')) {
+    return 'dashscope';
+  }
+  if (normalizedName.includes('ollama') || normalizedBaseUrl.includes('11434')) {
+    return 'ollama';
+  }
+  return 'openai';
+}
+
+function upsertRoute(
+  routes: StudioConfigRoute[],
+  nextRoute: StudioConfigRoute
+): StudioConfigRoute[] {
+  return [
+    ...routes.filter(
+      (route) => route.agent.trim().toLowerCase() !== nextRoute.agent.trim().toLowerCase()
+    ),
+    nextRoute,
+  ];
+}
+
+function applyBookModelOverrides(
+  baseRoutes: StudioConfigRoute[],
+  defaultProvider: string,
+  book?: StudioRuntimeBookRecord | null
+): StudioConfigRoute[] {
+  const routes = [...baseRoutes];
+  if (!book || book.modelConfig.useGlobalDefaults) {
+    return routes;
+  }
+
+  const overrides: Array<{ agent: 'Writer' | 'Auditor' | 'Planner'; model: string }> = [
+    { agent: 'Writer', model: book.modelConfig.writer },
+    { agent: 'Auditor', model: book.modelConfig.auditor },
+    { agent: 'Planner', model: book.modelConfig.planner },
+  ];
+
+  return overrides.reduce((currentRoutes, override) => {
+    const existing = currentRoutes.find(
+      (route) => route.agent.trim().toLowerCase() === override.agent.toLowerCase()
+    );
+
+    return upsertRoute(currentRoutes, {
+      agent: override.agent,
+      provider: existing?.provider ?? defaultProvider,
+      model: override.model,
+      temperature: existing?.temperature,
+      maxTokens: existing?.maxTokens,
+    });
+  }, routes);
+}
+
+function isBrowserLikeRuntime(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
+}
+
+function buildLLMProvider(book?: StudioRuntimeBookRecord | null): LLMProvider {
+  if (isBrowserLikeRuntime()) {
+    return new DeterministicProvider();
+  }
+
+  const parsed = loadStudioConfig();
+  const configuredProviders = (parsed?.providers ?? []).filter(
+    (provider) => provider.apiKey && provider.baseUrl
+  );
+
+  if (configuredProviders.length > 0) {
+    const defaultProvider = configuredProviders.some(
+      (provider) => provider.name === parsed?.defaultProvider
+    )
+      ? (parsed?.defaultProvider ?? configuredProviders[0].name)
+      : configuredProviders[0].name;
+
+    const defaultProviderEntry =
+      configuredProviders.find((provider) => provider.name === defaultProvider) ??
+      configuredProviders[0];
+
+    const defaultModel =
+      parsed?.defaultModel ??
+      defaultProviderEntry.model ??
+      configuredProviders[0].model ??
+      'deterministic-provider';
+
+    const routingConfig = {
+      defaultProvider,
+      defaultModel,
+      agentRouting: applyBookModelOverrides(parsed?.agentRouting ?? [], defaultProvider, book),
+      providers: configuredProviders.map((provider) => ({
+        name: provider.name,
+        type: provider.type ?? inferProviderType(provider.name, provider.baseUrl),
+        config: {
+          apiKey: provider.apiKey,
+          baseURL: provider.baseUrl,
+          model: provider.model ?? defaultModel,
+        },
+        status:
+          provider.status === 'disconnected' ? ('disconnected' as const) : ('connected' as const),
+      })),
+    };
+    return new RoutedLLMProvider(routingConfig);
   }
 
   // Fallback: no API keys configured, use deterministic mock
   return new DeterministicProvider();
 }
 
-export function getStudioLLMProvider(): LLMProvider {
+export function getStudioLLMProvider(bookId?: string): LLMProvider {
+  if (bookId) {
+    return buildLLMProvider(readStudioBookRuntime(bookId));
+  }
+
   if (!llmProvider) {
     llmProvider = buildLLMProvider();
   }

@@ -9,7 +9,9 @@ function createMockRouting(): RoutingConfig {
     agentRouting: [
       { agent: 'Writer', provider: 'DashScope', model: 'qwen3.6-plus', temperature: 0.8 },
       { agent: 'Auditor', provider: 'OpenAI', model: 'gpt-4o', temperature: 0.2 },
+      { agent: 'Planner', provider: 'Gemini', model: 'gemini-2.5-pro', temperature: 0.6 },
     ],
+
     providers: [
       {
         name: 'DashScope',
@@ -84,6 +86,12 @@ describe('RoutedLLMProvider', () => {
       const config = provider.getAgentConfig('Auditor');
       expect(config.temperature).toBe(0.2);
       expect(config.model).toBe('gpt-4o');
+    });
+
+    it('should return Planner config for concrete planner agent names', () => {
+      const config = provider.getAgentConfig('StoryBootstrapPlanner');
+      expect(config.temperature).toBe(0.6);
+      expect(config.model).toBe('gemini-2.5-pro');
     });
 
     it('should return default config for unknown agent', () => {

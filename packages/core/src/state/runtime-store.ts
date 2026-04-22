@@ -61,6 +61,8 @@ export class RuntimeStateStore {
       facts: [],
       characters: [],
       worldRules: [],
+      chapterPlans: {},
+      outline: [],
       updatedAt: new Date().toISOString(),
     };
 
@@ -75,7 +77,13 @@ export class RuntimeStateStore {
   loadManifest(bookId: string): Manifest {
     const manifestPath = this.getManifestPath(bookId);
     const raw = fs.readFileSync(manifestPath, 'utf-8');
-    return JSON.parse(raw) as Manifest;
+    try {
+      return JSON.parse(raw) as Manifest;
+    } catch (error) {
+      throw new Error(
+        `manifest.json 解析失败（bookId=${bookId}）: ${error instanceof Error ? error.message : String(error)}。文件可能已损坏，请从快照恢复。`
+      );
+    }
   }
 
   /**
@@ -116,6 +124,8 @@ export class RuntimeStateStore {
       facts: state.facts ?? existing?.facts ?? [],
       characters: state.characters ?? existing?.characters ?? [],
       worldRules: state.worldRules ?? existing?.worldRules ?? [],
+      chapterPlans: state.chapterPlans ?? existing?.chapterPlans ?? {},
+      outline: state.outline ?? existing?.outline ?? [],
       updatedAt: new Date().toISOString(),
     };
 

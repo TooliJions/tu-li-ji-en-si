@@ -430,6 +430,27 @@ export function createAnalyticsRouter(): Hono {
       });
     }
 
+    const manifest = readManifest(bookId);
+    const worldRulesContext =
+      manifest && manifest.worldRules.length > 0
+        ? `\n## 世界规则\n${manifest.worldRules.map((r) => `- ${r.rule}`).join('\n')}`
+        : '';
+    const charactersContext =
+      manifest && manifest.characters.length > 0
+        ? `\n## 角色\n${manifest.characters.map((ch) => `- ${ch.name}(${ch.role})`).join('\n')}`
+        : '';
+    const activeHooks =
+      manifest && manifest.hooks.length > 0
+        ? manifest.hooks.filter((h) => h.status === 'open' || h.status === 'progressing')
+        : [];
+    const hooksContext =
+      activeHooks.length > 0
+        ? `\n## 进行中伏笔\n${activeHooks.map((h) => `- ${h.description}`).join('\n')}`
+        : '';
+    const bookContext = [worldRulesContext, charactersContext, hooksContext]
+      .filter(Boolean)
+      .join('\n');
+
     const styles: Array<{
       id: string;
       style: string;
@@ -442,37 +463,42 @@ export function createAnalyticsRouter(): Hono {
         style: 'fast_paced',
         label: '快节奏视角',
         characteristics: ['紧凑', '短句', '强推进'],
-        promptDirective: '请将章节改写为快节奏、短句为主、强推进情节的版本。',
+        promptDirective:
+          '请将以下章节的开篇段落改写为快节奏、短句为主、强推进情节的版本。保持与世界规则和角色设定的一致性。',
       },
       {
         id: 'B',
         style: 'emotional',
         label: '细腻情感',
         characteristics: ['情绪深度', '心理刻画', '慢镜头'],
-        promptDirective: '请将章节改写为情感细腻、强化心理刻画的版本。',
+        promptDirective:
+          '请将以下章节的开篇段落改写为情感细腻、强化心理刻画的版本。保持与世界规则和角色设定的一致性。',
       },
       {
         id: 'C',
         style: 'contemplative',
         label: '内省冷静',
         characteristics: ['哲思', '节制', '克制'],
-        promptDirective: '请将章节改写为冷静内省、节制克制、含哲思的版本。',
+        promptDirective:
+          '请将以下章节的开篇段落改写为冷静内省、节制克制、含哲思的版本。保持与世界规则和角色设定的一致性。',
       },
     ];
 
     const provider = getStudioLLMProvider();
     const start = Date.now();
 
+    const contentForPrompt = latestContent.substring(0, 4000);
+
     const results = await Promise.all(
       styles.map(async (s) => {
         try {
           const prompt = `你是一位风格改写师。
 ${s.promptDirective}
+${bookContext}
+## 原章节内容
+${contentForPrompt}
 
-## 原内容（节选）
-${latestContent.substring(0, 2000)}
-
-请直接输出改写后的正文（控制在 500 字内）。`;
+请输出改写后的开篇段落（800-1500字），仅输出正文内容，不要输出标题或说明文字。改写须与上述世界规则和角色设定保持一致。`;
           const resp = await provider.generate({ prompt });
           return {
             id: s.id,
@@ -514,7 +540,8 @@ ${latestContent.substring(0, 2000)}
     }
 
     const body = await c.req.json().catch(() => ({}));
-    const { alternativeId, style, text } = body;
+    const alternativeId = body.alternativeId ?? body.id;
+    const { style, text } = body;
 
     if (!alternativeId || !text) {
       return c.json(
@@ -532,7 +559,7 @@ ${latestContent.substring(0, 2000)}
     const manager = getStateManager();
     const chapterPath = manager.getChapterFilePath(bookId, latest.number);
 
-    // Read existing content to preserve frontmatter
+    // Read existing content to preserve frontmatter and remaining body
     let existingContent = '';
     if (fs.existsSync(chapterPath)) {
       existingContent = fs.readFileSync(chapterPath, 'utf-8');
@@ -540,7 +567,26 @@ ${latestContent.substring(0, 2000)}
 
     const frontmatterMatch = existingContent.match(/^---\n([\s\S]*?)\n---\n?/);
     const frontmatter = frontmatterMatch ? frontmatterMatch[0] : '';
-    const newContent = frontmatter ? `${frontmatter}\n${text}` : text;
+    const existingBody = frontmatterMatch
+      ? existingContent.slice(frontmatterMatch[0].length).trim()
+      : existingContent.trim();
+
+    // Only replace the first paragraph (up to the first double newline or first 1500 chars),
+    // preserving the rest of the chapter content
+    const firstParagraphEnd = existingBody.search(/\n\n/);
+    let newBody: string;
+    if (firstParagraphEnd > 0 && firstParagraphEnd < existingBody.length) {
+      const restContent = existingBody.slice(firstParagraphEnd);
+      newBody = `${text}\n${restContent}`;
+    } else {
+      // Fallback: if no clear paragraph break, prepend the rewrite and keep original
+      newBody =
+        existingBody.length > text.length
+          ? `${text}\n\n${existingBody.slice(text.length).trim()}`
+          : text;
+    }
+
+    const newContent = frontmatter ? `${frontmatter}\n${newBody}` : newBody;
 
     // 通过 StateManager 锁确保原子写入
     const lock = manager.acquireBookLock(bookId, 'apply-shuffle');
@@ -551,11 +597,11 @@ ${latestContent.substring(0, 2000)}
     try {
       fs.writeFileSync(chapterPath, newContent, 'utf-8');
 
-      // 递增 versionToken 以确保前端感知状态变更
+      // 递增 versionToken 以确保前端感知状态变更 — 传入完整 manifest 以避免数据丢失
       const store = new RuntimeStateStore(manager);
       const currentManifest = store.loadManifest(bookId);
       store.saveRuntimeStateSnapshot(bookId, {
-        bookId: currentManifest.bookId,
+        ...currentManifest,
         updatedAt: new Date().toISOString(),
       });
     } finally {
@@ -568,7 +614,7 @@ ${latestContent.substring(0, 2000)}
         chapterNumber: latest.number,
         style,
         wordCount: text.length,
-        message: `已将${style}风格方案应用到第 ${latest.number} 章`,
+        message: `已将${style}风格方案应用到第 ${latest.number} 章开篇段落`,
       },
     });
   });

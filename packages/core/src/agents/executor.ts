@@ -1,5 +1,7 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
 import type { ChapterPlan } from './chapter-planner';
+import { GENRE_WRITER_STYLE_MAP } from './genre-guidance';
+import { countChineseWords } from '../utils';
 
 export interface ChapterExecutionInput {
   title: string;
@@ -7,6 +9,8 @@ export interface ChapterExecutionInput {
   brief: string;
   chapterNumber: number;
   plan: ChapterPlan;
+  /** 用户创作意图，供 fallback prompt 使用 */
+  userIntent?: string;
 }
 
 export interface ChapterExecutionResult {
@@ -24,18 +28,6 @@ export interface AgentDependencies {
   buildContext: (input: ChapterExecutionInput) => Promise<string>;
   generateScene: (plan: ChapterPlan, context: string) => Promise<string>;
 }
-
-const GENRE_GUIDANCE: Record<string, string> = {
-  xianxia: '仙侠文风：修炼描写要具体，斗法场景要有气势，日常段落注重师徒/同门情谊',
-  fantasy: '玄幻文风：注重世界观展现、能力觉醒的震撼感、种族间的文化差异',
-  urban: '都市文风：贴近现实，对话自然流畅，注重职场细节和人际关系的微妙变化',
-  'sci-fi': '科幻文风：科技描写要严谨，注重未来感和未知感',
-  history: '历史文风：符合时代语言风格，注重历史场景还原和权谋斗争的智性美',
-  game: '游戏文风：注重游戏机制的趣味性、升级爽感和竞技对抗的紧张感',
-  horror: '悬疑文风：注重氛围营造、细节暗示、节奏控制，让读者有身临其境的紧张感',
-  romance: '言情文风：注重心理描写、情感细节、对话的暗示和留白',
-  fanfic: '同人文风：保持原作语言风格和角色说话方式，注重粉丝共鸣点',
-};
 
 export class ChapterExecutor extends BaseAgent {
   readonly name = 'ChapterExecutor';
@@ -69,7 +61,7 @@ export class ChapterExecutor extends BaseAgent {
           chapterNumber: input.chapterNumber,
           title: input.plan.title || `第 ${input.chapterNumber} 章`,
           content,
-          wordCount: content.length,
+          wordCount: countChineseWords(content),
         },
       };
     } catch (error) {
@@ -95,7 +87,7 @@ export class ChapterExecutor extends BaseAgent {
   }
 
   async #generateFallback(input: ChapterExecutionInput): Promise<string> {
-    const genreHint = GENRE_GUIDANCE[input.genre] ?? '';
+    const genreHint = GENRE_WRITER_STYLE_MAP[input.genre] ?? '';
     const plan = input.plan;
 
     const prompt = `你是网络小说作家。请根据以下章节计划，撰写正文。
@@ -131,8 +123,20 @@ ${plan.worldRules.map((r) => `  - ${r}`).join('\n')}`
 
 - **情感节拍**: ${plan.emotionalBeat}
 - **场景过渡**: ${plan.sceneTransition}
+${plan.openingHook ? `- **开篇钩子**: ${plan.openingHook}` : ''}
+${plan.closingHook ? `- **结尾悬念**: ${plan.closingHook}` : ''}
+${plan.characterGrowthBeat ? `- **主角成长点**: ${plan.characterGrowthBeat}` : ''}
+${plan.pacingTag ? `- **叙事节奏**: ${plan.pacingTag}` : ''}
+${input.userIntent ? `\n## 用户创作意图\n${input.userIntent}` : ''}
 
 ## 写作要求
+
+1. 保持情节连贯性
+2. 角色对话自然生动
+3. 场景描写具体有画面感
+4. 注意段落节奏，张弛有度
+5. 保持题材风格的统一性
+6. 遵守世界观设定中的每一条规则
 
 请直接输出章节正文内容，不需要标题外的任何格式标记。内容应自然流畅，角色对话生动，描写具体，避免空洞叙述。`;
 

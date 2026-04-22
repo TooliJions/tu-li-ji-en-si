@@ -55,12 +55,47 @@ const COOLDOWN_MS = 5 * 60 * 1000; // 冷却 5 分钟
 const MIN_SCORE = 0;
 const MAX_SCORE = 100;
 
+const AGENT_ROLE_ALIASES: Record<string, string> = {
+  writer: 'writer',
+  scenepolisher: 'writer',
+  chapterexecutor: 'writer',
+  contextcard: 'writer',
+  stylerefiner: 'writer',
+  marketinjector: 'writer',
+  stylefingerprinter: 'writer',
+
+  auditor: 'auditor',
+  qualityreviewer: 'auditor',
+  factchecker: 'auditor',
+  entityauditor: 'auditor',
+  styleauditor: 'auditor',
+  titlevoiceauditor: 'auditor',
+  compliancereviewer: 'auditor',
+  hookauditor: 'auditor',
+  fatigueanalyzer: 'auditor',
+  dialoguechecker: 'auditor',
+  audittierclassifier: 'auditor',
+
+  planner: 'planner',
+  outlineplanner: 'planner',
+  chapterplanner: 'planner',
+  characterdesigner: 'planner',
+  intentdirector: 'planner',
+  storybootstrapplanner: 'planner',
+
+  reviser: 'reviser',
+  surgicalrewriter: 'reviser',
+
+  composer: 'composer',
+};
+
 // ─── RoutedLLMProvider ─────────────────────────────────────────
 
 export class RoutedLLMProvider extends LLMProvider {
   private routing: RoutingConfig;
   private providers: Map<string, LLMProvider>;
   private reputations: Map<string, ProviderReputation>;
+  private providerCache: Map<string, LLMProvider> = new Map();
 
   constructor(routing: RoutingConfig) {
     const firstProvider = routing.providers[0];
@@ -123,10 +158,7 @@ export class RoutedLLMProvider extends LLMProvider {
   resolveProvider(
     agentName?: string
   ): { provider: LLMProvider; model: string; providerName: string } | null {
-    // Find agent-specific route
-    const route = this.routing.agentRouting.find(
-      (r) => r.agent.toLowerCase() === (agentName ?? '').toLowerCase()
-    );
+    const route = this.findRoute(agentName);
 
     const targetProvider = route ? route.provider : this.routing.defaultProvider;
 
@@ -145,9 +177,7 @@ export class RoutedLLMProvider extends LLMProvider {
    * Get configuration overrides for a specific agent.
    */
   getAgentConfig(agentName?: string): LLMConfig {
-    const route = this.routing.agentRouting.find(
-      (r) => r.agent.toLowerCase() === (agentName ?? '').toLowerCase()
-    );
+    const route = this.findRoute(agentName);
 
     if (route) {
       const entry = this.routing.providers.find((e) => e.name === route.provider);
@@ -291,7 +321,7 @@ export class RoutedLLMProvider extends LLMProvider {
         yield chunk;
       }
       this.recordSuccess(resolved.providerName);
-    } catch (error) {
+    } catch (primaryError) {
       this.recordFailure(resolved.providerName);
       const fallback = this.findFallbackProvider(resolved.providerName);
       if (fallback) {
@@ -301,33 +331,82 @@ export class RoutedLLMProvider extends LLMProvider {
             yield chunk;
           }
           this.recordSuccess(fallback.providerName);
-        } catch {
+          return; // fallback 成功，不再 throw
+        } catch (fallbackError) {
           this.recordFailure(fallback.providerName);
+          const combinedError = new Error(
+            `Stream failed: primary (${resolved.providerName}): ${primaryError instanceof Error ? primaryError.message : String(primaryError)}; fallback (${fallback.providerName}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+          );
+          throw combinedError;
         }
       }
-      throw error;
+      throw primaryError;
     }
   }
 
   // ─── Internal Helpers ────────────────────────────────────────
 
+  private normalizeAgentName(agentName?: string): string {
+    return (agentName ?? '').trim().toLowerCase();
+  }
+
+  private buildAgentCandidates(agentName?: string): string[] {
+    const normalized = this.normalizeAgentName(agentName);
+    if (!normalized) {
+      return [];
+    }
+
+    const baseName = normalized.split('-')[0];
+    return Array.from(
+      new Set(
+        [normalized, baseName, AGENT_ROLE_ALIASES[normalized], AGENT_ROLE_ALIASES[baseName]].filter(
+          (candidate): candidate is string => Boolean(candidate)
+        )
+      )
+    );
+  }
+
+  private findRoute(agentName?: string): AgentRoute | undefined {
+    const candidates = this.buildAgentCandidates(agentName);
+    if (candidates.length === 0) {
+      return undefined;
+    }
+
+    return this.routing.agentRouting.find((route) =>
+      candidates.includes(route.agent.trim().toLowerCase())
+    );
+  }
+
   private createProviderForModel(baseProvider: LLMProvider, model: string): LLMProvider {
     const entry = this.routing.providers.find((e) => this.providers.get(e.name) === baseProvider);
     const baseConfig = entry?.config ?? this.config;
     const type: ProviderType = entry?.type ?? 'openai';
+    const cacheKey = `${entry?.name ?? 'default'}:${model}:${type}`;
+
+    const cached = this.providerCache.get(cacheKey);
+    if (cached) return cached;
+
+    let provider: LLMProvider;
     switch (type) {
       case 'claude':
-        return new ClaudeProvider({ ...baseConfig, model });
+        provider = new ClaudeProvider({ ...baseConfig, model });
+        break;
       case 'ollama':
-        return new OllamaProvider({ ...baseConfig, model });
+        provider = new OllamaProvider({ ...baseConfig, model });
+        break;
       case 'dashscope':
-        return new DashScopeProvider({ ...baseConfig, model });
+        provider = new DashScopeProvider({ ...baseConfig, model });
+        break;
       case 'gemini':
-        return new GeminiProvider({ ...baseConfig, model });
+        provider = new GeminiProvider({ ...baseConfig, model });
+        break;
       case 'openai':
       default:
-        return new OpenAICompatibleProvider({ ...baseConfig, model });
+        provider = new OpenAICompatibleProvider({ ...baseConfig, model });
+        break;
     }
+    this.providerCache.set(cacheKey, provider);
+    return provider;
   }
 
   private isInCooldown(providerName: string): boolean {

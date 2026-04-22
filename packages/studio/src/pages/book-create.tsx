@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const GENRE_OPTIONS = ['都市', '玄幻', '科幻', '仙侠', '历史', '悬疑', '游戏', '同人', '其他'];
@@ -18,6 +18,85 @@ interface ModelConfig {
   planner: string;
 }
 
+/**
+ * 从 brief 文本中提取目标字数（单位：字）。
+ * 支持格式：
+ *   "500万字" / "500万" / "50万字" / "5万字"
+ *   "5000000字" / "5000000"
+ *   "三百万字" / "一百万字"
+ */
+function extractTargetWordsFromBrief(text: string): number | null {
+  if (!text.trim()) return null;
+
+  const chineseDigitMap: Record<string, number> = {
+    零: 0,
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+    百: 100,
+    千: 1000,
+    万: 10000,
+    亿: 100000000,
+  };
+
+  // 中文数字解析（简易版，支持"三百"、"五十"、"一百二十"等）
+  function parseChineseNumber(s: string): number {
+    let result = 0;
+    let current = 0;
+    for (const ch of s) {
+      const v = chineseDigitMap[ch];
+      if (v === undefined) continue;
+      if (v >= 10) {
+        if (current === 0) current = 1;
+        if (v >= 10000) {
+          result = result + current * v;
+          current = 0;
+        } else {
+          current *= v;
+        }
+      } else {
+        current = v;
+      }
+    }
+    return result + current;
+  }
+
+  // Pattern 1: "X万字" or "X万" (Arabic numerals)
+  const wanMatch = text.match(/(\d+(?:\.\d+)?)\s*万字/);
+  if (wanMatch) return Math.round(parseFloat(wanMatch[1]) * 10000);
+
+  // Pattern 2: "X百万字" (Arabic numerals)
+  const baiWanMatch = text.match(/(\d+(?:\.\d+)?)\s*百万字/);
+  if (baiWanMatch) return Math.round(parseFloat(baiWanMatch[1]) * 1000000);
+
+  // Pattern 3: pure digit + "字"
+  const digitMatch = text.match(/(\d{5,})\s*字/);
+  if (digitMatch) return parseInt(digitMatch[1], 10);
+
+  // Pattern 4: Chinese number + "万字"
+  const cnWanMatch = text.match(/([一二三四五六七八九十百千万亿零]+)\s*万字/);
+  if (cnWanMatch) {
+    const n = parseChineseNumber(cnWanMatch[1]);
+    if (n > 0) return n * 10000;
+  }
+
+  // Pattern 5: Chinese number + "百万字"
+  const cnBaiWanMatch = text.match(/([一二三四五六七八九十百千万亿零]+)\s*百万字/);
+  if (cnBaiWanMatch) {
+    const n = parseChineseNumber(cnBaiWanMatch[1]);
+    if (n > 0) return n * 1000000;
+  }
+
+  return null;
+}
+
 export default function BookCreate() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -25,8 +104,8 @@ export default function BookCreate() {
   const [genre, setGenre] = useState('');
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
   const [platform, setPlatform] = useState('qidian');
-  const [targetChapterCount, setTargetChapterCount] = useState(100);
   const [targetWordsPerChapter, setTargetWordsPerChapter] = useState(3000);
+  const [totalWordsOverride, setTotalWordsOverride] = useState<number | null>(null);
   const [promptVersion, setPromptVersion] = useState('v2');
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     useGlobalDefaults: true,
@@ -39,7 +118,19 @@ export default function BookCreate() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const targetWords = targetChapterCount * targetWordsPerChapter;
+  // 从 brief 中自动提取目标字数
+  const briefTargetWords = useMemo(() => extractTargetWordsFromBrief(brief), [brief]);
+
+  // 总字数 = 用户手动覆盖 > brief 提取 > 默认 30 万字
+  const targetWords = totalWordsOverride ?? briefTargetWords ?? 300000;
+  const targetChapterCount = Math.max(1, Math.ceil(targetWords / targetWordsPerChapter));
+
+  // 格式化总字数显示
+  function formatWords(w: number): string {
+    if (w >= 100000000) return `${(w / 100000000).toFixed(1)}亿`;
+    if (w >= 10000) return `${(w / 10000).toFixed(w % 10000 === 0 ? 0 : 1)}万`;
+    return w.toLocaleString();
+  }
 
   function updateModelConfig<K extends keyof ModelConfig>(key: K, value: ModelConfig[K]) {
     setModelConfig((prev) => ({ ...prev, [key]: value }));
@@ -221,18 +312,35 @@ export default function BookCreate() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="target-chapters" className="block text-sm font-medium mb-1">
-                  目标章节数
+                <label htmlFor="target-total-words" className="block text-sm font-medium mb-1">
+                  目标总字数（万字）
                 </label>
                 <input
-                  id="target-chapters"
-                  aria-label="目标章节数"
+                  id="target-total-words"
+                  aria-label="目标总字数（万字）"
                   type="number"
                   min={1}
-                  value={targetChapterCount}
-                  onChange={(e) => setTargetChapterCount(Number(e.target.value) || 1)}
+                  step={10}
+                  value={
+                    totalWordsOverride !== null
+                      ? totalWordsOverride / 10000
+                      : (briefTargetWords ?? 300000) / 10000
+                  }
+                  onChange={(e) => {
+                    const wan = Number(e.target.value);
+                    if (wan > 0) {
+                      setTotalWordsOverride(wan * 10000);
+                    } else {
+                      setTotalWordsOverride(null);
+                    }
+                  }}
                   className="w-full px-3 py-2 border rounded-md bg-background"
                 />
+                {briefTargetWords && totalWordsOverride === null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    从创作简报自动识别：{formatWords(briefTargetWords)}字
+                  </p>
+                )}
               </div>
               <div>
                 <label
@@ -255,7 +363,17 @@ export default function BookCreate() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              预计总字数 {targetWords.toLocaleString()} 字
+              预计 {targetChapterCount} 章 × {targetWordsPerChapter.toLocaleString()} 字 ={' '}
+              {formatWords(targetWords)}字
+              {totalWordsOverride !== null && (
+                <button
+                  type="button"
+                  className="ml-2 text-primary underline text-xs"
+                  onClick={() => setTotalWordsOverride(null)}
+                >
+                  重置为自动
+                </button>
+              )}
             </p>
 
             <div>
@@ -422,7 +540,7 @@ export default function BookCreate() {
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">章节规划</dt>
                 <dd>
-                  {targetChapterCount} 章 / {targetWordsPerChapter.toLocaleString()} 字
+                  约 {targetChapterCount} 章 / {formatWords(targetWords)}字
                 </dd>
               </div>
               <div className="flex justify-between gap-4">

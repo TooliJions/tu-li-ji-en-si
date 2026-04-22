@@ -76,6 +76,66 @@ export type WorldRule = z.infer<typeof WorldRuleSchema>;
 
 // ─── Manifest Schemas ───────────────────────────────────────────
 
+export const SceneBreakdownSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  characters: z.array(z.string()),
+  mood: z.string(),
+  wordCount: z.number().int().positive(),
+});
+
+export const HookActionSchema = z.object({
+  action: z.enum(['plant', 'advance', 'payoff']),
+  description: z.string(),
+});
+
+export const ChapterPlanStoreSchema = z.object({
+  chapterNumber: z.number().int().positive(),
+  title: z.string(),
+  intention: z.string(),
+  wordCountTarget: z.number().int().positive(),
+  characters: z.array(z.string()),
+  keyEvents: z.array(z.string()),
+  hooks: z.array(
+    z.object({
+      description: z.string(),
+      type: z.string(),
+      priority: z.string(),
+    })
+  ),
+  worldRules: z.array(z.string()),
+  emotionalBeat: z.string(),
+  sceneTransition: z.string(),
+  createdAt: z.string().datetime(),
+  // 新增字段（向后兼容：旧数据可能缺少这些字段）
+  openingHook: z.string().optional().default(''),
+  closingHook: z.string().optional().default(''),
+  sceneBreakdown: z.array(SceneBreakdownSchema).optional().default([]),
+  characterGrowthBeat: z.string().optional().default(''),
+  hookActions: z.array(HookActionSchema).optional().default([]),
+  pacingTag: z
+    .enum(['slow_build', 'rising', 'climax', 'cooldown', 'transition'])
+    .optional()
+    .default('slow_build'),
+});
+
+export type ChapterPlanStore = z.infer<typeof ChapterPlanStoreSchema>;
+
+export const OutlineChapterSchema = z.object({
+  chapterNumber: z.number().int().positive(),
+  title: z.string(),
+  summary: z.string(),
+});
+
+export const OutlineActSchema = z.object({
+  actNumber: z.number().int().positive(),
+  title: z.string(),
+  summary: z.string(),
+  chapters: z.array(OutlineChapterSchema),
+});
+
+export type OutlineAct = z.infer<typeof OutlineActSchema>;
+
 export const ManifestSchema = z.object({
   bookId: z.string(),
   versionToken: z.number().int().positive(),
@@ -85,6 +145,8 @@ export const ManifestSchema = z.object({
   facts: z.array(FactSchema),
   characters: z.array(CharacterSchema),
   worldRules: z.array(WorldRuleSchema),
+  chapterPlans: z.record(z.string(), ChapterPlanStoreSchema).default({}),
+  outline: z.array(OutlineActSchema).default([]),
   updatedAt: z.string().datetime(),
 });
 

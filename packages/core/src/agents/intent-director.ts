@@ -1,4 +1,6 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { generateJSONWithValidation, type LLMOutputRule } from '../llm/output-validator';
+import { GENRE_GUIDANCE } from './genre-guidance';
 
 export interface IntentInput {
   userIntent: string;
@@ -20,18 +22,6 @@ export interface IntentOutput {
   agentName: string;
 }
 
-const GENRE_GUIDANCE: Record<string, string> = {
-  xianxia: '仙侠题材：注重修炼突破、师徒传承、宗门斗争的叙事节奏',
-  fantasy: '玄幻题材：注重能力觉醒、种族冲突、史诗感的层次递进',
-  urban: '都市题材：注重职场冲突、人际关系、现实困境的交织推进',
-  'sci-fi': '科幻题材：注重科技设定展示、未来社会规则、未知探索的悬念',
-  history: '历史题材：注重历史事件融入、权谋斗争、时代氛围的营造',
-  game: '游戏题材：注重副本挑战、等级突破、竞技对战的节奏感',
-  horror: '悬疑题材：注重线索铺设、悬念制造、反转伏笔的递进',
-  romance: '言情题材：注重情感推进、误会与和解、关系发展的细腻描写',
-  fanfic: '同人体裁：注重原作角色互动、正典事件呼应的协调性',
-};
-
 export class IntentDirector extends BaseAgent {
   readonly name = 'IntentDirector';
   readonly temperature = 0.7;
@@ -50,7 +40,21 @@ export class IntentDirector extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<IntentOutput>(prompt);
+      const INTENT_RULES: LLMOutputRule[] = [
+        { field: 'narrativeGoal', type: 'min_string_length', min: 5 },
+        { field: 'keyBeats', type: 'min_array_length', min: 2 },
+        { field: 'focusCharacters', type: 'non_empty_array' },
+      ];
+      const result = await generateJSONWithValidation<IntentOutput>(
+        this.provider,
+        prompt,
+        INTENT_RULES,
+        {
+          temperature: this.temperature,
+          agentName: this.name,
+          retry: { maxRetries: 2, retryDelayMs: 500 },
+        }
+      );
 
       return {
         success: true,
@@ -126,7 +130,7 @@ ${input.userIntent}
   "styleNotes": "风格建议（如何描写、对话风格、节奏控制等）"
 }
 
-keyBeats 应该包含 3-5 个关键情感/叙事节拍点。focusCharacters 应基于角色档案和用户意图选择 1-3 个核心角色。`);
+keyBeats 应该包含 3-5 个关键情感/叙事节拍点。focusCharacters 必须从上方"角色档案"中选择，禁止创建角色档案中不存在的角色。选择 1-3 个核心角色。`);
 
     return lines.join('\n');
   }

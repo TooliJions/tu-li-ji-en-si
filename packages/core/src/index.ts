@@ -1,7 +1,9 @@
 // CyberNovelist Core — Public API Facade
 // Re-export all public interfaces from the core engine
 
+export * from './utils';
 export * from './llm/provider';
+export * from './llm/output-validator';
 export * from './llm/routed-provider';
 export * from './llm/claude-provider';
 export * from './llm/ollama-provider';

@@ -1,0 +1,289 @@
+<h2>UI 原型 vs 实现代码 — 完整对比分析报告</h2>
+<p class="subtitle">逐页面比对 ui-prototype.md 中的 13 个页面线框图与实际实现代码</p>
+
+<div class="section">
+<h3>总览</h3>
+<p>原型定义 <strong>13 个页面</strong>，实际实现 <strong>18 个页面文件</strong>。多出的页面为新增功能页面（emotional-arcs、style-manager、fanfic-init、chapters）。</p>
+</div>
+
+<div class="mockup">
+<div class="mockup-header">逐页面对比详情</div>
+<div class="mockup-body">
+
+<h3>页面 1：仪表盘 Dashboard — 实现度 85%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>三指标卡片（书籍总数/创作中/总字数）+ 第4个"待处理伏笔"</li>
+    <li>书籍列表 + 进度条</li>
+    <li>最近活动记录</li>
+    <li>质量趋势图（BaselineChart组件）</li>
+    <li>"新建书籍"按钮</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>原型3指标 → 实现4指标（多了"创作中"和"待处理伏笔"）</li>
+    <li>原型活动为表格 → 实现为列表样式</li>
+    <li>质量趋势图原型为散点图 → 实现为BaselineChart折线图</li>
+  </ul></div>
+</div>
+
+<h3>页面 2：书籍详情 BookDetail — 实现度 75%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>章节列表 + 状态标签</li>
+    <li>操作菜单（编辑/合并/拆分/回滚/删除）</li>
+    <li>PollutionBadge（污染隔离橙色边框+斜纹）</li>
+    <li>TimeDial（时间回溯拨盘）</li>
+    <li>快速操作区域</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少"连续写章""系统诊断"按钮</li>
+    <li>缺少底部"统计"行（已完成X章/草稿X章等）</li>
+    <li>合并/拆分操作直接执行，无确认弹窗</li>
+    <li>回滚使用快照列表而非原型中旋转拨盘UI</li>
+  </ul></div>
+</div>
+
+<h3>页面 2b：创建新书 BookCreate — 实现度 95%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>Step 1 基本信息（书名/题材/语言/平台）</li>
+    <li>Step 2 创作设置（目标章节/字数/模型配置/提示词版本）</li>
+    <li>创作简报（支持文件上传+文本编辑）</li>
+    <li>右侧创建摘要面板</li>
+    <li>题材选项完整（9个题材+4个平台）</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>原型为分步流程 → 实现基本一致但布局更紧凑</li>
+    <li>模型配置只显示3个Agent（Writer/Auditor/Planner），原型有更多</li>
+  </ul></div>
+</div>
+
+<h3>页面 4：创作规划 WritingPlan — 实现度 90%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>左侧步骤导航（6步骤）</li>
+    <li>章节列表 + 状态标识</li>
+    <li>章节详细规划表单（目标/人物/事件/伏笔）</li>
+    <li>AI辅助生成规划</li>
+    <li>底部"保存规划"/"开始创作"按钮</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>原型为双栏（步骤导航+主内容）→ 实现为三栏布局</li>
+    <li>缺少"当前卷"选择器</li>
+    <li>缺少"手动编辑"切换模式</li>
+  </ul></div>
+</div>
+
+<h3>页面 5：正文创作 Writing — 实现度 80%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>快速试写（字数+意图+按钮）</li>
+    <li>完整创作（意图textarea+两个按钮）</li>
+    <li>流水线进度实时展示（SSE推送）</li>
+    <li>记忆透视（MemoryWordcloud词云）</li>
+    <li>心流模式（全屏暗化#1a1a2e+实体高亮）</li>
+    <li>日志面板 + 草稿转正 + 上下文漂移检测</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>原型流水线进度为5步圆点 → 实现为6步网格标签</li>
+    <li>缺少"质量仪表盘"（AI痕迹/连贯性/节奏等8维度进度条）</li>
+    <li>记忆透视缺少"3秒后自动淡出"动画</li>
+    <li>心流模式按钮位置不同（原型在顶栏右侧）</li>
+  </ul></div>
+</div>
+
+<h3>页面 5b：快速试写结果 — 实现度 70%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>试写结果展示（字数/耗时/LLM调用次数）</li>
+    <li>实体词汇高亮</li>
+    <li>草稿转正按钮</li>
+    <li>上下文漂移检测弹窗</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少"丢弃草稿"和"手动编辑"按钮</li>
+    <li>漂移检测弹窗缺少"使用旧草稿继续"选项</li>
+    <li>缺少"上下文版本Token"显示</li>
+  </ul></div>
+</div>
+
+<h3>页面 6：章节阅读 ChapterReader — 实现度 85%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>章节内容阅读 + 编辑模式</li>
+    <li>心流模式（全屏暗化+实体高亮+ContextPopup）</li>
+    <li>审计报告面板（三级分类+雷达图）</li>
+    <li>污染隔离警告横幅</li>
+    <li>TimeDial回滚拨盘</li>
+    <li>上一章/下一章导航</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少顶部"上一章/下一章/心流"按钮组（按钮在右侧工具栏）</li>
+    <li>心流模式下审计面板默认显示（原型应隐藏）</li>
+    <li>缺少"重新审计"按钮</li>
+  </ul></div>
+</div>
+
+<h3>页面 7：守护进程 DaemonControl — 实现度 75%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>状态总览（状态/下一章/间隔/Token限额）</li>
+    <li>控制面板（起始/目标章节/间隔时间）</li>
+    <li>运行日志（级别过滤）</li>
+    <li>通知推送配置（Webhook+触发事件）</li>
+    <li>Token用量进度条</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少"智能间隔配置"详细面板（RPM阈值/退避上限）</li>
+    <li>缺少"每日配额保护"独立面板</li>
+    <li>缺少底部"统计"行（平均X分钟/章/总耗时）</li>
+    <li>缺少"连续降级"警告</li>
+    <li>日志使用MOCK数据而非SSE实时推送</li>
+  </ul></div>
+</div>
+
+<h3>页面 8：伏笔面板 HookPanel — 实现度 80%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>健康概览（5指标卡片）</li>
+    <li>伏笔列表 + 筛选 + 状态/优先级标签</li>
+    <li>创建伏笔表单</li>
+    <li>状态切换下拉菜单</li>
+    <li>意图设置弹窗（最小/最大章节）</li>
+    <li>唤醒确认弹窗</li>
+    <li>时间轴Tab（复用HookTimelineWorkspace）</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少"伏笔健康度"进度条（活跃伏笔/休眠/逾期/回收率）</li>
+    <li>惊群调度详情折叠面板未实现</li>
+    <li>缺少"查看唤醒调度日志"按钮</li>
+    <li>时间轴双轨视图在独立页面（hook-timeline.tsx）</li>
+  </ul></div>
+</div>
+
+<h3>页面 9：数据分析 Analytics — 实现度 90%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>字数统计图表</li>
+    <li>审计通过率</li>
+    <li>Token用量（按渠道+按章节）</li>
+    <li>AI痕迹趋势</li>
+    <li>质量基线 + 漂移检测</li>
+    <li>情感弧线概览</li>
+    <li>灵感洗牌（3方案卡片）</li>
+    <li>质量趋势详情（TrendDetailChart）</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>AI痕迹图原型为折线图+琥珀渐变关注区 → 实现为柱状图</li>
+    <li>缺少"建议气泡"浮动动画</li>
+    <li>灵感洗牌缺少"采用此方案/微调"按钮</li>
+    <li>质量基线缺少"重新建立基线"按钮</li>
+  </ul></div>
+</div>
+
+<h3>页面 10：配置 ConfigView — 未找到独立页面</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>配置通过路由指向（/config），但代码文件不存在</li>
+    <li>模型配置分散在BookCreate中</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li><strong>config-view.tsx 文件不存在</strong>（sidebar.tsx中有路由但无对应页面）</li>
+    <li>缺少全局Provider配置/API Key管理</li>
+    <li>缺少Agent模型路由表格</li>
+    <li>缺少备用Provider状态表格</li>
+    <li>缺少通知配置（Telegram Bot等）</li>
+  </ul></div>
+</div>
+
+<h3>页面 11：真相文件 TruthFiles — 实现度 70%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>多Tab导航（概览/源码编辑/角色矩阵/副线管理/冲突检查）</li>
+    <li>投影状态同步状态</li>
+    <li>Markdown导入工具</li>
+    <li>JSON源码编辑器</li>
+    <li>角色矩阵卡片</li>
+    <li>伏笔/副线表格</li>
+    <li>冲突检查与差异详情</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>原型标签为[当前状态/伏笔/章节摘要/角色矩阵/情感弧线/副线] → 实现不同</li>
+    <li>缺少"当前世界状态"角色卡片展示（位置/健康/情感/资源）</li>
+    <li>缺少"从JSON查看"和"回滚到上一章状态"按钮</li>
+    <li>角色矩阵只显示名称/确信度，缺少详细信息</li>
+  </ul></div>
+</div>
+
+<h3>页面 12b：提示词版本 PromptVersion — 实现度 90%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>当前配置展示 + 版本切换</li>
+    <li>可用版本表格（版本/日期/变更说明/Agent数）</li>
+    <li>版本对比工具（选择两个版本+diff展示）</li>
+    <li>差异高亮显示</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>Diff对比使用模拟数据而非真实API结果</li>
+    <li>缺少详细的逐Agent提示词变更展示</li>
+  </ul></div>
+</div>
+
+<h3>页面 13：系统诊断 DoctorView — 实现度 85%</h3>
+<div class="pros-cons">
+  <div class="pros"><h4>已实现</h4><ul>
+    <li>问题清单（ severity标签+修复按钮）</li>
+    <li>Provider健康状态</li>
+    <li>质量基线状态</li>
+    <li>重组恢复功能</li>
+    <li>状态差异对比</li>
+    <li>刷新诊断按钮</li>
+  </ul></div>
+  <div class="cons"><h4>差距</h4><ul>
+    <li>缺少环境检查区块（Node.js版本/磁盘空间/AI连接）</li>
+    <li>缺少"修复所有"和"仅清理僵尸锁"按钮</li>
+    <li>缺少按书分组的详细诊断视图</li>
+    <li>缺少自然语言对比视图弹窗（设定脱节检测）</li>
+  </ul></div>
+</div>
+
+</div>
+</div>
+
+<div class="section">
+<h3>总结与优先级建议</h3>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="critical" onclick="toggleSelect(this)">
+    <div class="letter">!</div>
+    <div class="content">
+      <h3>关键缺失（P0）</h3>
+      <p>1. <strong>ConfigView 页面完全缺失</strong> — 侧边栏有路由但无对应组件<br/>
+         2. <strong>守护进程日志为MOCK数据</strong> — 应使用SSE实时推送<br/>
+         3. <strong>合并/拆分操作无确认弹窗</strong> — 存在误操作风险</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="high" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>重要差距（P1）</h3>
+      <p>1. 写作页面缺少质量仪表盘8维度进度条<br/>
+         2. 数据分析AI痕迹图缺少琥珀渐变关注区和建议气泡<br/>
+         3. 伏笔面板缺少健康度进度条和惊群折叠面板<br/>
+         4. 真相文件缺少"当前世界状态"展示</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="medium" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>视觉/UX优化（P2）</h3>
+      <p>1. 记忆透视缺少3秒淡出动画<br/>
+         2. 仪表盘活动表格→列表样式差异<br/>
+         3. 灵感洗牌缺少方案操作按钮<br/>
+         4. DoctorView缺少按书分组诊断</p>
+    </div>
+  </div>
+</div>
+</div>

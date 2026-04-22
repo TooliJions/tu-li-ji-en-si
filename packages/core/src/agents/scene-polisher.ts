@@ -1,11 +1,14 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
 import type { Character, Hook, Fact, WorldRule } from '../models/state';
+import { GENRE_STYLE_GUIDANCE as GENRE_GUIDANCE } from './genre-guidance';
+import { countChineseWords } from '../utils';
 
 export interface ScenePolishInput {
   draftContent: string;
   chapterNumber: number;
   title?: string;
   genre: string;
+  intentGuidance?: string;
   contextCard?: {
     characters: Character[];
     hooks: Hook[];
@@ -21,18 +24,6 @@ export interface ScenePolishOutput {
   wordCount: number;
   originalWordCount: number;
 }
-
-const GENRE_GUIDANCE: Record<string, string> = {
-  xianxia: '仙侠文风：修炼描写要具体，斗法场景要有气势，日常段落注重师徒/同门情谊，用词古朴雅致',
-  fantasy: '玄幻文风：注重能力觉醒的震撼感、种族间的文化差异、史诗感的营造',
-  urban: '都市文风：贴近现实，对话自然流畅，注重职场细节和人际关系的微妙变化',
-  'sci-fi': '科幻文风：科技描写严谨，注重未来感和未知感，术语使用准确',
-  history: '历史文风：符合时代语言风格，注重历史场景还原和权谋斗争的智性美',
-  game: '游戏文风：注重游戏机制的趣味性、升级爽感和竞技对抗的紧张感',
-  horror: '悬疑文风：注重氛围营造、细节暗示、节奏控制，让读者有身临其境的紧张感',
-  romance: '言情文风：注重心理描写、情感细节、对话的暗示和留白，情感推进自然',
-  fanfic: '同人文风：保持原作语言风格和角色说话方式一致性，注重粉丝共鸣点',
-};
 
 export class ScenePolisher extends BaseAgent {
   readonly name = 'ScenePolisher';
@@ -58,8 +49,8 @@ export class ScenePolisher extends BaseAgent {
         success: true,
         data: {
           polishedContent: polished,
-          wordCount: polished.length,
-          originalWordCount: input.draftContent.length,
+          wordCount: countChineseWords(polished),
+          originalWordCount: countChineseWords(input.draftContent),
         },
       };
     } catch (error) {
@@ -104,7 +95,7 @@ ${card.previousChapterSummary}`);
         lines.push(`
 ## 本章角色
 
-${card.characters.map((c) => `- ${c.name}（${c.role}）：${c.traits.join('、')}`).join('\n')}`);
+${card.characters.map((c) => `- ${c.name}（${c.role}）：${Array.isArray(c.traits) ? c.traits.join('、') : c.traits}`).join('\n')}`);
       }
 
       if (card.hooks.length > 0) {
@@ -122,6 +113,13 @@ ${card.worldRules.map((r) => `- [${r.category}] ${r.rule}`).join('\n')}`);
       }
     }
 
+    if (input.intentGuidance) {
+      lines.push(`
+## 润色方向指引
+
+${input.intentGuidance}`);
+    }
+
     lines.push(`
 ## 初稿内容
 
@@ -130,12 +128,14 @@ ${input.draftContent}
 ## 润色要求
 
 1. 保持原有情节和结构不变
-2. 提升语言的流畅性和画面感
-3. 角色对话要自然生动，符合角色身份性格
-4. 场景描写要具体有画面感
-5. 删除冗余和重复表达
-6. 注意段落节奏，张弛有度
-7. 保持题材风格的统一性
+2. **字数保留**：润色后字数不得少于初稿字数的 90%。可以优化表达，但不可删除场景、对话或心理描写来缩减篇幅
+3. 提升语言的流畅性和画面感
+4. 角色对话要自然生动，符合角色身份性格
+5. 场景描写要具体有画面感
+6. 删除冗余和重复表达（但保留有叙事价值的细节）
+7. 注意段落节奏，张弛有度
+8. 保持题材风格的统一性
+9. 确保世界观设定在润色后仍被严格遵守
 
 请直接输出润色后的正文内容，不需要额外说明。`);
 

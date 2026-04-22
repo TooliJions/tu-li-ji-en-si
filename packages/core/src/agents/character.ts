@@ -1,4 +1,6 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { generateJSONWithValidation, type LLMOutputRule } from '../llm/output-validator';
+import { GENRE_CHARACTER_GUIDANCE as GENRE_GUIDANCE, GENRE_CONSTRAINTS } from './genre-guidance';
 
 export interface CharacterDesignBrief {
   title: string;
@@ -21,18 +23,6 @@ export interface CharacterDesignResult {
   characters: CharacterProfile[];
 }
 
-const GENRE_GUIDANCE: Record<string, string> = {
-  xianxia: '仙侠题材：角色应体现修炼者的道心、劫难、境界追求，注重师徒关系、宗门归属',
-  fantasy: '玄幻题材：注重种族多样性（人/精灵/龙族等）、魔法天赋、血脉传承',
-  urban: '都市题材：贴近现实的人物背景，职场身份、社会关系、性格反差',
-  'sci-fi': '科幻题材：未来社会角色，科技能力、AI/机械增强、星际背景',
-  history: '历史题材：符合时代背景的人物，注重历史人物性格考据',
-  game: '游戏题材：注重角色的职业定位、技能树、成长路线',
-  horror: '悬疑题材：角色应有神秘感、隐藏动机、不可告人的秘密',
-  romance: '言情题材：注重角色的情感表达方式、性格互补、成长变化',
-  fanfic: '同人体裁：保持原作角色性格一致性（不OOC），合理扩展原作未涉及的角色',
-};
-
 export class CharacterDesigner extends BaseAgent {
   readonly name = 'CharacterDesigner';
   readonly temperature = 0.7;
@@ -51,10 +41,48 @@ export class CharacterDesigner extends BaseAgent {
     }
 
     const outline = ctx.promptContext?.outline as string | undefined;
-    const prompt = this.#buildPrompt(brief, outline);
+    const eraContext = ctx.promptContext?.eraContext as string | undefined;
+    const prompt = this.#buildPrompt(brief, outline, eraContext);
 
     try {
-      const result = await this.generateJSON<CharacterDesignResult>(prompt);
+      const CHARACTER_RULES: LLMOutputRule[] = [
+        { field: 'characters', type: 'min_array_length', min: brief.characterCount ?? 2 },
+      ];
+
+      const result = await generateJSONWithValidation<CharacterDesignResult>(
+        this.provider,
+        prompt,
+        CHARACTER_RULES,
+        {
+          temperature: this.temperature,
+          agentName: this.name,
+          retry: { maxRetries: 2, retryDelayMs: 500 },
+        }
+      );
+
+      // 兜底：确保角色列表不为空
+      if (!Array.isArray(result.characters) || result.characters.length === 0) {
+        result.characters = [
+          {
+            name: '主角',
+            role: 'protagonist',
+            traits: ['坚韧', '机智'],
+            background: '穿越到新世界的现代人',
+            abilities: ['适应力强', '善于利用资源'],
+            relationships: {},
+            arc: '从迷茫到坚定，逐步成长为真正的强者',
+          },
+        ];
+      }
+
+      // 确保每个角色有必要的字段
+      for (const char of result.characters) {
+        if (!char.name || char.name.trim().length === 0) char.name = '无名角色';
+        if (!char.role) char.role = 'supporting';
+        if (!Array.isArray(char.traits) || char.traits.length === 0) char.traits = ['性格待定'];
+        if (!char.arc || char.arc.trim().length === 0) char.arc = '角色成长轨迹待展开';
+      }
+
       return { success: true, data: result };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -62,7 +90,7 @@ export class CharacterDesigner extends BaseAgent {
     }
   }
 
-  #buildPrompt(brief: CharacterDesignBrief, outline?: string): string {
+  #buildPrompt(brief: CharacterDesignBrief, outline?: string, eraContext?: string): string {
     const genreHint = GENRE_GUIDANCE[brief.genre] ?? '';
 
     let prompt = `你是一位专业的网络小说角色设计师。请根据以下创作简报，设计角色档案。
@@ -84,6 +112,16 @@ export class CharacterDesigner extends BaseAgent {
 ## 故事大纲
 
 ${outline}`;
+    }
+
+    const constraints = GENRE_CONSTRAINTS[brief.genre];
+    if (constraints && constraints.length > 0) {
+      prompt += `
+
+## 题材约束
+
+${brief.genre === 'history' && eraContext ? `本书设定在以下历史时期：${eraContext}\n\n` : ''}角色设计必须严格遵循以下${brief.genre}题材规则：
+${constraints.map((c) => `- ${c}`).join('\n')}`;
     }
 
     prompt += `

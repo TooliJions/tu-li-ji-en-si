@@ -126,7 +126,7 @@ export class HookPolicy {
       priority: 'critical' | 'major' | 'minor';
       plantedChapter: number;
     }>,
-    _currentChapter: number
+    currentChapter: number
   ): WakeCandidate[] {
     if (dormantHooks.length === 0) return [];
 

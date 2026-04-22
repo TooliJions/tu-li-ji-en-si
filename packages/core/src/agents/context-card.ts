@@ -1,5 +1,6 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
 import type { Character, Hook, Fact, WorldRule, Manifest } from '../models/state';
+import { GENRE_CONTEXT_KEYWORDS as GENRE_GUIDANCE } from './genre-guidance';
 
 export interface ContextCardInput {
   bookId: string;
@@ -27,18 +28,6 @@ export interface ContextDataSources {
   getPreviousChapterSummary: (chapterNumber: number) => Promise<string>;
   getChapterContext: (chapterNumber: number) => Promise<string>;
 }
-
-const GENRE_GUIDANCE: Record<string, string> = {
-  xianxia: '仙侠：修炼体系、宗门势力、法宝灵药、师徒传承',
-  fantasy: '玄幻：种族设定、魔法体系、血脉传承、世界地图',
-  urban: '都市：职场身份、社会关系、现实场景、现代科技',
-  'sci-fi': '科幻：科技设定、未来社会、太空探索、AI伦理',
-  history: '历史：历史背景、人物考据、时代风貌、政治格局',
-  game: '游戏：游戏机制、等级体系、副本挑战、竞技对战',
-  horror: '悬疑：线索伏笔、人物关系网、时间线、动机分析',
-  romance: '言情：情感发展线、角色心理、关系进展、冲突节点',
-  fanfic: '同人：原作正典设定、角色性格一致性、时间线对齐',
-};
 
 export class ContextCard extends BaseAgent {
   readonly name = 'ContextCard';
@@ -127,7 +116,11 @@ export class ContextCard extends BaseAgent {
     if (manifest.characters.length > 0) {
       lines.push('## 角色');
       for (const char of manifest.characters) {
-        const traits = char.traits.join('、');
+        const traits = Array.isArray(char.traits)
+          ? char.traits.join('、')
+          : typeof char.traits === 'string'
+            ? char.traits
+            : '';
         lines.push(`- **${char.name}** (${char.role})${traits ? ` — ${traits}` : ''}`);
       }
       lines.push('');

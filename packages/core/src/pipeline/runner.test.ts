@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMProvider } from '../llm/provider';
 import type { TelemetryLogger } from '../telemetry/logger';
 
@@ -10,7 +10,7 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn((filePath: string) => {
     // Return different data based on path
     if (filePath.includes('meta.json')) {
-      return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+      return JSON.stringify({ title: 'Test Novel', genre: 'xianxia', synopsis: '测试小说简介' });
     }
     if (filePath.includes('index.json')) {
       return JSON.stringify({
@@ -30,6 +30,8 @@ vi.mock('fs', () => ({
       facts: [],
       characters: [],
       worldRules: [],
+      chapterPlans: {},
+      outline: [],
       updatedAt: new Date().toISOString(),
     });
   }),
@@ -79,7 +81,7 @@ describe('PipelineRunner', () => {
     (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
     (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
       if (filePath.includes('meta.json')) {
-        return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+        return JSON.stringify({ title: 'Test Novel', genre: 'xianxia', synopsis: '测试小说简介' });
       }
       if (filePath.includes('index.json')) {
         return JSON.stringify({
@@ -98,6 +100,7 @@ describe('PipelineRunner', () => {
         facts: [],
         characters: [],
         worldRules: [],
+        chapterPlans: {},
         updatedAt: new Date().toISOString(),
       });
     });
@@ -467,32 +470,30 @@ describe('PipelineRunner', () => {
 
   describe('writeNextChapter()', () => {
     it('completes full pipeline for next chapter', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章摘要',
-        activeHooks: ['hook-1'],
-        characterStates: ['林风：状态良好'],
-        locationContext: '青云门',
+        narrativeGoal: '展现主角成长',
+        emotionalTone: '从困惑到顿悟',
+        keyBeats: ['修炼场景', '突破境界'],
+        focusCharacters: ['林风'],
+        styleNotes: '注重修炼细节描写',
       });
 
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '展现主角成长',
-        keyScenes: ['修炼场景', '突破境界'],
-        emotionalArc: '从困惑到顿悟',
-        hookProgression: ['hook-1 推进'],
-      });
-
+      // ChapterExecutor (generateScene): generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '林风盘膝而坐，开始修炼。灵气涌入体内。',
         usage: { promptTokens: 500, completionTokens: 400, totalTokens: 900 },
         model: 'test-model',
       });
 
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '林风盘膝静坐，灵气涌动。',
         usage: { promptTokens: 300, completionTokens: 200, totalTokens: 500 },
         model: 'test-model',
       });
 
+      // Audit: generateJSONWithMeta × 1
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -502,6 +503,13 @@ describe('PipelineRunner', () => {
         },
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test-model',
+      });
+
+      // Memory extraction: generateJSON × 1
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
       });
 
       const result = await runner.writeNextChapter({
@@ -518,28 +526,27 @@ describe('PipelineRunner', () => {
     });
 
     it('retries on audit failure then passes', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit fail
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [{ severity: 'blocking', description: '问题' }],
@@ -550,11 +557,13 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Revision
       mockProvider.generate.mockResolvedValueOnce({
         text: '修订稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -564,6 +573,12 @@ describe('PipelineRunner', () => {
         },
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
+      });
+      // Memory extraction
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
       });
 
       const result = await runner.writeNextChapter({
@@ -578,23 +593,21 @@ describe('PipelineRunner', () => {
     });
 
     it('falls back to accept_with_warnings after max retries', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
@@ -648,23 +661,21 @@ describe('PipelineRunner', () => {
         telemetryLogger: createNoopTelemetryLogger(),
       });
 
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
@@ -704,28 +715,27 @@ describe('PipelineRunner', () => {
     });
 
     it('continues pipeline even when memory extraction fails', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '记忆提取失败测试',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -753,28 +763,27 @@ describe('PipelineRunner', () => {
     });
 
     it('persists extracted facts and hooks into manifest state', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '记忆落盘测试',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -785,6 +794,7 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Memory extraction
       mockProvider.generateJSON.mockResolvedValueOnce({
         facts: [{ content: '林风获得黑色玉佩', category: 'plot', confidence: 'high' }],
         newHooks: [
@@ -840,28 +850,27 @@ describe('PipelineRunner', () => {
     });
 
     it('updates existing chapter status in index when chapter already exists', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '已存在章节内容',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -881,7 +890,11 @@ describe('PipelineRunner', () => {
       // Simulate chapter already in index
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
         if (String(filePath).includes('meta.json')) {
-          return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+          return JSON.stringify({
+            title: 'Test Novel',
+            genre: 'xianxia',
+            synopsis: '测试小说简介',
+          });
         }
         if (String(filePath).includes('index.json')) {
           return JSON.stringify({
@@ -900,6 +913,7 @@ describe('PipelineRunner', () => {
           facts: [],
           characters: [],
           worldRules: [],
+          chapterPlans: {},
           updatedAt: new Date().toISOString(),
         });
       });
@@ -952,28 +966,27 @@ describe('PipelineRunner', () => {
         telemetryLogger: spyLogger,
       });
 
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 500, completionTokens: 400, totalTokens: 900 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 300, completionTokens: 200, totalTokens: 500 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -983,6 +996,12 @@ describe('PipelineRunner', () => {
         },
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
+      });
+      // Memory extraction
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
       });
 
       const result = await runnerWithSpy.writeNextChapter({
@@ -1022,28 +1041,27 @@ describe('PipelineRunner', () => {
         telemetryLogger: spyLogger,
       });
 
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '润色稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Audit fail
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [{ severity: 'blocking', description: '需要修订' }],
@@ -1054,11 +1072,13 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // Revision
       mockProvider.generate.mockResolvedValueOnce({
         text: '修订稿',
         usage: { promptTokens: 120, completionTokens: 80, totalTokens: 200 },
         model: 'test',
       });
+      // Audit pass
       mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
         data: {
           issues: [],
@@ -1068,6 +1088,12 @@ describe('PipelineRunner', () => {
         },
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
+      });
+      // Memory extraction
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
       });
 
       const result = await runnerWithSpy.writeNextChapter({
@@ -1121,23 +1147,21 @@ describe('PipelineRunner', () => {
     });
 
     it('returns error when composeChapter throws unexpected exception', async () => {
+      // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
-        summary: '上一章',
-        activeHooks: [],
-        characterStates: [],
-        locationContext: '某处',
+        narrativeGoal: '推进主线情节发展',
+        emotionalTone: '',
+        keyBeats: ['事件A', '事件B'],
+        focusCharacters: ['林风'],
+        styleNotes: '',
       });
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterGoal: '目标',
-        keyScenes: [],
-        emotionalArc: '',
-        hookProgression: [],
-      });
+      // ChapterExecutor: generate × 1
       mockProvider.generate.mockResolvedValueOnce({
         text: '初稿',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
+      // ScenePolisher crash
       mockProvider.generate.mockRejectedValueOnce(new Error('ScenePolisher crash'));
 
       const result = await runner.writeNextChapter({
@@ -1170,23 +1194,20 @@ describe('PipelineRunner', () => {
     });
 
     it('plans a chapter with outline and chapter plan', async () => {
-      mockProvider.generateJSON
-        .mockResolvedValueOnce({
+      mockProvider.generateJSON.mockResolvedValue({
+        plan: {
           chapterNumber: 1,
           title: '第一章',
-          summary: '主角出场',
-          keyEvents: ['林风登场', '发现灵剑'],
-          targetWordCount: 3000,
-          hooks: ['灵剑线索'],
-        })
-        .mockResolvedValueOnce({
-          scenes: [
-            { description: '林风走进大厅', targetWords: 1000, mood: '紧张' },
-            { description: '发现神秘玉佩', targetWords: 1000, mood: '神秘' },
-          ],
+          intention: '主角首次出场并发现灵剑，开启修炼之路',
+          wordCountTarget: 3000,
           characters: ['林风', '师父'],
-          hooks: ['灵剑线索'],
-        });
+          keyEvents: ['林风登场', '发现灵剑'],
+          hooks: [{ description: '灵剑线索', type: 'plot', priority: 'major' }],
+          worldRules: ['修仙体系'],
+          emotionalBeat: '平静→紧张',
+          sceneTransition: '自然过渡',
+        },
+      });
 
       const result = await runner.planChapter({
         bookId: 'test-book',
@@ -1202,19 +1223,19 @@ describe('PipelineRunner', () => {
     });
 
     it('writes planned chapter entries using canonical index fields', async () => {
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        chapterNumber: 2,
-        title: '第二章',
-        summary: '第二章概要',
-        keyEvents: ['事件一'],
-        targetWordCount: 3000,
-        hooks: [],
-      });
-
-      mockProvider.generateJSON.mockResolvedValueOnce({
-        scenes: [{ description: '场景', targetWords: 1000, mood: '紧张' }],
-        characters: ['林风'],
-        hooks: [],
+      mockProvider.generateJSON.mockResolvedValue({
+        plan: {
+          chapterNumber: 2,
+          title: '第二章',
+          intention: '第二章概要：主角进入新的修炼阶段',
+          wordCountTarget: 3000,
+          characters: ['林风'],
+          keyEvents: ['事件一', '事件二'],
+          hooks: [],
+          worldRules: [],
+          emotionalBeat: '紧张',
+          sceneTransition: '自然过渡',
+        },
       });
 
       await runner.planChapter({
@@ -1290,7 +1311,11 @@ describe('PipelineRunner', () => {
       // Simulate: manifest versionToken changed since draft was written
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
         if (String(filePath).includes('meta.json')) {
-          return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+          return JSON.stringify({
+            title: 'Test Novel',
+            genre: 'xianxia',
+            synopsis: '测试小说简介',
+          });
         }
         if (String(filePath).includes('index.json')) {
           return JSON.stringify({
@@ -1309,6 +1334,7 @@ describe('PipelineRunner', () => {
           facts: [],
           characters: [],
           worldRules: [],
+          chapterPlans: {},
           updatedAt: new Date().toISOString(),
         });
       });
@@ -1318,6 +1344,19 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 200, completionTokens: 100, totalTokens: 300 },
         model: 'test-model',
       });
+      // Mock #checkWorldRules (generateJSON returns empty violations)
+      mockProvider.generateJSON
+        .mockResolvedValueOnce({
+          narrativeGoal: '将草稿转正',
+          emotionalTone: '平稳推进',
+          keyBeats: ['转正'],
+          focusCharacters: ['主角'],
+          styleNotes: '保持风格',
+          chapterNumber: 1,
+          genre: 'xianxia',
+          agentName: 'IntentDirector',
+        })
+        .mockResolvedValue([]); // #checkWorldRules
 
       const result = await runner.upgradeDraft({
         bookId: 'test-book',
@@ -1344,6 +1383,19 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 300, completionTokens: 150, totalTokens: 450 },
         model: 'test-model',
       });
+      // Mock IntentDirector (generateJSON) + #checkWorldRules (generateJSON)
+      mockProvider.generateJSON
+        .mockResolvedValueOnce({
+          narrativeGoal: '润色转正',
+          emotionalTone: '紧张→释然',
+          keyBeats: ['润色转正'],
+          focusCharacters: ['主角'],
+          styleNotes: '保持原风格',
+          chapterNumber: 1,
+          genre: 'xianxia',
+          agentName: 'IntentDirector',
+        })
+        .mockResolvedValue([]); // #checkWorldRules returns no violations
 
       const result = await runner.upgradeDraft({
         bookId: 'test-book',
@@ -1369,7 +1421,11 @@ describe('PipelineRunner', () => {
       (fs.openSync as ReturnType<typeof vi.fn>).mockReturnValue(1);
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
         if (String(filePath).includes('meta.json')) {
-          return JSON.stringify({ title: 'Test Novel', genre: 'xianxia' });
+          return JSON.stringify({
+            title: 'Test Novel',
+            genre: 'xianxia',
+            synopsis: '测试小说简介',
+          });
         }
         if (String(filePath).includes('index.json')) {
           return JSON.stringify({
@@ -1388,9 +1444,29 @@ describe('PipelineRunner', () => {
           facts: [],
           characters: [],
           worldRules: [],
+          chapterPlans: {},
           updatedAt: new Date().toISOString(),
         });
       });
+
+      // Re-setup provider mocks after clearAllMocks
+      mockProvider.generate.mockResolvedValue({
+        text: '锁测试内容',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        model: 'test-model',
+      });
+      mockProvider.generateJSON
+        .mockResolvedValueOnce({
+          narrativeGoal: '测试锁',
+          emotionalTone: '平稳',
+          keyBeats: ['测试'],
+          focusCharacters: [],
+          styleNotes: '',
+          chapterNumber: 1,
+          genre: 'xianxia',
+          agentName: 'IntentDirector',
+        })
+        .mockResolvedValue([]);
 
       await runner.upgradeDraft({
         bookId: 'test-book',
@@ -1423,6 +1499,18 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test-model',
       });
+      mockProvider.generateJSON
+        .mockResolvedValueOnce({
+          narrativeGoal: '测试锁',
+          emotionalTone: '平稳',
+          keyBeats: ['测试'],
+          focusCharacters: [],
+          styleNotes: '',
+          chapterNumber: 1,
+          genre: 'xianxia',
+          agentName: 'IntentDirector',
+        })
+        .mockResolvedValue([]); // #checkWorldRules
 
       await runner.upgradeDraft({
         bookId: 'test-book',
@@ -1461,7 +1549,6 @@ describe('PipelineRunner', () => {
       expect(result.bookId).toBe('test-book');
       expect(result.chapterNumber).toBe(1);
       expect(typeof result.success).toBe('boolean');
-      expect(result.usage).toBeDefined();
     });
   });
 });

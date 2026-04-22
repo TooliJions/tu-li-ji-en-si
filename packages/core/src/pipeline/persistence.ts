@@ -4,6 +4,7 @@ import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 import type { ChapterIndex } from '../models/chapter';
 import type { SnapshotMetadata } from '../state/snapshot';
+import { countChineseWords } from '../utils';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
         number: input.chapterNumber,
         title: input.title,
         fileName: `chapter-${padded}.md`,
-        wordCount: input.content.length,
+        wordCount: countChineseWords(input.content),
         createdAt: new Date().toISOString(),
       });
     }

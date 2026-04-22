@@ -1,7 +1,8 @@
 import { Shuffle, Sparkles } from 'lucide-react';
 
 /**
- * Inspiration shuffle — presents 3 rewrite alternatives for comparison.
+ * Style rewrite panel — presents 3 style-rewrite alternatives for the opening paragraph.
+ * Renamed from "灵感洗牌" to reflect actual behavior: paragraph-level style rewriting, not inspiration generation.
  */
 export default function InspirationShuffle({
   options,
@@ -17,7 +18,7 @@ export default function InspirationShuffle({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles size={18} className="text-amber-500" />
-          <h3 className="text-lg font-semibold">灵感洗牌</h3>
+          <h3 className="text-lg font-semibold">风格改写</h3>
         </div>
         {onShuffle && (
           <button
@@ -29,6 +30,9 @@ export default function InspirationShuffle({
           </button>
         )}
       </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        以下为最新章节开篇段落的风格改写方案，采用后将替换原开篇段落，章节其余内容保持不变。
+      </p>
       <div className="space-y-3">
         {options.map((opt) => (
           <div
@@ -36,10 +40,8 @@ export default function InspirationShuffle({
             className="rounded border p-4 bg-background flex items-start justify-between gap-3"
           >
             <div className="flex-1">
-              <p className="text-sm">{opt.text}</p>
-              <div className="text-xs text-muted-foreground mt-1">
-                匹配度: {Math.round(opt.score * 100)}%
-              </div>
+              <p className="text-sm whitespace-pre-line">{opt.text}</p>
+              <div className="text-xs text-muted-foreground mt-1">字数: {opt.text.length}</div>
             </div>
             <button
               onClick={() => onSelect(opt.id)}

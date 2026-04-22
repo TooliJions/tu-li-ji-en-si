@@ -38,6 +38,7 @@ export abstract class BaseAgent {
     options?: { temperature?: number; maxTokens?: number }
   ): Promise<string> {
     const response = await this.provider.generate(this.#buildRequest(prompt, options));
+    this.#lastUsage = response.usage;
     return response.text;
   }
 
@@ -49,6 +50,15 @@ export abstract class BaseAgent {
     options?: { temperature?: number; maxTokens?: number }
   ): Promise<T> {
     return this.provider.generateJSON<T>(this.#buildRequest(prompt, options));
+  }
+
+  #lastUsage?: AgentResult['usage'];
+
+  /**
+   * 获取最近一次 generate 调用的 usage 信息
+   */
+  getLastUsage(): AgentResult['usage'] {
+    return this.#lastUsage;
   }
 
   #buildRequest(

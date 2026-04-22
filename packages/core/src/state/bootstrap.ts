@@ -73,6 +73,8 @@ export class StateBootstrap {
       facts: [],
       characters: [],
       worldRules: [],
+      chapterPlans: {},
+      outline: [],
       updatedAt: now,
     };
     fs.writeFileSync(

@@ -3,6 +3,7 @@ import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 import { LLMProvider } from '../llm/provider';
 import type { ChapterIndexEntry } from '../models/chapter';
+import { countChineseWords } from '../utils';
 
 // ─── Config ──────────────────────────────────────────────────────
 
@@ -269,7 +270,10 @@ ${input.content}
 
   // ── Internal: Helpers ─────────────────────────────────────────
 
-  #findChapterEntry(chapters: ChapterIndexEntry[], chapterNumber: number): ChapterIndexEntry | undefined {
+  #findChapterEntry(
+    chapters: ChapterIndexEntry[],
+    chapterNumber: number
+  ): ChapterIndexEntry | undefined {
     return chapters.find((chapter) => {
       const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
       return chapter.number === chapterNumber || legacyChapter.chapterNumber === chapterNumber;
@@ -304,14 +308,14 @@ ${input.content}
     const existingChapter = this.#findChapterEntry(index.chapters, input.chapterNumber);
     if (existingChapter) {
       this.#normalizeChapterEntry(existingChapter, input.chapterNumber, input.title, input.content);
-      existingChapter.wordCount = input.content.length;
+      existingChapter.wordCount = countChineseWords(input.content);
     } else {
       const padded = String(input.chapterNumber).padStart(4, '0');
       index.chapters.push({
         number: input.chapterNumber,
         title: input.title,
         fileName: `chapter-${padded}.md`,
-        wordCount: input.content.length,
+        wordCount: countChineseWords(input.content),
         createdAt: new Date().toISOString(),
       });
     }
