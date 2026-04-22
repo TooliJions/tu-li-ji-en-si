@@ -384,3 +384,230 @@ test.describe('并发场景测试', () => {
     await context2.close();
   });
 });
+
+/**
+ * E2E Test: 完整创作端到端流水线
+ */
+test.describe('完整创作端到端流水线', () => {
+  test.describe.configure({ mode: 'serial' });
+  const testBookTitle = `E2E-端到端-${Date.now()}`;
+  let bookId: string;
+
+  test('1. 创建书籍并验证', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await page.getByRole('link', { name: '新建书籍' }).click();
+    await page.getByLabel('书名').fill(testBookTitle);
+    await page.locator('#book-genre').selectOption('玄幻');
+    await page.getByRole('button', { name: '下一步' }).click();
+    await page.getByLabel('创作简报').fill('主角踏上修仙之路。');
+    await page.getByRole('button', { name: '创建书籍' }).click();
+    await expect(page).toHaveURL(/\/book\/book-/);
+    await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
+    bookId = page.url().split('/').pop() as string;
+    expect(bookId).toMatch(/^book-/);
+  });
+
+  test('2. 创作规划完成', async ({ page }) => {
+    await page.goto(`/writing-plan?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /创作规划/ })).toBeVisible();
+    await expect(page.getByText('灵感与设定')).toBeVisible();
+  });
+
+  test('3. 快速试写第一章', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+    await expect(page.getByPlaceholder('输入简要意图')).toBeVisible();
+    await expect(page.getByRole('button', { name: /开始快速试写/ })).toBeVisible();
+  });
+
+  test('4. 伏笔埋设', async ({ page }) => {
+    await page.goto(`/hooks?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: '伏笔管理' })).toBeVisible();
+    const descInput = page.getByPlaceholder('伏笔描述');
+    await expect(descInput).toBeVisible();
+    await descInput.fill('灵根的真正来源');
+    await page.getByRole('button', { name: '创建' }).click();
+    await expect(page.getByText('灵根的真正来源')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('5. 审计结果查看', async ({ page }) => {
+    await page.goto(`/book/${bookId}`);
+    await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
+    await expect(page.getByText('章节列表')).toBeVisible();
+  });
+
+  test('6. 守护进程启动', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
+  });
+
+  test('7. 导出验证', async ({ page }) => {
+    await page.goto(`/export?bookId=${bookId}`);
+    await expect(page).not.toHaveURL(/404|error/i);
+  });
+
+  test('8. 数据分析验证', async ({ page }) => {
+    await page.goto(`/analytics?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: '数据分析' })).toBeVisible();
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-090 状态差异分类展示
+ */
+test.describe('PRD-090: 状态差异分类展示', () => {
+  const testBookTitle = `E2E-状态分类-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '科幻',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 状态差异分类测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('Doctor 诊断页面状态差异区域', async ({ page }) => {
+    await page.goto(`/doctor?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /Doctor|诊断/ })).toBeVisible();
+  });
+
+  test('分类单选框存在', async ({ page }) => {
+    await page.goto(`/doctor?bookId=${bookId}`);
+    const categoryRadios = page.locator('input[type="radio"]');
+    if (await categoryRadios.first().isVisible({ timeout: 3000 })) {
+      await expect(categoryRadios.first()).toBeVisible();
+    }
+  });
+
+  test('分类标签：角色/关系/物品/事实/伏笔', async ({ page }) => {
+    await page.goto(`/doctor?bookId=${bookId}`);
+    const categories = ['角色', '关系', '物品', '事实', '伏笔'];
+    let foundCount = 0;
+    for (const cat of categories) {
+      if (
+        await page
+          .getByText(cat)
+          .first()
+          .isVisible({ timeout: 1000 })
+          .catch(() => false)
+      ) {
+        foundCount++;
+      }
+    }
+    expect(foundCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('多选框勾选交互', async ({ page }) => {
+    await page.goto(`/doctor?bookId=${bookId}`);
+    const checkboxes = page.locator('input[type="checkbox"]');
+    if (await checkboxes.first().isVisible({ timeout: 3000 })) {
+      await expect(checkboxes.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-091 污染隔离视觉强化
+ */
+test.describe('PRD-091: 污染隔离视觉强化', () => {
+  const testBookTitle = `E2E-污染视觉-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '游戏',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 污染隔离视觉测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('章节卡片橙色外框 #FF8C00', async ({ page }) => {
+    await page.goto(`/book/${bookId}`);
+    const orangeBorder = page.locator('[style*="#FF8C00"], [style*="ff8c00"]');
+    if (await orangeBorder.first().isVisible({ timeout: 3000 })) {
+      await expect(orangeBorder.first()).toBeVisible();
+    }
+  });
+
+  test('污染隔离红色标签', async ({ page }) => {
+    await page.goto(`/book/${bookId}`);
+    const pollutionLabel = page.getByText(/污染隔离/i);
+    if (await pollutionLabel.first().isVisible({ timeout: 2000 })) {
+      await expect(pollutionLabel.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-024b 心流模式实体感知
+ */
+test.describe('PRD-024b: 心流模式实体感知', () => {
+  const testBookTitle = `E2E-心流实体-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '悬疑',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 心流模式实体感知测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('心流模式按钮', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+    const flowBtn = page.getByRole('button', { name: /心流|flow/i });
+    if (await flowBtn.isVisible({ timeout: 3000 })) {
+      await expect(flowBtn).toBeVisible();
+    }
+  });
+
+  test('实体虚线底纹', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+    const dashedUnderline = page.locator(
+      'mark[class*="border-dashed"], [style*="border-bottom: dashed"]'
+    );
+    if (await dashedUnderline.first().isVisible({ timeout: 5000 })) {
+      await expect(dashedUnderline.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});

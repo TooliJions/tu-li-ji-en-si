@@ -31,6 +31,7 @@ export interface StudioRuntimeBookRecord {
   language: string;
   platform: string;
   brief?: string;
+  planningBrief?: string;
   createdAt: string;
   updatedAt: string;
   fanficMode: string | null;
@@ -150,6 +151,128 @@ class DeterministicProvider extends LLMProvider {
 
   #buildJsonResponse(prompt: string): unknown {
     const chapterNumber = extractChapterNumber(prompt);
+
+    if (prompt.includes('世界观构建师')) {
+      return {
+        currentFocus: '核心矛盾：竞赛推荐名额只有一个；成长主线：主角从自我怀疑走向主动承担。',
+        centralConflict: '竞赛推荐名额只有一个，主角必须在家庭压力和校园竞争中争出资格。',
+        growthArc: '主角从自我怀疑走向主动承担，学会把天赋转化为责任。',
+        worldRules: ['校园竞赛采用淘汰制，校内仅 1 个推荐名额。', '现实向校园环境，无超自然设定。'],
+        hooks: ['全国竞赛推荐名单即将公布', '家庭对主角参赛并不支持'],
+      };
+    }
+
+    if (prompt.includes('大纲策划师')) {
+      return {
+        acts: [
+          {
+            actNumber: 1,
+            title: '重新入局',
+            summary: '主角重返竞赛体系，被迫重新证明自己。',
+            chapters: [
+              {
+                chapterNumber: 1,
+                title: '重返考场',
+                summary: '主角在首次测验中崭露头角，重新被老师注意。',
+              },
+              {
+                chapterNumber: 2,
+                title: '名额之争',
+                summary: '校内竞赛名额争夺正式启动。',
+              },
+            ],
+          },
+          {
+            actNumber: 2,
+            title: '压力升级',
+            summary: '家庭与校园双重压力挤压主角成长空间。',
+            chapters: [
+              {
+                chapterNumber: 3,
+                title: '资格赛前夜',
+                summary: '主角在崩溃边缘选择继续挑战。',
+              },
+            ],
+          },
+          {
+            actNumber: 3,
+            title: '逆袭兑现',
+            summary: '主角完成成长并在更大舞台兑现自己。',
+            chapters: [
+              {
+                chapterNumber: 4,
+                title: '全国赛开场',
+                summary: '主角正式进入更大的竞技舞台。',
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    if (prompt.includes('角色设计师')) {
+      return {
+        characters: [
+          {
+            name: '林晨',
+            role: 'protagonist',
+            traits: ['克制', '好胜', '敏锐'],
+            background: '一次失利让他跌入低谷，但也逼着他重新进入竞赛体系。',
+            abilities: ['竞赛解题', '高压专注'],
+            relationships: {
+              王老师: '赏识他的伯乐',
+              苏小雨: '理解他处境的同桌盟友',
+            },
+            arc: '从自我怀疑到主动承担，学会把天赋转化为责任。',
+          },
+          {
+            name: '王老师',
+            role: 'supporting',
+            traits: ['严格', '克制', '果断'],
+            background: '竞赛组老师，在主角身上看到了重新下注的可能。',
+            abilities: ['识别潜力', '资源调度'],
+            relationships: {
+              林晨: '重点观察与培养对象',
+            },
+            arc: '从谨慎观望到公开押注主角。',
+          },
+          {
+            name: '苏小雨',
+            role: 'supporting',
+            traits: ['冷静', '细腻', '坚定'],
+            background: '主角的同桌，最早看见他脆弱与锋芒并存的一面。',
+            abilities: ['信息整合', '情绪支持'],
+            relationships: {
+              林晨: '并肩成长的同桌盟友',
+            },
+            arc: '从旁观者变成主角的重要支持者。',
+          },
+        ],
+      };
+    }
+
+    if (prompt.includes('章节策划师')) {
+      return {
+        plan: {
+          chapterNumber,
+          title: '竞赛邀约',
+          intention: '主角在首次测验后被竞赛老师单独约谈，正式进入名额竞争。',
+          wordCountTarget: 3000,
+          characters: ['林晨', '王老师'],
+          keyEvents: ['测验结果公布', '老师单独约谈'],
+          hooks: [
+            {
+              description: '全国竞赛推荐名单即将公布',
+              type: 'plot',
+              priority: 'major',
+            },
+          ],
+          worldRules: ['校园竞赛采用淘汰制，校内仅 1 个推荐名额。'],
+          emotionalBeat: '压抑→绷紧→燃起斗志',
+          sceneTransition: '从校园日常切入正式竞争线，并给下一章留下名单悬念。',
+        },
+      };
+    }
 
     if (prompt.includes('大纲规划师')) {
       return {

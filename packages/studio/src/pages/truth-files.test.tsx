@@ -10,6 +10,8 @@ vi.mock('../lib/api', () => ({
   importMarkdown: vi.fn(),
   fetchHooks: vi.fn(),
   fetchMemoryPreview: vi.fn(),
+  fetchChapterSnapshots: vi.fn(),
+  rollbackChapter: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -46,6 +48,21 @@ const mockProjectionStatus = {
   discrepancies: [],
 };
 
+const mockSnapshots = [
+  {
+    id: 'snap-4',
+    chapter: 4,
+    label: '第4章 快照',
+    timestamp: '2026-04-19T00:00:00.000Z',
+  },
+  {
+    id: 'snap-3',
+    chapter: 3,
+    label: '第3章 快照',
+    timestamp: '2026-04-18T00:00:00.000Z',
+  },
+];
+
 function renderWithRouter(bookId = 'book-001') {
   return render(
     <MemoryRouter initialEntries={[`/truth-files?bookId=${bookId}`]}>
@@ -65,6 +82,8 @@ describe('TruthFiles Page', () => {
     vi.mocked(api.fetchHooks).mockResolvedValue([]);
     vi.mocked(api.fetchMemoryPreview).mockResolvedValue({ memories: [] });
     vi.mocked(api.fetchTruthFile).mockResolvedValue({ content: null, versionToken: 1 });
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([]);
+    vi.mocked(api.rollbackChapter).mockResolvedValue(true);
   });
 
   it('shows empty state when bookId is missing', async () => {
@@ -441,5 +460,75 @@ describe('TruthFiles Page', () => {
     expect(screen.getAllByText(/编辑/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/从 JSON 查看/)).toBeTruthy();
     expect(screen.getByText(/回滚到上一章状态/)).toBeTruthy();
+  });
+
+  it('从概览卡片进入 current_state 的 JSON 查看', async () => {
+    vi.mocked(api.fetchTruthFile).mockResolvedValue({
+      name: 'current_state',
+      content: {
+        chapter: 5,
+        physics: '现实世界',
+        characters: {
+          林晨: {
+            location: '档案室',
+          },
+        },
+      },
+      versionToken: 1234567890,
+    });
+
+    renderWithRouter();
+
+    await screen.findByText(/当前世界状态/, {}, { timeout: 3000 });
+
+    fireEvent.click(screen.getByText('从 JSON 查看'));
+
+    await screen.findByText('JSON 源文件');
+    expect(screen.getByText('编辑源码')).toBeTruthy();
+    expect(api.fetchTruthFile).toHaveBeenLastCalledWith('book-001', 'current_state');
+  });
+
+  it('从概览卡片直接进入 current_state 编辑模式', async () => {
+    vi.mocked(api.fetchTruthFile).mockResolvedValue({
+      name: 'current_state',
+      content: {
+        chapter: 5,
+        physics: '现实世界',
+      },
+      versionToken: 1234567890,
+    });
+
+    renderWithRouter();
+
+    await screen.findByText(/当前世界状态/, {}, { timeout: 3000 });
+
+    fireEvent.click(screen.getByText('编辑'));
+
+    await screen.findByText('保存');
+    expect(screen.getAllByRole('textbox').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('从概览卡片打开上一章状态回滚确认', async () => {
+    vi.mocked(api.fetchTruthFile).mockResolvedValue({
+      name: 'current_state',
+      content: {
+        chapter: 5,
+        physics: '现实世界',
+        characters: {},
+      },
+      versionToken: 1234567890,
+    });
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue(mockSnapshots);
+
+    renderWithRouter();
+
+    await screen.findByText(/当前世界状态/, {}, { timeout: 3000 });
+
+    fireEvent.click(screen.getByText('回滚到上一章状态'));
+
+    await screen.findByText('时间回溯');
+    expect(api.fetchChapterSnapshots).toHaveBeenCalledWith('book-001', 5);
+    expect(screen.getByText('第4章 快照')).toBeTruthy();
+    expect(screen.getByText('确认回滚')).toBeTruthy();
   });
 });

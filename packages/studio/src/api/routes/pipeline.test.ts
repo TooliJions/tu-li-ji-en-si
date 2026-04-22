@@ -2,9 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { RuntimeStateStore, StateManager } from '@cybernovelist/core';
 import { createPipelineRouter, pipelineStore } from './pipeline';
 import { createBookRouter, resetBookStoreForTests } from './books';
-import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
+import {
+  getStudioRuntimeRootDir,
+  readStudioBookRuntime,
+  resetStudioCoreBridgeForTests,
+} from '../core-bridge';
 
 function createTestApp() {
   const app = new Hono();
@@ -13,17 +18,90 @@ function createTestApp() {
   return app;
 }
 
-async function createBook(app: ReturnType<typeof createTestApp>) {
+async function createBook(
+  app: ReturnType<typeof createTestApp>,
+  payload: Record<string, unknown> = { title: '测试小说', genre: 'urban', targetWords: 100000 }
+) {
   const res = await app.request('/api/books', {
     method: 'POST',
-    body: JSON.stringify({ title: '测试小说', genre: 'urban', targetWords: 100000 }),
+    body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
   });
   const data = (await res.json()) as { data: { id: string } };
   return data.data.id;
 }
 
-async function waitForPipelineCompletion(app: ReturnType<typeof createTestApp>, bookId: string, pipelineId: string) {
+async function bootstrapStory(
+  app: ReturnType<typeof createTestApp>,
+  bookId: string,
+  chapterNumber = 1
+) {
+  const res = await app.request(`/api/books/${bookId}/pipeline/bootstrap-story`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterNumber }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  expect(res.status).toBe(200);
+  return res;
+}
+
+function seedBookFocus(bookId: string, focus: string) {
+  const manager = new StateManager(getStudioRuntimeRootDir());
+  const store = new RuntimeStateStore(manager);
+  const manifest = store.loadManifest(bookId);
+  store.saveRuntimeStateSnapshot(bookId, {
+    ...manifest,
+    currentFocus: focus,
+  });
+}
+
+function seedBookPlanningContext(bookId: string) {
+  const manager = new StateManager(getStudioRuntimeRootDir());
+  const store = new RuntimeStateStore(manager);
+  const manifest = store.loadManifest(bookId);
+  store.saveRuntimeStateSnapshot(bookId, {
+    ...manifest,
+    currentFocus: '当前重点：写主角在年度设计大赛前夜的压力与抉择',
+    worldRules: [
+      {
+        id: 'rule-001',
+        category: 'career',
+        rule: '年度设计大赛采用淘汰制，校内只有一个推荐名额。',
+        exceptions: [],
+      },
+    ],
+    characters: [
+      {
+        id: 'char-001',
+        name: '林浩',
+        role: 'protagonist',
+        traits: ['执拗'],
+        relationships: {},
+      },
+    ],
+    hooks: [
+      {
+        id: 'hook-001',
+        description: '总监深夜留下一封匿名提醒',
+        type: 'plot',
+        status: 'open',
+        priority: 'major',
+        plantedChapter: 1,
+        relatedCharacters: ['林浩'],
+        relatedChapters: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  });
+}
+
+async function waitForPipelineCompletion(
+  app: ReturnType<typeof createTestApp>,
+  bookId: string,
+  pipelineId: string
+) {
   for (let attempt = 0; attempt < 20; attempt++) {
     const res = await app.request(`/api/books/${bookId}/pipeline/${pipelineId}`);
     const data = (await res.json()) as { data: { status: string } };
@@ -109,6 +187,72 @@ describe('Pipeline Route', () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it('derives write-next intent from stored project context when no custom intent is provided', async () => {
+      const bookId = await createBook(app, {
+        title: '霓虹设计局',
+        genre: 'urban',
+        targetWords: 100000,
+        brief: '主角林浩在顶级设计公司夹缝求生，准备冲击年度设计大赛。',
+      });
+      seedBookFocus(bookId, '当前重点：写主角在年度设计大赛前夜的压力与抉择');
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/write-next`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(202);
+      const data = (await res.json()) as { data: { pipelineId: string } };
+      await waitForPipelineCompletion(app, bookId, data.data.pipelineId);
+
+      const chapterPath = path.join(
+        getStudioRuntimeRootDir(),
+        bookId,
+        'story',
+        'chapters',
+        'chapter-0001.md'
+      );
+      const chapterContent = fs.readFileSync(chapterPath, 'utf-8');
+      expect(chapterContent).toContain('年度设计大赛');
+      expect(chapterContent).not.toContain('继续上一章');
+    });
+
+    it('merges chapter planning intent with stored project context instead of replacing it', async () => {
+      const bookId = await createBook(app, {
+        title: '霓虹设计局',
+        genre: 'urban',
+        targetWords: 100000,
+        brief: '主角林浩在顶级设计公司夹缝求生，准备冲击年度设计大赛。',
+      });
+      seedBookPlanningContext(bookId);
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/write-next`, {
+        method: 'POST',
+        body: JSON.stringify({
+          chapterNumber: 1,
+          customIntent: '章节规划：老师正式提出推荐林浩参加全国竞赛。',
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(202);
+      const data = (await res.json()) as { data: { pipelineId: string } };
+      await waitForPipelineCompletion(app, bookId, data.data.pipelineId);
+
+      const chapterPath = path.join(
+        getStudioRuntimeRootDir(),
+        bookId,
+        'story',
+        'chapters',
+        'chapter-0001.md'
+      );
+      const chapterContent = fs.readFileSync(chapterPath, 'utf-8');
+      expect(chapterContent).toContain('年度设计大赛');
+      expect(chapterContent).toContain('全国竞赛');
+      expect(chapterContent).toContain('匿名提醒');
+    });
   });
 
   describe('POST /api/books/:bookId/pipeline/fast-draft', () => {
@@ -140,6 +284,27 @@ describe('Pipeline Route', () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as { data: { wordCount: number } };
       expect(data.data.wordCount).toBe(800);
+    });
+
+    it('derives fast draft context from the stored brief and current focus when no custom intent is provided', async () => {
+      const bookId = await createBook(app, {
+        title: '霓虹设计局',
+        genre: 'urban',
+        targetWords: 100000,
+        brief: '主角林浩在顶级设计公司夹缝求生，准备冲击年度设计大赛。',
+      });
+      seedBookFocus(bookId, '当前重点：写主角在年度设计大赛前夜的压力与抉择');
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/fast-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ wordCount: 800 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: { content: string } };
+      expect(data.data.content).toContain('年度设计大赛');
+      expect(data.data.content).not.toContain('快速试写当前主线');
     });
 
     it('returns 400 for negative wordCount', async () => {
@@ -226,6 +391,27 @@ describe('Pipeline Route', () => {
       ).toBe(true);
     });
 
+    it('uses stored project setting context instead of the hardcoded draft fallback', async () => {
+      const bookId = await createBook(app, {
+        title: '霓虹设计局',
+        genre: 'urban',
+        targetWords: 100000,
+        brief: '主角林浩在顶级设计公司夹缝求生，准备冲击年度设计大赛。',
+      });
+      seedBookFocus(bookId, '当前重点：写主角在年度设计大赛前夜的压力与抉择');
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/write-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { data: { content: string } };
+      expect(data.data.content).toContain('年度设计大赛');
+      expect(data.data.content).not.toContain('草稿模式推进主线');
+    });
+
     it('returns 400 for missing chapterNumber', async () => {
       const bookId = await createBook(app);
 
@@ -234,6 +420,191 @@ describe('Pipeline Route', () => {
         body: JSON.stringify({}),
         headers: { 'Content-Type': 'application/json' },
       });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/books/:bookId/pipeline/plan-chapter', () => {
+    it('returns a normalized planning payload with characters and hooks', async () => {
+      const bookId = await createBook(app);
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/plan-chapter`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1, outlineContext: '主角首次出场' }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          success: boolean;
+          chapterNumber: number;
+          title: string;
+          summary: string;
+          keyEvents: string[];
+          characters: string[];
+          hooks: string[];
+        };
+      };
+
+      expect(data.data.success).toBe(true);
+      expect(data.data.chapterNumber).toBe(1);
+      expect(data.data.title).toBeTruthy();
+      expect(Array.isArray(data.data.keyEvents)).toBe(true);
+      expect(Array.isArray(data.data.characters)).toBe(true);
+      expect(Array.isArray(data.data.hooks)).toBe(true);
+    });
+  });
+
+  describe('POST /api/books/:bookId/pipeline/bootstrap-story', () => {
+    it('generates and persists a book-level planning chain from the inspiration brief', async () => {
+      const bookId = await createBook(app, {
+        title: '重返竞赛场',
+        genre: 'urban',
+        targetChapterCount: 80,
+        targetWordsPerChapter: 3200,
+        brief: '主角在高考失利后重回校园竞赛体系，必须在名额争夺、家庭压力与自我怀疑之间完成逆袭。',
+      });
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/bootstrap-story`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        data: {
+          success: boolean;
+          currentFocus: string;
+          centralConflict: string;
+          growthArc: string;
+          worldRules: string[];
+          characters: Array<{ name: string; role: string; arc?: string }>;
+          hooks: string[];
+          chapterPlan: {
+            chapterNumber: number;
+            title: string;
+            summary: string;
+            characters: string[];
+            keyEvents: string[];
+            hooks: string[];
+          };
+        };
+      };
+
+      expect(data.data.success).toBe(true);
+      expect(data.data.currentFocus).toBeTruthy();
+      expect(data.data.centralConflict).toBeTruthy();
+      expect(data.data.growthArc).toBeTruthy();
+      expect(data.data.worldRules.length).toBeGreaterThan(0);
+      expect(data.data.characters.length).toBeGreaterThan(0);
+      expect(data.data.hooks.length).toBeGreaterThan(0);
+      expect(data.data.chapterPlan.chapterNumber).toBe(1);
+      expect(data.data.chapterPlan.title).toBeTruthy();
+      expect(data.data.chapterPlan.summary).toBeTruthy();
+      expect(data.data.chapterPlan.characters.length).toBeGreaterThan(0);
+
+      const manager = new StateManager(getStudioRuntimeRootDir());
+      const store = new RuntimeStateStore(manager);
+      const manifest = store.loadManifest(bookId);
+
+      expect(manifest.currentFocus).toBeTruthy();
+      expect(manifest.worldRules.length).toBeGreaterThan(0);
+      expect(manifest.characters.length).toBeGreaterThan(0);
+      expect(manifest.characters.some((character) => Boolean(character.arc))).toBe(true);
+      expect(manifest.hooks.length).toBeGreaterThan(0);
+    });
+
+    it('persists a planning brief so downstream write-next consumes the generated outline and growth arc', async () => {
+      const bookId = await createBook(app, {
+        title: '重返竞赛场',
+        genre: 'urban',
+        targetChapterCount: 80,
+        targetWordsPerChapter: 3200,
+        brief: '主角在高考失利后重回校园竞赛体系，必须在名额争夺、家庭压力与自我怀疑之间完成逆袭。',
+      });
+
+      await bootstrapStory(app, bookId, 1);
+
+      const runtimeBook = readStudioBookRuntime(bookId);
+      expect(runtimeBook?.planningBrief).toContain('主题大纲');
+      expect(runtimeBook?.planningBrief).toContain('核心矛盾');
+      expect(runtimeBook?.planningBrief).toContain('成长主线');
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/write-next`, {
+        method: 'POST',
+        body: JSON.stringify({
+          chapterNumber: 1,
+          customIntent: '章节规划：老师正式提出推荐林晨参加全国竞赛。',
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(res.status).toBe(202);
+      const data = (await res.json()) as { data: { pipelineId: string } };
+      await waitForPipelineCompletion(app, bookId, data.data.pipelineId);
+
+      const chapterPath = path.join(
+        getStudioRuntimeRootDir(),
+        bookId,
+        'story',
+        'chapters',
+        'chapter-0001.md'
+      );
+      const chapterContent = fs.readFileSync(chapterPath, 'utf-8');
+      expect(chapterContent).toContain('竞赛推荐名额只有一个');
+      expect(chapterContent).toContain('主动承担');
+      expect(chapterContent).toContain('全国竞赛');
+    });
+
+    it('reuses the generated planning brief in fast draft and draft mode after bootstrap', async () => {
+      const bookId = await createBook(app, {
+        title: '重返竞赛场',
+        genre: 'urban',
+        targetChapterCount: 80,
+        targetWordsPerChapter: 3200,
+        brief: '主角在高考失利后重回校园竞赛体系，必须在名额争夺、家庭压力与自我怀疑之间完成逆袭。',
+      });
+
+      await bootstrapStory(app, bookId, 1);
+
+      const fastDraftRes = await app.request(`/api/books/${bookId}/pipeline/fast-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ wordCount: 800 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(fastDraftRes.status).toBe(200);
+      const fastDraftData = (await fastDraftRes.json()) as { data: { content: string } };
+      expect(fastDraftData.data.content).toContain('竞赛推荐名额只有一个');
+      expect(fastDraftData.data.content).toContain('主动承担');
+
+      const writeDraftRes = await app.request(`/api/books/${bookId}/pipeline/write-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(writeDraftRes.status).toBe(200);
+      const writeDraftData = (await writeDraftRes.json()) as { data: { content: string } };
+      expect(writeDraftData.data.content).toContain('竞赛推荐名额只有一个');
+      expect(writeDraftData.data.content).toContain('主动承担');
+    });
+
+    it('returns 400 when the book has no inspiration brief to bootstrap from', async () => {
+      const bookId = await createBook(app, {
+        title: '空白开局',
+        genre: 'urban',
+        targetWords: 100000,
+      });
+
+      const res = await app.request(`/api/books/${bookId}/pipeline/bootstrap-story`, {
+        method: 'POST',
+        body: JSON.stringify({ chapterNumber: 1 }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
       expect(res.status).toBe(400);
     });
   });

@@ -76,4 +76,22 @@ describe('AppLayout', () => {
       expect(screen.getByText('CyberNovelist')).toBeTruthy();
     });
   });
+
+  it('auto-associates current book context from the page bookId into the header', async () => {
+    render(
+      <MemoryRouter initialEntries={['/writing-plan?bookId=book-1']}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/writing-plan" element={<div>创作规划</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('孽徒大唐')).toBeTruthy();
+    });
+
+    expect(screen.getByText('当前书籍：')).toBeTruthy();
+  });
 });

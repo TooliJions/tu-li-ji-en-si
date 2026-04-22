@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BookOpen, Download, FileOutput, FileText, LoaderCircle } from 'lucide-react';
-import { fetchBooks, startExport, type ExportFormat } from '../lib/api';
+import { fetchBooks, fetchChapters, startExport, type ExportFormat } from '../lib/api';
 
 interface Book {
   id: string;
@@ -32,6 +32,10 @@ export default function ExportView() {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('markdown');
   const [exporting, setExporting] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [chapterCount, setChapterCount] = useState(0);
+  const [useChapterRange, setUseChapterRange] = useState(false);
+  const [chapterFrom, setChapterFrom] = useState(1);
+  const [chapterTo, setChapterTo] = useState(1);
 
   useEffect(() => {
     fetchBooks()
@@ -53,6 +57,21 @@ export default function ExportView() {
     [books, selectedBookId]
   );
 
+  useEffect(() => {
+    if (!selectedBookId) {
+      setChapterCount(0);
+      return;
+    }
+    fetchChapters(selectedBookId)
+      .then((chapters) => {
+        const count = chapters.length;
+        setChapterCount(count);
+        setChapterTo(count);
+        setChapterFrom(1);
+      })
+      .catch(() => setChapterCount(0));
+  }, [selectedBookId]);
+
   async function handleExport() {
     if (!selectedBookId || exporting) {
       return;
@@ -62,7 +81,13 @@ export default function ExportView() {
     setResultMessage(null);
 
     try {
-      const result = await startExport(selectedBookId, selectedFormat);
+      const options = useChapterRange
+        ? {
+            chapterFrom: Math.min(chapterFrom, chapterTo),
+            chapterTo: Math.max(chapterFrom, chapterTo),
+          }
+        : undefined;
+      const result = await startExport(selectedBookId, selectedFormat, options);
       const formatLabel =
         EXPORT_FORMATS.find((item) => item.value === result.format)?.label ?? result.format;
       setResultMessage(`已下载 ${selectedBook?.title ?? '当前书籍'}，文件：${result.filename}。`);
@@ -203,6 +228,44 @@ export default function ExportView() {
               );
             })}
           </div>
+
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="chapter-range-toggle"
+              checked={useChapterRange}
+              onChange={(e) => setUseChapterRange(e.target.checked)}
+              className="rounded border"
+            />
+            <label htmlFor="chapter-range-toggle" className="text-sm">
+              指定章节范围
+            </label>
+          </div>
+
+          {useChapterRange && chapterCount > 0 && (
+            <div className="mt-3 flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={chapterCount}
+                value={chapterFrom}
+                onChange={(e) => setChapterFrom(Number(e.target.value))}
+                className="w-20 rounded-md border px-2 py-1.5 text-sm bg-background"
+                aria-label="起始章节"
+              />
+              <span className="text-sm text-muted-foreground">至</span>
+              <input
+                type="number"
+                min={1}
+                max={chapterCount}
+                value={chapterTo}
+                onChange={(e) => setChapterTo(Number(e.target.value))}
+                className="w-20 rounded-md border px-2 py-1.5 text-sm bg-background"
+                aria-label="结束章节"
+              />
+              <span className="text-xs text-muted-foreground">共 {chapterCount} 章</span>
+            </div>
+          )}
 
           <button
             type="button"

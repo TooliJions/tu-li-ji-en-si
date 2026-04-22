@@ -155,6 +155,17 @@ export async function planChapter(
   return data.data;
 }
 
+export async function bootstrapStory(bookId: string, chapterNumber?: number) {
+  const res = await fetch(`/api/books/${bookId}/pipeline/bootstrap-story`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(chapterNumber && chapterNumber > 0 ? { chapterNumber } : {}),
+  });
+  if (!res.ok) throw new Error('自动规划链启动失败');
+  const data = await res.json();
+  return data.data;
+}
+
 export async function startFastDraft(
   bookId: string,
   customIntent?: string,
@@ -266,6 +277,24 @@ export async function triggerInspirationShuffle(bookId: string) {
     method: 'POST',
   });
   if (!res.ok) throw new Error('灵感洗牌失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function applyInspirationShuffle(
+  bookId: string,
+  alternative: {
+    id: string;
+    style: string;
+    text: string;
+  }
+) {
+  const res = await fetch(`/api/books/${bookId}/analytics/apply-shuffle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(alternative),
+  });
+  if (!res.ok) throw new Error('应用灵感方案失败');
   const data = await res.json();
   return data.data;
 }
@@ -472,6 +501,45 @@ export async function testProvider(provider: {
   return data.data;
 }
 
+export async function testNotification(config: { telegramToken: string; chatId: string }) {
+  const res = await fetch('/api/config/test-notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  return data.data;
+}
+
+export async function fetchAvailableModels() {
+  const res = await fetch('/api/config/available-models');
+  if (!res.ok) throw new Error('获取可用模型列表失败');
+  const data = await res.json();
+  return data.data;
+}
+
+// Genres
+export async function fetchGenres() {
+  const res = await fetch('/api/genres');
+  if (!res.ok) throw new Error('获取题材列表失败');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function updateGenre(
+  genreId: string,
+  updates: { name?: string; description?: string; constraints?: string[]; tags?: string[] }
+) {
+  const res = await fetch(`/api/genres/${genreId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error('更新题材失败');
+  const data = await res.json();
+  return data.data;
+}
+
 // System Doctor
 export async function fetchDoctorStatus() {
   const res = await fetch('/api/system/doctor');
@@ -596,13 +664,33 @@ export async function fetchPromptDiff(bookId: string, from: string, to: string) 
 // Export
 export type ExportFormat = 'markdown' | 'txt' | 'epub';
 
-export async function startExport(bookId: string, format: ExportFormat) {
-  const res = await fetch(`/api/books/${bookId}/export`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ format }),
-  });
+export async function startExport(
+  bookId: string,
+  format: ExportFormat,
+  options?: { chapterFrom?: number; chapterTo?: number }
+) {
+  const params = new URLSearchParams();
+  params.set('format', format);
+  if (options?.chapterFrom) params.set('chapterFrom', String(options.chapterFrom));
+  if (options?.chapterTo) params.set('chapterTo', String(options.chapterTo));
+
+  const res = await fetch(`/api/books/${bookId}/export?${params.toString()}`);
   if (!res.ok) throw new Error('启动导出失败');
-  const data = await res.json();
-  return data.data;
+
+  const filename =
+    res.headers.get('content-disposition')?.match(/filename="?([^";]+)"?/i)?.[1] ??
+    `导出.${format === 'epub' ? 'epub' : format === 'txt' ? 'txt' : 'md'}`;
+
+  // 触发浏览器下载
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  return { filename, format };
 }

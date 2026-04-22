@@ -20,8 +20,11 @@ import {
   fetchBaselineAlert,
   fetchEmotionalArcs,
   triggerInspirationShuffle,
+  applyInspirationShuffle,
 } from '../lib/api';
 import TrendDetailChart from '../components/trend-detail-chart';
+import SuggestionBubble from '../components/suggestion-bubble';
+import InspirationShuffle from '../components/inspiration-shuffle';
 
 interface WordCountData {
   totalWords: number;
@@ -155,6 +158,9 @@ export default function Analytics() {
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [shuffleError, setShuffleError] = useState<string | null>(null);
+  const [shuffleOptions, setShuffleOptions] = useState<
+    { id: string; text: string; score: number; style: string }[]
+  >([]);
 
   useEffect(() => {
     if (!bookId) return;
@@ -190,10 +196,45 @@ export default function Analytics() {
     try {
       const result = await triggerInspirationShuffle(bookId);
       setInspirationResults(result);
+      // Convert to InspirationShuffle component format
+      setShuffleOptions(
+        result.alternatives.map(
+          (alt: { id: string; label: string; text: string; style: string }) => ({
+            id: alt.id,
+            text: `${alt.label} — ${alt.text}`,
+            score: 0.7 + Math.random() * 0.3,
+            style: alt.style,
+          })
+        )
+      );
     } catch (err: unknown) {
       setShuffleError(err instanceof Error ? err.message : '灵感生成失败');
     } finally {
       setShuffleLoading(false);
+    }
+  }
+
+  async function handleShuffleSelect(id: string) {
+    if (!bookId) return;
+    const selected = shuffleOptions.find((opt) => opt.id === id);
+    if (!selected) return;
+
+    try {
+      // Extract just the text part (remove the "label — " prefix for the backend)
+      const rawText = selected.text.includes(' — ')
+        ? selected.text.split(' — ').slice(1).join(' — ')
+        : selected.text;
+
+      await applyInspirationShuffle(bookId, {
+        id: selected.id,
+        style: selected.style,
+        text: rawText,
+      });
+      setShuffleOptions((prev) =>
+        prev.map((opt) => (opt.id === id ? { ...opt, score: 1.0 } : opt))
+      );
+    } catch (err: unknown) {
+      setShuffleError(err instanceof Error ? err.message : '应用失败');
     }
   }
 
@@ -477,35 +518,32 @@ export default function Analytics() {
             const recent = aiTrace.trend.slice(-3);
             const anyInAttention = recent.some((p) => p.score >= 0.2);
             return anyInAttention ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 relative mt-6">
-                <div className="absolute -top-2 left-8 w-4 h-4 bg-amber-50 border-l border-t border-amber-200 transform rotate-45" />
-                <p className="text-sm font-medium text-amber-800 mb-2">建议</p>
-                <p className="text-sm text-amber-700 mb-2">近期的文字似乎有些刻板，可能的原因：</p>
-                <ul className="text-sm text-amber-700 space-y-1 mb-3">
-                  <li>· 当前模型的表达风格趋于模式化</li>
-                  <li>· 大纲结构可能限制了叙事自由度</li>
-                  <li>· 角色情感弧线进入平缓期</li>
-                </ul>
-                <p className="text-sm font-medium text-amber-800 mb-2">试试这样做：</p>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    to={`/config?bookId=${bookId}`}
-                    className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
-                  >
-                    切换至更具创造力的模型
-                  </Link>
-                  <button
-                    onClick={async () => {
-                      if (bookId) {
-                        await triggerInspirationShuffle(bookId);
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
-                  >
-                    灵感洗牌：重写当前段落
-                  </button>
-                </div>
-              </div>
+              <SuggestionBubble
+                type="warning"
+                title="建议"
+                message="近期的文字似乎有些刻板，可能的原因："
+                reasons={[
+                  '当前模型的表达风格趋于模式化',
+                  '大纲结构可能限制了叙事自由度',
+                  '角色情感弧线进入平缓期',
+                ]}
+                actions={
+                  <>
+                    <Link
+                      to={`/config?bookId=${bookId}`}
+                      className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
+                    >
+                      切换至更具创造力的模型
+                    </Link>
+                    <button
+                      onClick={handleShuffle}
+                      className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm hover:bg-amber-200"
+                    >
+                      灵感洗牌：重写当前段落
+                    </button>
+                  </>
+                }
+              />
             ) : null;
           })()}
       </div>
@@ -596,56 +634,33 @@ export default function Analytics() {
       </div>
 
       {/* Inspiration Shuffle */}
-      <div className="rounded-lg border bg-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Shuffle size={18} className="text-pink-500" />
-            <h2 className="text-lg font-semibold">灵感洗牌</h2>
-          </div>
-          <button
-            onClick={handleShuffle}
-            disabled={shuffleLoading}
-            className="px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
-          >
-            {shuffleLoading ? '生成中…' : '生成灵感'}
-          </button>
-        </div>
-        {inspirationResults && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-3">
-              生成耗时 {inspirationResults.generationTime.toFixed(1)}s
-            </p>
-            <div className="space-y-4">
-              {inspirationResults.alternatives.map((alt) => (
-                <div
-                  key={alt.id}
-                  className="rounded-lg border p-4 hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-medium">{alt.label}</h3>
-                    <span className="text-xs text-muted-foreground">{alt.wordCount} 字</span>
-                  </div>
-                  <div className="flex gap-1 mb-3">
-                    {alt.characteristics.map((tag) => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-sm leading-relaxed text-foreground">{alt.text}</p>
-                </div>
-              ))}
+      {shuffleOptions.length > 0 ? (
+        <InspirationShuffle
+          options={shuffleOptions}
+          onSelect={handleShuffleSelect}
+          onShuffle={handleShuffle}
+        />
+      ) : (
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Shuffle size={18} className="text-pink-500" />
+              <h2 className="text-lg font-semibold">灵感洗牌</h2>
             </div>
+            <button
+              onClick={handleShuffle}
+              disabled={shuffleLoading}
+              className="px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+            >
+              {shuffleLoading ? '生成中…' : '生成灵感'}
+            </button>
           </div>
-        )}
-        {shuffleError && <p className="text-sm text-destructive">{shuffleError}</p>}
-        {!inspirationResults && !shuffleLoading && !shuffleError && (
-          <p className="text-sm text-muted-foreground">点击「生成灵感」获取不同风格的写作方案</p>
-        )}
-      </div>
+          {shuffleError && <p className="text-sm text-destructive">{shuffleError}</p>}
+          {!shuffleLoading && !shuffleError && (
+            <p className="text-sm text-muted-foreground">点击「生成灵感」获取不同风格的写作方案</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

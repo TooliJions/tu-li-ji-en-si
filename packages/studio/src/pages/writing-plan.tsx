@@ -13,7 +13,7 @@ import {
   Users,
   Wand2,
 } from 'lucide-react';
-import { fetchBook, fetchChapters, planChapter } from '../lib/api';
+import { bootstrapStory, fetchBook, fetchChapters, fetchTruthFile, planChapter } from '../lib/api';
 
 interface Book {
   id: string;
@@ -21,6 +21,7 @@ interface Book {
   genre: string;
   chapterCount: number;
   targetChapterCount: number;
+  brief?: string;
 }
 
 interface Chapter {
@@ -46,6 +47,32 @@ interface PlanChapterResponse {
   keyEvents?: string[];
   hooks?: string[];
   characters?: string[];
+}
+
+interface BootstrapStoryResponse {
+  success: boolean;
+  currentFocus: string;
+  centralConflict: string;
+  growthArc: string;
+  worldRules: string[];
+  characters: Array<{ name: string; role: string; arc?: string }>;
+  hooks: string[];
+  chapterPlan: PlanChapterResponse;
+}
+
+interface PlanningManifest {
+  currentFocus?: string;
+  worldRules?: Array<{ rule?: string }>;
+  characters?: Array<{ name?: string }>;
+  hooks?: Array<{ description?: string; status?: string }>;
+}
+
+interface PlanningSources {
+  brief: string;
+  currentFocus: string;
+  worldRules: string[];
+  characters: string[];
+  hooks: string[];
 }
 
 const STEPS = [
@@ -131,14 +158,107 @@ function getVolumeMeta(chapterNumber: number): { number: number; title: string }
   };
 }
 
+function stripLeadingLabel(value: string, label: string): string {
+  return value.replace(new RegExp(`^${label}[：:]?\\s*`), '').trim();
+}
+
+function truncateSummary(value: string, maxLength = 32): string {
+  if (!value) {
+    return '';
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function normalizePlanningSources(
+  book: Book | null,
+  manifest: PlanningManifest | null
+): PlanningSources {
+  return {
+    brief: (book?.brief ?? '').trim(),
+    currentFocus: stripLeadingLabel((manifest?.currentFocus ?? '').trim(), '当前重点'),
+    worldRules: (manifest?.worldRules ?? [])
+      .map((rule) => (rule?.rule ?? '').trim())
+      .filter(Boolean),
+    characters: (manifest?.characters ?? [])
+      .map((character) => (character?.name ?? '').trim())
+      .filter(Boolean),
+    hooks: (manifest?.hooks ?? [])
+      .filter(
+        (hook) =>
+          !hook?.status || ['open', 'progressing', 'deferred', 'dormant'].includes(hook.status)
+      )
+      .map((hook) => (hook?.description ?? '').trim())
+      .filter(Boolean),
+  };
+}
+
+function buildPlanContext(plan: ChapterPlan, sources: PlanningSources): string {
+  return [
+    sources.brief ? `创作简报: ${sources.brief}` : '',
+    sources.currentFocus ? `当前重点: ${sources.currentFocus}` : '',
+    sources.worldRules.length > 0 ? `世界设定: ${sources.worldRules.join('；')}` : '',
+    sources.characters.length > 0 ? `角色设定: ${sources.characters.join('、')}` : '',
+    sources.hooks.length > 0 ? `现有伏笔: ${sources.hooks.join('；')}` : '',
+    plan.title.trim() ? `章节标题: ${plan.title.trim()}` : '',
+    plan.goal.trim() ? `章节目标: ${plan.goal.trim()}` : '',
+    plan.characters.trim() ? `出场人物: ${plan.characters.trim()}` : '',
+    plan.keyEvents.trim() ? `关键事件: ${plan.keyEvents.trim()}` : '',
+    plan.hooks.trim() ? `本章伏笔: ${plan.hooks.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function buildWritingParams(bookId: string, plan: ChapterPlan): URLSearchParams {
+  const intent = [
+    plan.title.trim() ? `章节标题: ${plan.title.trim()}` : '',
+    plan.goal.trim() ? `章节目标: ${plan.goal.trim()}` : '',
+    plan.characters.trim() ? `出场人物: ${plan.characters.trim()}` : '',
+    plan.keyEvents.trim() ? `关键事件: ${plan.keyEvents.trim()}` : '',
+    plan.hooks.trim() ? `伏笔埋设: ${plan.hooks.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('；');
+
+  const nextParams = new URLSearchParams({
+    bookId,
+    chapter: String(plan.chapterNumber),
+  });
+
+  if (intent) {
+    nextParams.set('intent', intent);
+  }
+  if (plan.title.trim()) {
+    nextParams.set('title', plan.title.trim());
+  }
+  if (plan.characters.trim()) {
+    nextParams.set('characters', plan.characters.trim());
+  }
+  if (plan.hooks.trim()) {
+    nextParams.set('hooks', plan.hooks.trim());
+  }
+
+  return nextParams;
+}
+
 export default function WritingPlan() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const bookId = searchParams.get('bookId') ?? '';
+  const autoBootstrap = searchParams.get('autoBootstrap') === '1';
+  const autoWrite = searchParams.get('autoWrite') === '1';
 
   const [book, setBook] = useState<Book | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [plans, setPlans] = useState<Record<number, ChapterPlan>>({});
+  const [planningSources, setPlanningSources] = useState<PlanningSources>({
+    brief: '',
+    currentFocus: '',
+    worldRules: [],
+    characters: [],
+    hooks: [],
+  });
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -146,6 +266,7 @@ export default function WritingPlan() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const goalRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoBootstrapTriggeredRef = useRef(false);
 
   useEffect(() => {
     if (!bookId) {
@@ -156,8 +277,12 @@ export default function WritingPlan() {
     setLoading(true);
     setLoadError(null);
 
-    Promise.all([fetchBook(bookId), fetchChapters(bookId)])
-      .then(([bookData, chaptersData]) => {
+    Promise.all([
+      fetchBook(bookId),
+      fetchChapters(bookId),
+      fetchTruthFile(bookId, 'manifest').catch(() => null),
+    ])
+      .then(([bookData, chaptersData, manifestData]) => {
         const lastPublishedChapter = [...chaptersData]
           .filter((chapter: Chapter) => chapter.status === 'published')
           .sort((left: Chapter, right: Chapter) => right.number - left.number)[0];
@@ -165,6 +290,12 @@ export default function WritingPlan() {
         setBook(bookData);
         setChapters(chaptersData);
         setPlans(loadStoredPlans(bookId));
+        setPlanningSources(
+          normalizePlanningSources(
+            bookData,
+            (manifestData as { content?: PlanningManifest } | null)?.content ?? null
+          )
+        );
         setSelectedChapter(lastPublishedChapter ? lastPublishedChapter.number + 1 : 1);
       })
       .catch((error: unknown) => {
@@ -190,6 +321,101 @@ export default function WritingPlan() {
     [chapters]
   );
   const volumeMeta = getVolumeMeta(selectedChapter);
+  const stepSummaries = useMemo(
+    () => ({
+      1: planningSources.brief ? truncateSummary(planningSources.brief) : '未填写创作简报',
+      2: planningSources.currentFocus
+        ? truncateSummary(planningSources.currentFocus)
+        : planningSources.worldRules[0]
+          ? truncateSummary(planningSources.worldRules[0])
+          : '未补充世界设定',
+      3:
+        planningSources.characters.length > 0
+          ? truncateSummary(planningSources.characters.join('、'))
+          : '未录入关键角色',
+      4:
+        currentPlan.goal.trim() || currentPlan.title.trim()
+          ? truncateSummary(currentPlan.goal.trim() || currentPlan.title.trim())
+          : '待完善本章规划',
+      5: '基于以上设定进入正文创作',
+      6: '规划完成后可交给守护进程续写',
+    }),
+    [currentPlan.goal, currentPlan.title, planningSources]
+  );
+  const completedSteps = useMemo(
+    () => ({
+      1: Boolean(planningSources.brief),
+      2: Boolean(planningSources.currentFocus || planningSources.worldRules.length > 0),
+      3: planningSources.characters.length > 0,
+      4: !isPlanEmpty(currentPlan),
+    }),
+    [currentPlan, planningSources]
+  );
+
+  useEffect(() => {
+    if (
+      !autoBootstrap ||
+      autoBootstrapTriggeredRef.current ||
+      loading ||
+      !bookId ||
+      !book?.brief?.trim()
+    ) {
+      return;
+    }
+
+    autoBootstrapTriggeredRef.current = true;
+    setAiLoading(true);
+    setAiError(null);
+
+    void bootstrapStory(bookId, selectedChapter)
+      .then((result) => {
+        const bootstrap = result as BootstrapStoryResponse;
+        const plannedChapter = bootstrap.chapterPlan.chapterNumber || selectedChapter;
+        const nextPlan: ChapterPlan = {
+          chapterNumber: plannedChapter,
+          title: bootstrap.chapterPlan.title ?? '',
+          goal: bootstrap.chapterPlan.summary ?? '',
+          characters: Array.isArray(bootstrap.chapterPlan.characters)
+            ? bootstrap.chapterPlan.characters.join(' ')
+            : '',
+          keyEvents: Array.isArray(bootstrap.chapterPlan.keyEvents)
+            ? bootstrap.chapterPlan.keyEvents.join('\n')
+            : '',
+          hooks: Array.isArray(bootstrap.chapterPlan.hooks)
+            ? bootstrap.chapterPlan.hooks.join('、')
+            : '',
+        };
+
+        setPlanningSources({
+          brief: book.brief?.trim() ?? '',
+          currentFocus: bootstrap.currentFocus,
+          worldRules: bootstrap.worldRules ?? [],
+          characters: bootstrap.characters.map((character) => character.name).filter(Boolean),
+          hooks: bootstrap.hooks ?? [],
+        });
+        setSelectedChapter(plannedChapter);
+        setPlans((previous) => {
+          const nextPlans = {
+            ...previous,
+            [plannedChapter]: nextPlan,
+          };
+          persistPlans(bookId, nextPlans);
+          return nextPlans;
+        });
+
+        if (autoWrite) {
+          const nextParams = buildWritingParams(bookId, nextPlan);
+          nextParams.set('autoStart', '1');
+          navigate(`/writing?${nextParams.toString()}`);
+        }
+      })
+      .catch((error: unknown) => {
+        setAiError(error instanceof Error ? error.message : '自动规划链启动失败');
+      })
+      .finally(() => {
+        setAiLoading(false);
+      });
+  }, [autoBootstrap, autoWrite, book, bookId, loading, navigate, selectedChapter]);
 
   function updatePlan(field: keyof Omit<ChapterPlan, 'chapterNumber'>, value: string): void {
     setSaveNotice(null);
@@ -227,15 +453,7 @@ export default function WritingPlan() {
     setAiLoading(true);
     setAiError(null);
 
-    const outlineContext = [
-      currentPlan.title && `章节标题: ${currentPlan.title}`,
-      currentPlan.goal && `章节目标: ${currentPlan.goal}`,
-      currentPlan.characters && `出场人物: ${currentPlan.characters}`,
-      currentPlan.keyEvents && `关键事件: ${currentPlan.keyEvents}`,
-      currentPlan.hooks && `伏笔埋设: ${currentPlan.hooks}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const outlineContext = buildPlanContext(currentPlan, planningSources);
 
     try {
       const result = (await planChapter(
@@ -276,34 +494,7 @@ export default function WritingPlan() {
     }
 
     handleSavePlan();
-
-    const intent = [
-      currentPlan.title && `章节标题: ${currentPlan.title}`,
-      currentPlan.goal && `章节目标: ${currentPlan.goal}`,
-      currentPlan.characters && `出场人物: ${currentPlan.characters}`,
-      currentPlan.keyEvents && `关键事件: ${currentPlan.keyEvents}`,
-      currentPlan.hooks && `伏笔埋设: ${currentPlan.hooks}`,
-    ]
-      .filter(Boolean)
-      .join('；');
-
-    const nextParams = new URLSearchParams({
-      bookId,
-      chapter: String(selectedChapter),
-    });
-    if (intent) {
-      nextParams.set('intent', intent);
-    }
-    if (currentPlan.title.trim()) {
-      nextParams.set('title', currentPlan.title.trim());
-    }
-    if (currentPlan.characters.trim()) {
-      nextParams.set('characters', currentPlan.characters.trim());
-    }
-    if (currentPlan.hooks.trim()) {
-      nextParams.set('hooks', currentPlan.hooks.trim());
-    }
-
+    const nextParams = buildWritingParams(bookId, currentPlan);
     navigate(`/writing?${nextParams.toString()}`);
   }
 
@@ -350,14 +541,16 @@ export default function WritingPlan() {
 
         <div className="space-y-2">
           {STEPS.map(({ index, label, icon: Icon }) => {
-            const isDone = index < 4;
+            const isDone = Boolean(completedSteps[index as keyof typeof completedSteps]);
             const isActive = index === 4;
+            const canNavigate = index !== 4;
+            const canAutoPlanFromSummary = index < 4;
+            const stepSummary = stepSummaries[index as keyof typeof stepSummaries];
 
             return (
-              <Link
+              <div
                 key={label}
-                to={stepLinkFor(index, bookId)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                className={`flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
                   isActive
                     ? 'bg-primary/10 text-primary'
                     : isDone
@@ -376,12 +569,51 @@ export default function WritingPlan() {
                 >
                   {isDone ? <Check size={12} /> : index}
                 </span>
-                <span className="flex min-w-0 items-center gap-2">
-                  <Icon size={14} />
-                  {label}
+                <span className="min-w-0 flex-1">
+                  {canNavigate ? (
+                    <Link to={stepLinkFor(index, bookId)} className="flex items-center gap-2">
+                      <Icon size={14} />
+                      {label}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Icon size={14} />
+                      {label}
+                    </span>
+                  )}
+                  {canAutoPlanFromSummary ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleAiPlan();
+                      }}
+                      className={`mt-1 block text-left text-xs leading-5 hover:underline underline-offset-2 ${
+                        isActive
+                          ? 'text-primary/80'
+                          : isDone
+                            ? 'text-emerald-700/80'
+                            : 'text-muted-foreground'
+                      }`}
+                      title="基于当前上游设定自动生成本章规划"
+                    >
+                      {stepSummary}
+                    </button>
+                  ) : (
+                    <span
+                      className={`mt-1 block text-xs leading-5 ${
+                        isActive
+                          ? 'text-primary/80'
+                          : isDone
+                            ? 'text-emerald-700/80'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      {stepSummary}
+                    </span>
+                  )}
                 </span>
                 {isActive ? <ChevronRight size={14} className="ml-auto" /> : null}
-              </Link>
+              </div>
             );
           })}
         </div>

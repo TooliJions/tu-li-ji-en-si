@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
-import fs from 'node:fs';
-import path from 'node:path';
-import OpenAI from 'openai';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { OpenAICompatibleProvider, LLMConfig } from '@cybernovelist/core';
 
 interface ProviderEntry {
   name: string;
   status: string;
   apiKey: string;
   baseUrl: string;
+  model?: string;
 }
 
 interface AgentRouteEntry {
@@ -40,18 +41,21 @@ const defaultConfig: ConfigState = {
       status: 'disconnected',
       apiKey: '',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen3.6-plus',
     },
     {
       name: 'OpenAI',
       status: 'disconnected',
       apiKey: '',
       baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
     },
     {
       name: 'Gemini',
       status: 'disconnected',
       apiKey: '',
-      baseUrl: 'https://generativelanguage.googleapis.com',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: 'gemini-2.0-flash',
     },
   ],
   notifications: { telegramToken: '', chatId: '' },
@@ -80,6 +84,27 @@ function saveConfig(cfg: ConfigState) {
   fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf-8');
 }
 
+function findProviderConfig(name: string): ProviderEntry | undefined {
+  const config = loadConfig();
+  return config.providers.find((p) => p.name === name);
+}
+
+function resolveProviderConfig(entry: ProviderEntry): {
+  config: LLMConfig;
+  effectiveModel: string;
+} {
+  const model = entry.model || defaultConfig.defaultModel;
+  const baseUrl = entry.baseUrl;
+  const llmConfig: LLMConfig = {
+    apiKey: entry.apiKey,
+    baseURL: baseUrl,
+    model,
+    temperature: 0.7,
+    maxTokens: 100,
+  };
+  return { config: llmConfig, effectiveModel: model };
+}
+
 export function createConfigRouter(): Hono {
   let config = loadConfig();
   const router = new Hono();
@@ -98,14 +123,14 @@ export function createConfigRouter(): Hono {
   // POST /api/config/test-provider
   router.post('/test-provider', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const { apiKey, baseUrl, model } = body;
+    const { apiKey, baseUrl, model, name } = body;
 
     if (!apiKey || !baseUrl) {
       return c.json({
         data: {
           success: false,
           error: '缺少 apiKey 或 baseUrl',
-          provider: body.name || body.provider || 'Unknown',
+          provider: name || 'Unknown',
         },
       });
     }
@@ -114,24 +139,22 @@ export function createConfigRouter(): Hono {
     const startTime = Date.now();
 
     try {
-      const client = new OpenAI({
+      const provider = new OpenAICompatibleProvider({
         apiKey,
         baseURL: baseUrl,
-        timeout: 15000,
+        model: testModel,
+        maxTokens: 10,
       });
 
-      await client.chat.completions.create({
-        model: testModel,
-        messages: [{ role: 'user', content: 'Hi' }],
-        max_tokens: 5,
-      });
+      await provider.generate({ prompt: 'Hi' });
 
       const latencyMs = Date.now() - startTime;
       return c.json({
         data: {
           success: true,
           latencyMs,
-          provider: body.name || body.provider || 'Unknown',
+          provider: name || testModel,
+          model: testModel,
         },
       });
     } catch (err: unknown) {
@@ -142,9 +165,62 @@ export function createConfigRouter(): Hono {
           success: false,
           latencyMs,
           error: message,
-          provider: body.name || body.provider || 'Unknown',
+          provider: name || testModel,
         },
       });
+    }
+  });
+
+  // GET /api/config/available-models
+  router.get('/available-models', (c) => {
+    const { providers, defaultProvider } = config;
+    const connected = providers.filter((p) => p.apiKey);
+    const models = connected.flatMap((p) => {
+      const entry = findProviderConfig(p.name);
+      if (!entry) return [];
+      return [
+        {
+          provider: p.name,
+          model: p.model || entry.model || defaultConfig.defaultModel,
+          status: 'configured',
+        },
+      ];
+    });
+    return c.json({ data: { models, defaultProvider } });
+  });
+
+  // POST /api/config/test-notification
+  router.post('/test-notification', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { telegramToken, chatId } = body;
+
+    if (!telegramToken || !chatId) {
+      return c.json({
+        data: { success: false, error: '缺少 telegramToken 或 chatId' },
+      });
+    }
+
+    try {
+      const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: '🔔 CyberNovelist 测试推送 — 通知配置已生效。',
+        }),
+      });
+
+      if (res.ok) {
+        return c.json({ data: { success: true } });
+      }
+      const errorText = await res.text().catch(() => '');
+      return c.json({
+        data: { success: false, error: `Telegram API 返回 ${res.status}: ${errorText}` },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '推送失败';
+      return c.json({ data: { success: false, error: message } });
     }
   });
 

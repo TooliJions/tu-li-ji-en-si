@@ -96,7 +96,11 @@ export default function BookCreate() {
       }
 
       const data = await res.json();
-      navigate(`/book/${data.data.id}`);
+      navigate(
+        brief.trim()
+          ? `/writing-plan?bookId=${data.data.id}&autoBootstrap=1&autoWrite=1`
+          : `/book/${data.data.id}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
@@ -231,7 +235,10 @@ export default function BookCreate() {
                 />
               </div>
               <div>
-                <label htmlFor="target-words-per-chapter" className="block text-sm font-medium mb-1">
+                <label
+                  htmlFor="target-words-per-chapter"
+                  className="block text-sm font-medium mb-1"
+                >
                   目标字数/章
                 </label>
                 <input
@@ -247,7 +254,9 @@ export default function BookCreate() {
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground">预计总字数 {targetWords.toLocaleString()} 字</p>
+            <p className="text-sm text-muted-foreground">
+              预计总字数 {targetWords.toLocaleString()} 字
+            </p>
 
             <div>
               <label htmlFor="prompt-version" className="block text-sm font-medium mb-1">

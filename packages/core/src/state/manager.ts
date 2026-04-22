@@ -65,11 +65,39 @@ export class StateManager {
   // ── Book Lock ─────────────────────────────────────────────────
 
   /**
+   * 检查进程是否仍在运行。
+   */
+  private isProcessRunning(pid: number): boolean {
+    try {
+      // 信号 0 不会杀死进程，但可以用来检测进程是否存在
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * 获取书籍排他锁。
-   * 使用 open("wx") 原子创建 .lock 文件，若已存在则抛出。
+   * 使用 open("wx") 原子创建 .lock 文件，若已存在则检查是否为陈旧锁并清理。
    */
   acquireBookLock(bookId: string, operation: string): BookLock | null {
     const lockPath = this.getBookPath(bookId, '.lock');
+
+    // 检查陈旧锁逻辑
+    if (fs.existsSync(lockPath)) {
+      try {
+        const content = fs.readFileSync(lockPath, 'utf-8');
+        const lockData = JSON.parse(content) as BookLock;
+        if (lockData.pid && !this.isProcessRunning(lockData.pid)) {
+          fs.unlinkSync(lockPath);
+        }
+      } catch (err) {
+        // 如果锁文件损坏，也进行清理
+        fs.unlinkSync(lockPath);
+      }
+    }
+
     const lockInfo: BookLock = {
       bookId,
       pid: process.pid,

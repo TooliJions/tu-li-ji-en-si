@@ -131,9 +131,61 @@ const STAGE_LABELS: Record<string, string> = {
   persisting: '持久化中',
 };
 
+function buildPlanningIntent(
+  requestedIntent: string,
+  requestedTitle: string,
+  requestedCharacters: string,
+  requestedHooks: string
+) {
+  if (requestedIntent) {
+    return requestedIntent;
+  }
+
+  return [
+    requestedTitle ? `章节标题: ${requestedTitle}` : '',
+    requestedCharacters ? `出场人物: ${requestedCharacters}` : '',
+    requestedHooks ? `伏笔埋设: ${requestedHooks}` : '',
+  ]
+    .filter(Boolean)
+    .join('；');
+}
+
+function normalizePipelineStatus(data: Partial<PipelineStatus>): PipelineStatus {
+  return {
+    pipelineId: data.pipelineId ?? 'unknown-pipeline',
+    status: data.status ?? 'running',
+    stages: Array.isArray(data.stages) ? data.stages : [],
+    currentStage: data.currentStage ?? '',
+    progress: data.progress ?? {},
+    startedAt: data.startedAt ?? new Date(0).toISOString(),
+    result: data.result,
+  };
+}
+
+function getPipelineCompletionRatio(pipeline: PipelineStatus): number {
+  if (pipeline.stages.length === 0) {
+    return 0;
+  }
+
+  const currentStageIndex = pipeline.stages.indexOf(pipeline.currentStage);
+  const completedStages =
+    Math.max(currentStageIndex, 0) + (pipeline.status === 'completed' ? 1 : 0);
+  return completedStages / pipeline.stages.length;
+}
+
 export default function Writing() {
   const [searchParams] = useSearchParams();
   const bookId = searchParams.get('bookId') || '';
+  const autoStart = searchParams.get('autoStart') === '1';
+  const requestedChapterParam = Number.parseInt(searchParams.get('chapter') || '', 10);
+  const requestedChapter =
+    Number.isFinite(requestedChapterParam) && requestedChapterParam > 0
+      ? requestedChapterParam
+      : null;
+  const requestedTitle = (searchParams.get('title') || '').trim();
+  const requestedIntent = (searchParams.get('intent') || '').trim();
+  const requestedCharacters = (searchParams.get('characters') || '').trim();
+  const requestedHooks = (searchParams.get('hooks') || '').trim();
   const [book, setBook] = useState<Book | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,18 +240,56 @@ export default function Writing() {
   }, [pipeline?.currentStage]);
 
   const sseRef = useRef<EventSource | null>(null);
+  const autoStartTriggeredRef = useRef(false);
+  const nextChapterNumber = Math.max(...chapters.map((ch) => ch.number), 0) + 1;
+  const activeChapterNumber = requestedChapter ?? nextChapterNumber;
+  const activeChapterTitle =
+    requestedTitle || chapters.find((ch) => ch.number === activeChapterNumber)?.title || '未命名';
+  const planningIntent = buildPlanningIntent(
+    requestedIntent,
+    requestedTitle,
+    requestedCharacters,
+    requestedHooks
+  );
+
+  useEffect(() => {
+    setWriteIntent(planningIntent);
+    setDraftIntent(planningIntent);
+  }, [planningIntent]);
 
   async function loadWorkspaceData(targetBookId: string) {
-    const [bookData, chaptersData, memoryData, truthFiles, tokenData, aiTrace, auditData] =
-      await Promise.all([
-        fetchBook(targetBookId),
-        fetchChapters(targetBookId),
-        fetchMemoryPreview(targetBookId),
-        fetchTruthFiles(targetBookId) as Promise<TruthFilesSummary>,
-        fetchTokenUsage(targetBookId).catch(() => ({ prompt: 0, completion: 0, total: 0 })),
-        fetchAiTrace(targetBookId).catch(() => ({ score: 0, labels: [] })),
-        fetchAuditRate(targetBookId).catch(() => ({ passed: 0, failed: 0, total: 0 })),
-      ]);
+    // 允许部分失败，核心数据若失败则通过 setBook(null) 触发重试 UI
+    const results = await Promise.allSettled([
+      fetchBook(targetBookId),
+      fetchChapters(targetBookId),
+      fetchMemoryPreview(targetBookId),
+      fetchTruthFiles(targetBookId),
+      fetchTokenUsage(targetBookId),
+      fetchAiTrace(targetBookId),
+      fetchAuditRate(targetBookId),
+    ]);
+
+    const bookData = results[0].status === 'fulfilled' ? (results[0].value as Book) : null;
+    const chaptersData = results[1].status === 'fulfilled' ? (results[1].value as Chapter[]) : [];
+    const memoryData =
+      results[2].status === 'fulfilled' ? (results[2].value as MemoryPreview) : null;
+    const truthFiles =
+      results[3].status === 'fulfilled'
+        ? (results[3].value as TruthFilesSummary)
+        : { versionToken: 0, files: [] };
+    const tokenData =
+      results[4].status === 'fulfilled'
+        ? (results[4].value as AnalyticsData['tokens'])
+        : { prompt: 0, completion: 0, total: 0 };
+    const aiTrace =
+      results[5].status === 'fulfilled'
+        ? (results[5].value as AnalyticsData['aiTrace'])
+        : { score: 0, labels: [] };
+    const auditData =
+      results[6].status === 'fulfilled'
+        ? (results[6].value as AnalyticsData['auditRate'])
+        : { passed: 0, failed: 0, total: 0 };
+
     setBook(bookData);
     setChapters(chaptersData);
     setMemoryPreview(memoryData);
@@ -208,6 +298,11 @@ export default function Writing() {
       aiTrace: aiTrace,
       auditRate: auditData,
     });
+
+    if (results[0].status === 'rejected') {
+      addLog(`加载核心数据失败: ${String(results[0].reason)}`, 'error', 'API');
+    }
+
     return {
       versionToken: truthFiles.versionToken || 0,
     };
@@ -259,7 +354,7 @@ export default function Writing() {
     sseRef.current = sse;
 
     sse.addEventListener('pipeline_progress', (event) => {
-      const data = JSON.parse(event.data);
+      const data = normalizePipelineStatus(JSON.parse(event.data) as Partial<PipelineStatus>);
       setPipeline(data);
       addLog(`流水线状态: ${STAGE_LABELS[data.currentStage] || data.currentStage}`, 'info');
 
@@ -317,6 +412,7 @@ export default function Writing() {
   const draftModeEntities = draftModeResult
     ? extractFlowEntities(draftModeResult.content, knownEntityNames)
     : [];
+  const pipelineCompletionRatio = pipeline ? getPipelineCompletionRatio(pipeline) : 0;
 
   async function handleEntityEnter(
     entity: string,
@@ -374,13 +470,28 @@ export default function Writing() {
     setLogs([]);
     addLog('启动完整创作流水线...', 'info');
     try {
-      const nextChapter = Math.max(...chapters.map((ch) => ch.number), 0) + 1;
-      await startWriteNext(bookId, nextChapter, writeIntent || undefined);
+      await startWriteNext(bookId, activeChapterNumber, writeIntent || undefined);
     } catch (err: unknown) {
       addLog(`启动流水线失败: ${err instanceof Error ? err.message : String(err)}`, 'error');
       setPipelineLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (
+      !autoStart ||
+      autoStartTriggeredRef.current ||
+      loading ||
+      pipelineLoading ||
+      !bookId ||
+      !writeIntent.trim()
+    ) {
+      return;
+    }
+
+    autoStartTriggeredRef.current = true;
+    void handleWriteNext();
+  }, [autoStart, bookId, loading, pipelineLoading, writeIntent]);
 
   async function handleWriteDraft() {
     if (!bookId) return;
@@ -388,8 +499,7 @@ export default function Writing() {
     setUpgradeNotice(null);
     addLog('启动草稿模式生成...', 'info');
     try {
-      const nextChapter = Math.max(...chapters.map((ch) => ch.number), 0) + 1;
-      const result = await startWriteDraft(bookId, nextChapter);
+      const result = await startWriteDraft(bookId, activeChapterNumber);
       const workspace = await loadWorkspaceData(bookId);
       setDraftModeResult({
         content: result.content,
@@ -508,6 +618,33 @@ export default function Writing() {
     );
   }
 
+  if (!book && !loading && bookId) {
+    return (
+      <div className="text-center py-12 animate-in fade-in duration-500">
+        <AlertCircle className="mx-auto h-12 w-12 text-destructive opacity-50 mb-4" />
+        <h3 className="text-lg font-medium">数据加载失败</h3>
+        <p className="text-sm text-muted-foreground mt-2">无法连接到服务器或书籍核心数据缺失</p>
+        <div className="flex justify-center gap-4 mt-6">
+          <button
+            onClick={() => {
+              setLoading(true);
+              void loadWorkspaceData(bookId).finally(() => setLoading(false));
+            }}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            重试加载
+          </button>
+          <Link
+            to="/"
+            className="px-4 py-2 border rounded-md text-sm font-medium hover:bg-accent transition-colors"
+          >
+            返回仪表盘
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!book) {
     return (
       <div className="text-center py-12">
@@ -547,9 +684,7 @@ export default function Writing() {
       <header className="space-y-1">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">
-            正文创作 | 第{Math.max(...chapters.map((ch) => ch.number), 0) + 1}章 ·{' '}
-            {chapters.find((ch) => ch.number === Math.max(...chapters.map((c) => c.number), 0) + 1)
-              ?.title || '未命名'}
+            正文创作 | 第{activeChapterNumber}章 · {activeChapterTitle}
           </h1>
           {flowContent && (
             <button
@@ -629,8 +764,14 @@ export default function Writing() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-end mb-6">
               <div className="w-full sm:w-24">
-                <label className="text-xs text-muted-foreground mb-1 block">目标字数</label>
+                <label
+                  htmlFor="draft-word-count"
+                  className="text-xs text-muted-foreground mb-1 block"
+                >
+                  目标字数
+                </label>
                 <input
+                  id="draft-word-count"
                   type="number"
                   value={draftWordCount}
                   onChange={(e) => setDraftWordCount(parseInt(e.target.value, 10) || 800)}
@@ -640,8 +781,11 @@ export default function Writing() {
                 />
               </div>
               <div className="flex-1 w-full">
-                <label className="text-xs text-muted-foreground mb-1 block">创作意图（可选）</label>
+                <label htmlFor="draft-intent" className="text-xs text-muted-foreground mb-1 block">
+                  试写意图（可选）
+                </label>
                 <input
+                  id="draft-intent"
                   type="text"
                   value={draftIntent}
                   onChange={(e) => setDraftIntent(e.target.value)}
@@ -702,8 +846,11 @@ export default function Writing() {
                 </div>
               )}
               <div className="w-full">
-                <label className="text-xs text-muted-foreground mb-1 block">创作意图（可选）</label>
+                <label htmlFor="write-intent" className="text-xs text-muted-foreground mb-1 block">
+                  创作意图（可选）
+                </label>
                 <textarea
+                  id="write-intent"
                   value={writeIntent}
                   onChange={(e) => setWriteIntent(e.target.value)}
                   placeholder="输入更详细的创作指令，系统将整合所有真相文件生成正式章节。"
@@ -750,13 +897,7 @@ export default function Writing() {
                         {STAGE_LABELS[pipeline.currentStage] || pipeline.currentStage}
                       </span>
                       <span className="text-muted-foreground font-mono">
-                        {Math.round(
-                          ((pipeline.stages.indexOf(pipeline.currentStage) +
-                            (pipeline.status === 'completed' ? 1 : 0)) /
-                            pipeline.stages.length) *
-                            100
-                        )}
-                        %
+                        {Math.round(pipelineCompletionRatio * 100)}%
                       </span>
                     </div>
                   </div>
@@ -766,7 +907,7 @@ export default function Writing() {
                     <div
                       className={`absolute h-full transition-all duration-700 ease-out ${pipeline.status === 'failed' ? 'bg-rose-500' : 'bg-primary'}`}
                       style={{
-                        width: `${((pipeline.stages.indexOf(pipeline.currentStage) + (pipeline.status === 'completed' ? 1 : 0)) / pipeline.stages.length) * 100}%`,
+                        width: `${pipelineCompletionRatio * 100}%`,
                       }}
                     />
                   </div>

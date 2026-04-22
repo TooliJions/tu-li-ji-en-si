@@ -23,12 +23,7 @@ describe('Export Route', () => {
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as {
-        data: { format: string; status: string; bookId: string };
-      };
-      expect(data.data.format).toBe('epub');
-      expect(data.data.status).toBe('processing');
-      expect(data.data.bookId).toBe('book-001');
+      expect(res.headers.get('Content-Type')).toBe('application/epub+zip');
     });
 
     it('accepts chapter range', async () => {
@@ -38,8 +33,7 @@ describe('Export Route', () => {
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { data: { format: string } };
-      expect(data.data.format).toBe('epub');
+      expect(res.headers.get('Content-Type')).toBe('application/epub+zip');
     });
   });
 
@@ -51,9 +45,7 @@ describe('Export Route', () => {
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { data: { format: string; bookId: string } };
-      expect(data.data.format).toBe('txt');
-      expect(data.data.bookId).toBe('book-001');
+      expect(res.headers.get('Content-Type')).toContain('text/plain');
     });
   });
 
@@ -65,9 +57,7 @@ describe('Export Route', () => {
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { data: { format: string; bookId: string } };
-      expect(data.data.format).toBe('markdown');
-      expect(data.data.bookId).toBe('book-001');
+      expect(res.headers.get('Content-Type')).toContain('text/markdown');
     });
   });
 });

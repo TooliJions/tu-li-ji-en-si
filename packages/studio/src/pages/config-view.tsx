@@ -13,13 +13,20 @@ import {
   Globe,
   Bell,
 } from 'lucide-react';
-import { fetchConfig, updateConfig, testProvider } from '../lib/api';
+import {
+  fetchConfig,
+  updateConfig,
+  testProvider,
+  testNotification,
+  fetchAvailableModels,
+} from '../lib/api';
 
 interface Provider {
   name: string;
   status: string;
   apiKey: string;
   baseUrl: string;
+  model?: string;
 }
 
 interface AgentRoute {
@@ -34,6 +41,13 @@ interface Config {
   defaultModel: string;
   agentRouting: AgentRoute[];
   providers: Provider[];
+  notifications?: { telegramToken: string; chatId: string };
+}
+
+interface AvailableModel {
+  provider: string;
+  model: string;
+  status: string;
 }
 
 export default function ConfigView() {
@@ -57,6 +71,15 @@ export default function ConfigView() {
     error?: string;
   } | null>(null);
 
+  // Available models from backend
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+
+  // Notification test result
+  const [notifTestResult, setNotifTestResult] = useState<{
+    success: boolean;
+    error?: string;
+  } | null>(null);
+
   // Notification config
   const [notifications, setNotifications] = useState({
     telegramToken: '',
@@ -65,11 +88,23 @@ export default function ConfigView() {
 
   useEffect(() => {
     fetchConfig()
-      .then((c) => setConfig(c))
+      .then((c) => {
+        setConfig(c);
+        setNotifications({
+          telegramToken: c.notifications?.telegramToken ?? '',
+          chatId: c.notifications?.chatId ?? '',
+        });
+      })
       .catch(() => {
         // load failed
       })
       .finally(() => setLoading(false));
+
+    fetchAvailableModels()
+      .then((d) => setAvailableModels(d.models ?? []))
+      .catch(() => {
+        // non-critical
+      });
   }, []);
 
   async function handleSave(updated: Config) {
@@ -137,9 +172,28 @@ export default function ConfigView() {
     setConfig({ ...config, defaultModel: model });
   }
 
-  function handleDefaultProviderChange(provider: string) {
+  async function handleDefaultProviderChange(provider: string) {
     if (!config) return;
     setConfig({ ...config, defaultProvider: provider });
+  }
+
+  async function handleSaveNotifications() {
+    if (!config) return;
+    try {
+      await updateConfig({ ...config, notifications });
+    } catch {
+      // save failed
+    }
+  }
+
+  async function handleTestNotification() {
+    setNotifTestResult(null);
+    try {
+      const result = await testNotification(notifications);
+      setNotifTestResult({ success: result.success, error: result.error });
+    } catch {
+      setNotifTestResult({ success: false, error: '推送失败' });
+    }
   }
 
   if (loading) {
@@ -213,13 +267,19 @@ export default function ConfigView() {
                     aria-label="默认模型"
                     className="w-full px-3 py-2 rounded border bg-background text-sm"
                   >
-                    {config.providers
-                      .filter((pp) => pp.status === 'connected')
-                      .map((pp) => (
-                        <option key={pp.name} value={pp.name}>
-                          {pp.name}
-                        </option>
-                      ))}
+                    {availableModels.length > 0
+                      ? availableModels.map((m) => (
+                          <option key={`${m.provider}/${m.model}`} value={m.model}>
+                            {m.provider} — {m.model}
+                          </option>
+                        ))
+                      : config.providers
+                          .filter((pp) => pp.apiKey)
+                          .map((pp) => (
+                            <option key={pp.name} value={pp.model || pp.name}>
+                              {pp.name} — {pp.model || '未指定'}
+                            </option>
+                          ))}
                   </select>
                 </div>
                 <div>
@@ -415,17 +475,42 @@ export default function ConfigView() {
               />
               <button
                 onClick={() => {
-                  console.log(
-                    'Testing Telegram push:',
-                    notifications.telegramToken,
-                    notifications.chatId
-                  );
+                  handleSaveNotifications();
+                  handleTestNotification();
                 }}
                 className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap"
               >
                 测试推送
               </button>
             </div>
+          </div>
+          {notifTestResult && (
+            <div
+              className={`text-xs px-3 py-1.5 rounded flex items-center gap-1 ${
+                notifTestResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}
+            >
+              {notifTestResult.success ? (
+                <>
+                  <CheckCircle size={12} />
+                  推送成功
+                </>
+              ) : (
+                <>
+                  <XCircle size={12} />
+                  推送失败: {notifTestResult.error}
+                </>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSaveNotifications}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
+            >
+              <Save size={14} />
+              保存通知配置
+            </button>
           </div>
         </div>
       </div>

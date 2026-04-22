@@ -1177,15 +1177,15 @@ describe('PipelineRunner', () => {
           summary: '主角出场',
           keyEvents: ['林风登场', '发现灵剑'],
           targetWordCount: 3000,
-          hooks: [],
+          hooks: ['灵剑线索'],
         })
         .mockResolvedValueOnce({
           scenes: [
             { description: '林风走进大厅', targetWords: 1000, mood: '紧张' },
             { description: '发现神秘玉佩', targetWords: 1000, mood: '神秘' },
           ],
-          characters: ['林风'],
-          hooks: [],
+          characters: ['林风', '师父'],
+          hooks: ['灵剑线索'],
         });
 
       const result = await runner.planChapter({
@@ -1197,6 +1197,8 @@ describe('PipelineRunner', () => {
       expect(result.success).toBe(true);
       expect(result.chapterNumber).toBe(1);
       expect(result.title).toBe('第一章');
+      expect(result.characters).toEqual(['林风', '师父']);
+      expect(result.hooks).toEqual(['灵剑线索']);
     });
 
     it('writes planned chapter entries using canonical index fields', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './dashboard';
 import * as api from '../lib/api';
@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   fetchAiTrace: vi.fn(),
   deleteBook: vi.fn(),
   fetchBookActivity: vi.fn(),
+  fetchHooks: vi.fn(),
 }));
 
 const mockBooks = [
@@ -100,7 +101,17 @@ describe('Dashboard Page', () => {
       expect(screen.getByText('测试书籍 1')).toBeDefined();
     });
 
-    fireEvent.click(screen.getByTitle('删除书籍'));
+    // Open delete dialog by clicking the confirmation button directly via state
+    // The dialog only shows when deleteConfirm state is set via requestDeleteBook
+    const deleteBtn = screen.getByTitle('删除书籍');
+    fireEvent.pointerDown(deleteBtn);
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '确认删除' })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => {
       expect(screen.getByText('删除书籍失败：状态目录被占用')).toBeDefined();

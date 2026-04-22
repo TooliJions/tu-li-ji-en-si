@@ -17,6 +17,7 @@ import FanficInit from '@/pages/fanfic-init';
 import StyleManager from '@/pages/style-manager';
 import EmotionalArcs from '@/pages/emotional-arcs';
 import WritingPlan from '@/pages/writing-plan';
+import GenreManager from '@/pages/genre-manager';
 import ExportView from '@/pages/export-view';
 import ImportManager from '@/pages/import-manager';
 import LogViewerPage from '@/pages/log-viewer-page';
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/book/:bookId/chapter/:chapterNumber" element={<ChapterReader />} />
         <Route path="/writing" element={<Writing />} />
         <Route path="/chapters" element={<ChaptersPage />} />
+        <Route path="/review" element={<ChaptersPage />} />
         <Route path="/hooks" element={<HookPanel />} />
         <Route path="/hooks/timeline" element={<HookTimelinePage />} />
         <Route path="/daemon" element={<DaemonControl />} />
@@ -42,6 +44,7 @@ export default function App() {
         <Route path="/doctor" element={<DoctorView />} />
         <Route path="/fanfic-init" element={<FanficInit />} />
         <Route path="/style-manager" element={<StyleManager />} />
+        <Route path="/genres" element={<GenreManager />} />
         <Route path="/writing-plan" element={<WritingPlan />} />
         <Route path="/book/:bookId/emotional-arcs" element={<EmotionalArcs />} />
         <Route path="/export" element={<ExportView />} />

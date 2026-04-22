@@ -12,7 +12,7 @@ describe('SuggestionBubble', () => {
 
   it('shows warning type with yellow styling', () => {
     const { container } = render(<SuggestionBubble type="warning" message="test" />);
-    const bubble = container.querySelector('[class*="bg-yellow"]');
+    const bubble = container.querySelector('[class*="bg-amber"]');
     expect(bubble).toBeTruthy();
   });
 

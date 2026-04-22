@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { PipelinePersistence } from '@cybernovelist/core';
 import { createBookRouter, resetBookStoreForTests } from './books';
-import { createChapterRouter } from './chapters';
+import { buildChapterAuditReport, createChapterRouter, writeAuditReport } from './chapters';
 import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
 
 type ChapterRecord = {
@@ -444,11 +444,12 @@ describe('Chapters Route', () => {
   describe('POST /api/books/:bookId/chapters/:chapterNumber/audit', () => {
     it('builds and persists a content-driven audit report for a chapter', async () => {
       const bookId = await createBook(app);
+      const content =
+        '林砚把窗户推开，先听见楼下铁门合拢的回声，再看见雨水沿着台阶慢慢退下去。\n\n他没有急着下结论，只把口袋里的纸条摊平，对照灯下的笔迹，一点点把前后矛盾的地方圈了出来。';
       await seedChapter(bookId, {
         number: 1,
         title: null,
-        content:
-          '林砚把窗户推开，先听见楼下铁门合拢的回声，再看见雨水沿着台阶慢慢退下去。\n\n他没有急着下结论，只把口袋里的纸条摊平，对照灯下的笔迹，一点点把前后矛盾的地方圈了出来。',
+        content,
         status: 'published',
         wordCount: 7,
         qualityScore: null,
@@ -464,32 +465,17 @@ describe('Chapters Route', () => {
         headers: { 'Content-Type': 'application/json' },
       });
       expect(res.status).toBe(200);
+      const expected = buildChapterAuditReport(1, content);
       const data = (await res.json()) as {
-        data: {
-          overallStatus: string;
-          tiers: {
-            blocker: { failed: number };
-            warning: { failed: number };
-            suggestion: { failed: number };
-          };
-          radarScores: Array<{ dimension: string; score: number }>;
-        };
+        data: ReturnType<typeof buildChapterAuditReport>;
       };
-      expect(data.data.overallStatus).toBe('passed');
-      expect(data.data.tiers.blocker.failed).toBe(0);
-      expect(data.data.radarScores).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ dimension: 'ai_trace' }),
-          expect.objectContaining({ dimension: 'coherence' }),
-        ])
-      );
+      expect(data.data).toEqual(expected);
 
       const persisted = await app.request(`/api/books/${bookId}/chapters/1/audit-report`);
       const persistedData = (await persisted.json()) as {
-        data: { overallStatus: string; radarScores: Array<{ dimension: string; score: number }> };
+        data: ReturnType<typeof buildChapterAuditReport>;
       };
-      expect(persistedData.data.overallStatus).toBe('passed');
-      expect(persistedData.data.radarScores).toEqual(data.data.radarScores);
+      expect(persistedData.data).toEqual(expected);
     });
 
     it('flags high-risk AI patterns instead of returning a fixed pass result', async () => {
@@ -592,6 +578,52 @@ describe('Chapters Route', () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as { data: { overallStatus: string } };
       expect(data.data.overallStatus).toBe('not_audited');
+    });
+
+    it('refreshes legacy fixed audit reports into content-driven values', async () => {
+      const bookId = await createBook(app);
+      const content =
+        '林砚把伞挂在门口，先看了一眼鞋印里的泥水，再把桌上的旧票据摊开。\n\n他没有急着判断谁在说谎，而是按时间顺序把每一次出入记录重新排了一遍，终于在最不起眼的一栏里看见了缺口。';
+      await seedChapter(bookId, {
+        number: 2,
+        title: null,
+        content,
+        status: 'published',
+        wordCount: 7,
+        qualityScore: null,
+        aiTraceScore: null,
+        auditStatus: 'passed',
+        auditReport: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      writeAuditReport(bookId, 2, {
+        chapterNumber: 2,
+        overallStatus: 'passed',
+        tiers: {
+          blocker: { total: 12, passed: 12, failed: 0, items: [] },
+          warning: { total: 12, passed: 12, failed: 0, items: [] },
+          suggestion: { total: 9, passed: 9, failed: 0, items: [] },
+        },
+        radarScores: [
+          { dimension: 'ai_trace', label: 'AI 痕迹', score: 0.1 },
+          { dimension: 'coherence', label: '连贯性', score: 0.9 },
+          { dimension: 'pacing', label: '节奏', score: 0.8 },
+          { dimension: 'dialogue', label: '对话', score: 0.85 },
+          { dimension: 'description', label: '描写', score: 0.75 },
+          { dimension: 'emotion', label: '情感', score: 0.8 },
+          { dimension: 'creativity', label: '创新', score: 0.7 },
+          { dimension: 'completeness', label: '完整性', score: 0.85 },
+        ],
+      });
+
+      const res = await app.request(`/api/books/${bookId}/chapters/2/audit-report`);
+      expect(res.status).toBe(200);
+
+      const expected = buildChapterAuditReport(2, content);
+      const data = (await res.json()) as { data: ReturnType<typeof buildChapterAuditReport> };
+      expect(data.data).toEqual(expected);
     });
 
     it('returns 404 for non-existent chapter', async () => {

@@ -106,7 +106,7 @@ describe('PlatformAdapter', () => {
 
       expect(metaFile).toBeTruthy();
       const meta = JSON.parse(metaFile!.content);
-      expect(meta.title).toBe('测试小说');
+      expect(meta.bookName).toBe('测试小说');
       expect(meta.author).toBe('测试作者');
       expect(meta.description).toBe('这是一本测试小说');
       expect(meta.chapterCount).toBe(3);
@@ -155,9 +155,10 @@ describe('PlatformAdapter', () => {
       expect(meta.chapters).toBeTruthy();
       expect(meta.chapters.length).toBe(3);
       expect(meta.chapters[0]).toEqual({
-        number: 1,
-        title: '第一章 起点',
-        file: 'chapter_001.txt',
+        chapterId: 1,
+        chapterTitle: '第一章 起点',
+        fileName: 'chapter_001.txt',
+        wordCount: 19,
       });
     });
   });

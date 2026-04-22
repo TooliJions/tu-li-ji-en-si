@@ -18,6 +18,7 @@ import { createContextRouter } from './routes/context';
 import { createNaturalAgentRouter } from './routes/natural-agent';
 import { createFanficRouter } from './routes/fanfic';
 import { createStyleRouter } from './routes/style';
+import { createGenreRouter } from './routes/genres';
 
 // Re-export for route modules
 export { eventHub, SSEClient };
@@ -93,6 +94,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Global routes
   app.route('/api/config', createConfigRouter());
   app.route('/api/system', createSystemRouter());
+  app.route('/api/genres', createGenreRouter());
 
   return app;
 }

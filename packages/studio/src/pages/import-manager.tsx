@@ -282,7 +282,12 @@ export default function ImportManager() {
               <div className="mt-4 text-sm text-red-600">{diffError}</div>
             ) : diffData ? (
               <div className="mt-4">
-                <StateDiffView diff={diffData} onMerge={() => {}} />
+                <StateDiffView
+                  diff={diffData}
+                  onMerge={() => {}}
+                  onIgnore={() => setDiffData(null)}
+                  onReRead={() => window.location.reload()}
+                />
               </div>
             ) : (
               <div className="mt-4 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">

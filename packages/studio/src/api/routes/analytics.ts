@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   StateManager,
+  RuntimeStateStore,
   TelemetryLogger,
   buildChapterQualityAnalytics,
   summarizeAiTrace,
@@ -14,7 +15,11 @@ import {
   type BaselineAlertMetric,
 } from '@cybernovelist/core';
 import type { ChapterIndex, Manifest } from '@cybernovelist/core';
-import { getStudioRuntimeRootDir, getStudioLLMProvider, hasStudioBookRuntime } from '../core-bridge';
+import {
+  getStudioRuntimeRootDir,
+  getStudioLLMProvider,
+  hasStudioBookRuntime,
+} from '../core-bridge';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -24,25 +29,50 @@ function getStateManager(): StateManager {
 
 function getChapterAuditPath(bookId: string, chapterNumber: number): string {
   const padded = String(chapterNumber).padStart(4, '0');
-  return path.join(getStudioRuntimeRootDir(), bookId, 'story', 'state', 'audits', `chapter-${padded}.json`);
+  return path.join(
+    getStudioRuntimeRootDir(),
+    bookId,
+    'story',
+    'state',
+    'audits',
+    `chapter-${padded}.json`
+  );
 }
 
 function readIndex(bookId: string): ChapterIndex | null {
   const indexPath = path.join(getStudioRuntimeRootDir(), bookId, 'story', 'state', 'index.json');
   if (!fs.existsSync(indexPath)) return null;
-  return JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as ChapterIndex;
+  try {
+    return JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as ChapterIndex;
+  } catch {
+    return null;
+  }
 }
 
 function readAuditReport(bookId: string, chapterNumber: number): unknown | null {
   const auditPath = getChapterAuditPath(bookId, chapterNumber);
   if (!fs.existsSync(auditPath)) return null;
-  return JSON.parse(fs.readFileSync(auditPath, 'utf-8')) as unknown;
+  try {
+    return JSON.parse(fs.readFileSync(auditPath, 'utf-8')) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function readManifest(bookId: string): Manifest | null {
-  const manifestPath = path.join(getStudioRuntimeRootDir(), bookId, 'story', 'state', 'manifest.json');
+  const manifestPath = path.join(
+    getStudioRuntimeRootDir(),
+    bookId,
+    'story',
+    'state',
+    'manifest.json'
+  );
   if (!fs.existsSync(manifestPath)) return null;
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Manifest;
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Manifest;
+  } catch {
+    return null;
+  }
 }
 
 function readChapterContent(bookId: string, chapterNumber: number): string | null {
@@ -75,17 +105,74 @@ function readChapterQualityAnalytics(bookId: string) {
           timestamp: chapter.createdAt,
         };
       })
-      .filter((chapter): chapter is NonNullable<typeof chapter> => chapter !== null),
+      .filter((chapter): chapter is NonNullable<typeof chapter> => chapter !== null)
   );
 }
 
 // ── Emotion keyword-based heuristic ────────────────────────────────
 
 const EMOTION_KEYWORDS: Record<EmotionType, string[]> = {
-  joy: ['笑', '喜悦', '欢喜', '快乐', '开心', '幸福', '愉快', '欢欣', '高兴', '欢喜', '欢乐', '欣喜', '雀跃', '欢畅'],
-  anger: ['愤怒', '怒火', '恼怒', '暴躁', '生气', '愤慨', '暴怒', '恼火', '愤懑', '怒视', '咆哮', '愤恨'],
-  sadness: ['悲伤', '痛苦', '难过', '哀伤', '哭泣', '眼泪', '泪', '伤心', '悲痛', '忧伤', '沮丧', '失落', '凄凉', '悲凉', '泪'],
-  fear: ['恐惧', '害怕', '惊慌', '惊恐', '畏惧', '胆怯', '恐慌', '恐惧', '战栗', '颤抖', '不安', '惶恐'],
+  joy: [
+    '笑',
+    '喜悦',
+    '欢喜',
+    '快乐',
+    '开心',
+    '幸福',
+    '愉快',
+    '欢欣',
+    '高兴',
+    '欢喜',
+    '欢乐',
+    '欣喜',
+    '雀跃',
+    '欢畅',
+  ],
+  anger: [
+    '愤怒',
+    '怒火',
+    '恼怒',
+    '暴躁',
+    '生气',
+    '愤慨',
+    '暴怒',
+    '恼火',
+    '愤懑',
+    '怒视',
+    '咆哮',
+    '愤恨',
+  ],
+  sadness: [
+    '悲伤',
+    '痛苦',
+    '难过',
+    '哀伤',
+    '哭泣',
+    '眼泪',
+    '泪',
+    '伤心',
+    '悲痛',
+    '忧伤',
+    '沮丧',
+    '失落',
+    '凄凉',
+    '悲凉',
+    '泪',
+  ],
+  fear: [
+    '恐惧',
+    '害怕',
+    '惊慌',
+    '惊恐',
+    '畏惧',
+    '胆怯',
+    '恐慌',
+    '恐惧',
+    '战栗',
+    '颤抖',
+    '不安',
+    '惶恐',
+  ],
   surprise: ['惊讶', '吃惊', '震惊', '意外', '愕然', '诧异', '惊愕', '目瞪口呆', '惊呆', '愣住'],
   disgust: ['厌恶', '恶心', '憎恶', '反感', '鄙视', '嫌弃', '鄙夷', '作呕'],
   trust: ['信任', '信赖', '依靠', '放心', '安心', '可靠', '相信', '托付', '坚定'],
@@ -257,8 +344,19 @@ export function createAnalyticsRouter(): Hono {
     if (!index || index.chapters.length === 0) {
       return c.json({
         data: {
-          baseline: { version: 1, basedOnChapters: [], createdAt: '', metrics: { aiTraceScore: 0, sentenceDiversity: 0, avgParagraphLength: 0 } },
-          current: { aiTraceScore: 0, sentenceDiversity: 0, avgParagraphLength: 0, driftPercentage: 0, alert: false },
+          baseline: {
+            version: 1,
+            basedOnChapters: [],
+            createdAt: '',
+            metrics: { aiTraceScore: 0, sentenceDiversity: 0, avgParagraphLength: 0 },
+          },
+          current: {
+            aiTraceScore: 0,
+            sentenceDiversity: 0,
+            avgParagraphLength: 0,
+            driftPercentage: 0,
+            alert: false,
+          },
         },
       });
     }
@@ -281,10 +379,16 @@ export function createAnalyticsRouter(): Hono {
     if (!index || index.chapters.length === 0) {
       return c.json({
         data: {
-          metric, baseline: 0, threshold: 0, windowSize,
-          slidingAverage: 0, chaptersAnalyzed: [],
-          triggered: false, consecutiveChapters: 0,
-          severity: 'ok', suggestedAction: null,
+          metric,
+          baseline: 0,
+          threshold: 0,
+          windowSize,
+          slidingAverage: 0,
+          chaptersAnalyzed: [],
+          triggered: false,
+          consecutiveChapters: 0,
+          severity: 'ok',
+          suggestedAction: null,
           inspirationShuffle: { available: false },
         },
       });
@@ -398,6 +502,73 @@ ${latestContent.substring(0, 2000)}
         alternatives: results,
         generationTime,
         available: results.some((r) => r.wordCount > 0),
+      },
+    });
+  });
+
+  // POST /api/books/:bookId/analytics/apply-shuffle
+  router.post('/apply-shuffle', async (c) => {
+    const bookId = c.req.param('bookId')!;
+    if (!hasStudioBookRuntime(bookId)) {
+      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const { alternativeId, style, text } = body;
+
+    if (!alternativeId || !text) {
+      return c.json(
+        { error: { code: 'INVALID_STATE', message: '缺少 alternativeId 或 text' } },
+        400
+      );
+    }
+
+    const index = readIndex(bookId);
+    if (!index || index.chapters.length === 0) {
+      return c.json({ error: { code: 'NO_CHAPTER', message: '没有可应用的章节' } }, 400);
+    }
+
+    const latest = index.chapters[index.chapters.length - 1];
+    const manager = getStateManager();
+    const chapterPath = manager.getChapterFilePath(bookId, latest.number);
+
+    // Read existing content to preserve frontmatter
+    let existingContent = '';
+    if (fs.existsSync(chapterPath)) {
+      existingContent = fs.readFileSync(chapterPath, 'utf-8');
+    }
+
+    const frontmatterMatch = existingContent.match(/^---\n([\s\S]*?)\n---\n?/);
+    const frontmatter = frontmatterMatch ? frontmatterMatch[0] : '';
+    const newContent = frontmatter ? `${frontmatter}\n${text}` : text;
+
+    // 通过 StateManager 锁确保原子写入
+    const lock = manager.acquireBookLock(bookId, 'apply-shuffle');
+    if (!lock) {
+      return c.json({ error: { code: 'BOOK_LOCKED', message: '书籍正在被其他操作占用' } }, 409);
+    }
+
+    try {
+      fs.writeFileSync(chapterPath, newContent, 'utf-8');
+
+      // 递增 versionToken 以确保前端感知状态变更
+      const store = new RuntimeStateStore(manager);
+      const currentManifest = store.loadManifest(bookId);
+      store.saveRuntimeStateSnapshot(bookId, {
+        bookId: currentManifest.bookId,
+        updatedAt: new Date().toISOString(),
+      });
+    } finally {
+      manager.releaseBookLock(bookId);
+    }
+
+    return c.json({
+      data: {
+        success: true,
+        chapterNumber: latest.number,
+        style,
+        wordCount: text.length,
+        message: `已将${style}风格方案应用到第 ${latest.number} 章`,
       },
     });
   });

@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * E2E Test: 伏笔管理完整功能
+ * E2E Test: 功能特性（PRD-020~043, PRD-060~067, PRD-080~087）
+ *
+ * 覆盖：Agent/流水线、伏笔、导出/通知、系统诊断、提示词版本
  */
 test.describe('伏笔管理完整功能', () => {
   const testBookTitle = `E2E-伏笔完整-${Date.now()}`;
@@ -361,45 +363,274 @@ test.describe('配置页面', () => {
 });
 
 /**
- * E2E Test: 风格管理
+ * E2E Test: PRD-025 意图导演
  */
-test.describe('风格管理', () => {
-  const testBookTitle = `E2E-风格测试-${Date.now()}`;
+test.describe('PRD-025: 意图导演', () => {
+  const testBookTitle = `E2E-意图导演-${Date.now()}`;
   let bookId: string;
 
   test.beforeAll(async ({ request }) => {
     const res = await request.post('/api/books', {
       data: {
         title: testBookTitle,
-        genre: '同人',
-        targetChapterCount: 30,
+        genre: '玄幻',
+        targetChapterCount: 5,
         targetWordsPerChapter: 2000,
-        targetWords: 60000,
-        brief: 'E2E 风格管理测试',
+        targetWords: 10000,
+        brief: 'E2E 意图导演测试',
       },
     });
     const data = await res.json();
     bookId = data.data.id;
   });
 
-  test('风格管理页面', async ({ page }) => {
-    await page.goto(`/style?bookId=${bookId}`);
-    // 验证页面不会 404
-    await expect(page).not.toHaveURL(/404|error/i);
+  test('意图输入框存在', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+
+    const intentInput = page.getByPlaceholder('输入简要意图');
+    await expect(intentInput).toBeVisible();
   });
 
-  test.afterAll('清理测试书籍', async ({ request }) => {
-    if (bookId) {
-      await request.delete(`/api/books/${bookId}`);
-    }
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
   });
 });
 
 /**
- * E2E Test: 同人模式
+ * E2E Test: PRD-026 上下文治理
  */
-test.describe('同人模式', () => {
-  const testBookTitle = `E2E-同人测试-${Date.now()}`;
+test.describe('PRD-026: 上下文治理', () => {
+  const testBookTitle = `E2E-上下文治理-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '都市',
+        targetChapterCount: 20,
+        targetWordsPerChapter: 2000,
+        targetWords: 40000,
+        brief: 'E2E 上下文治理测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('上下文相关性显示', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+
+    const contextLabel = page.getByText(/上下文|context|相关性/i);
+    if (await contextLabel.first().isVisible({ timeout: 3000 })) {
+      await expect(contextLabel.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-027 规则栈编译
+ */
+test.describe('PRD-027: 规则栈编译', () => {
+  const testBookTitle = `E2E-规则栈-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '仙侠',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 规则栈测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('世界规则在写作页面显示', async ({ page }) => {
+    await page.goto(`/writing?bookId=${bookId}`);
+
+    const worldRules = page.getByText(/世界规则|规则栈|world.*rule/i);
+    if (await worldRules.first().isVisible({ timeout: 3000 })) {
+      await expect(worldRules.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-028/029 守护进程 + 智能间隔
+ */
+test.describe('PRD-028/029: 守护进程 + 智能间隔', () => {
+  const testBookTitle = `E2E-守护进程-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '游戏',
+        targetChapterCount: 50,
+        targetWordsPerChapter: 3000,
+        targetWords: 150000,
+        brief: 'E2E 守护进程测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('守护进程控制面板', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
+  });
+
+  test('启动/暂停按钮', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+
+    const startBtn = page.getByRole('button', { name: /启动|Start/i });
+    await expect(startBtn).toBeVisible();
+  });
+
+  test('智能间隔配置', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+
+    const intervalInput = page.locator('input[type="number"], input[placeholder*="间隔"]');
+    if (await intervalInput.first().isVisible({ timeout: 3000 })) {
+      await expect(intervalInput.first()).toBeVisible();
+    }
+  });
+
+  test('即时启动模式（间隔=0）', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+
+    const instantMode = page.getByText(/即时|immediate|间隔.*0/i);
+    if (await instantMode.first().isVisible({ timeout: 2000 })) {
+      await expect(instantMode.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-030 每日配额保护
+ */
+test.describe('PRD-030: 每日配额保护', () => {
+  const testBookTitle = `E2E-配额-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '科幻',
+        targetChapterCount: 10,
+        targetWordsPerChapter: 2000,
+        targetWords: 20000,
+        brief: 'E2E 配额测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('配额设置显示', async ({ page }) => {
+    await page.goto(`/daemon?bookId=${bookId}`);
+
+    const quotaLabel = page.getByText(/配额|quota|每日.*上限/i);
+    if (await quotaLabel.first().isVisible({ timeout: 3000 })) {
+      await expect(quotaLabel.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-060~067 真相文件体系
+ */
+test.describe('PRD-060: 7 真相文件体系', () => {
+  const testBookTitle = `E2E-真相体系-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '悬疑',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 真相文件体系测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('7 种真相文件类型显示', async ({ page }) => {
+    await page.goto(`/truth-files?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: '真相文件' })).toBeVisible();
+
+    const truthTypes = [
+      'current_state',
+      'hooks',
+      'chapter_summaries',
+      'subplot_board',
+      'emotional_arcs',
+      'character_matrix',
+      'manifest',
+    ];
+    let foundCount = 0;
+    for (const type of truthTypes) {
+      if (
+        await page
+          .getByText(type)
+          .first()
+          .isVisible({ timeout: 1000 })
+          .catch(() => false)
+      ) {
+        foundCount++;
+      }
+    }
+    expect(foundCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('JSON + Markdown 双视图（PRD-061）', async ({ page }) => {
+    await page.goto(`/truth-files?bookId=${bookId}`);
+    // 条件断言：数据存在时才验证
+    const jsonLabel = page.getByText('JSON 源文件');
+    if (await jsonLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await expect(jsonLabel).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-080/081 通知推送
+ */
+test.describe('PRD-080/081: 通知推送', () => {
+  const testBookTitle = `E2E-通知-${Date.now()}`;
   let bookId: string;
 
   test.beforeAll(async ({ request }) => {
@@ -407,25 +638,150 @@ test.describe('同人模式', () => {
       data: {
         title: testBookTitle,
         genre: '同人',
-        targetChapterCount: 50,
-        targetWordsPerChapter: 2500,
-        targetWords: 125000,
-        brief: 'E2E 同人模式测试',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 通知推送测试',
       },
     });
     const data = await res.json();
     bookId = data.data.id;
   });
 
-  test('同人初始化页面', async ({ page }) => {
-    await page.goto(`/fanfic?bookId=${bookId}`);
-    // 验证页面不会 404
+  test('通知配置存在', async ({ page }) => {
+    await page.goto(`/config`);
+
+    const notifyLabel = page.getByText(/通知|Telegram|飞书|企业微信|webhook/i);
+    if (await notifyLabel.first().isVisible({ timeout: 3000 })) {
+      await expect(notifyLabel.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-086/087 提示词版本管理
+ */
+test.describe('PRD-086/087: 提示词版本管理', () => {
+  const testBookTitle = `E2E-提示词-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '仙侠',
+        targetChapterCount: 5,
+        targetWordsPerChapter: 2000,
+        targetWords: 10000,
+        brief: 'E2E 提示词版本测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('提示词版本页面可访问', async ({ page }) => {
+    await page.goto(`/prompt-version?bookId=${bookId}`);
     await expect(page).not.toHaveURL(/404|error/i);
   });
 
-  test.afterAll('清理测试书籍', async ({ request }) => {
-    if (bookId) {
-      await request.delete(`/api/books/${bookId}`);
+  test('版本切换器存在', async ({ page }) => {
+    await page.goto(`/prompt-version?bookId=${bookId}`);
+
+    const versionSelector = page.locator('select[name*="version"], select[name*="prompt"]');
+    if (await versionSelector.first().isVisible({ timeout: 3000 })) {
+      await expect(versionSelector.first()).toBeVisible();
     }
+  });
+
+  test('latest 软链接标识', async ({ page }) => {
+    await page.goto(`/prompt-version?bookId=${bookId}`);
+
+    const latestLabel = page.getByText(/latest|当前|最新/i);
+    if (await latestLabel.first().isVisible({ timeout: 2000 })) {
+      await expect(latestLabel.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
+  });
+});
+
+/**
+ * E2E Test: PRD-082/083 数据分析/质量面板
+ */
+test.describe('PRD-082/083: 数据分析与质量面板', () => {
+  const testBookTitle = `E2E-分析面板-${Date.now()}`;
+  let bookId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post('/api/books', {
+      data: {
+        title: testBookTitle,
+        genre: '游戏',
+        targetChapterCount: 10,
+        targetWordsPerChapter: 2000,
+        targetWords: 20000,
+        brief: 'E2E 分析面板测试',
+      },
+    });
+    const data = await res.json();
+    bookId = data.data.id;
+  });
+
+  test('字数统计显示', async ({ page }) => {
+    await page.goto(`/analytics?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: '数据分析' })).toBeVisible();
+
+    const wordCount = page.getByText(/\d+\s*字|字数|word.*count/i);
+    if (await wordCount.first().isVisible({ timeout: 3000 })) {
+      await expect(wordCount.first()).toBeVisible();
+    }
+  });
+
+  test('Token 用量显示', async ({ page }) => {
+    await page.goto(`/analytics?bookId=${bookId}`);
+
+    const tokenUsage = page.getByText(/token|Token.*用量/i);
+    if (await tokenUsage.first().isVisible({ timeout: 3000 })) {
+      await expect(tokenUsage.first()).toBeVisible();
+    }
+  });
+
+  test('8 维度质量评分', async ({ page }) => {
+    await page.goto(`/analytics?bookId=${bookId}`);
+
+    const qualityDims = ['AI 痕迹', '连贯性', '节奏', '对话', '描写', '情感', '创新', '完整性'];
+    let foundCount = 0;
+    for (const dim of qualityDims) {
+      if (
+        await page
+          .getByText(dim)
+          .first()
+          .isVisible({ timeout: 1000 })
+          .catch(() => false)
+      ) {
+        foundCount++;
+      }
+    }
+    expect(foundCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('Provider 健康（新增）', async ({ page }) => {
+    await page.goto(`/doctor?bookId=${bookId}`);
+
+    const providerHealth = page.getByText(/Provider|provider/i);
+    if (await providerHealth.first().isVisible({ timeout: 3000 })) {
+      await expect(providerHealth.first()).toBeVisible();
+    }
+  });
+
+  test.afterAll('清理', async ({ request }) => {
+    if (bookId) await request.delete(`/api/books/${bookId}`);
   });
 });

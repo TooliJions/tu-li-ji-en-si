@@ -20,7 +20,11 @@ const TRUTH_FILE_MAP = {
     importTarget: 'chapter_summaries.md',
   },
   character_matrix: { fileName: 'character_matrix.md', kind: 'markdown' },
-  current_state: { fileName: 'current_state.md', kind: 'markdown', importTarget: 'current_state.md' },
+  current_state: {
+    fileName: 'current_state.md',
+    kind: 'markdown',
+    importTarget: 'current_state.md',
+  },
   emotional_arcs: { fileName: 'emotional_arcs.md', kind: 'markdown' },
   hooks: { fileName: 'hooks.md', kind: 'markdown', importTarget: 'hooks.md' },
   manifest: { fileName: 'manifest.json', kind: 'json' },
@@ -118,26 +122,46 @@ function buildTruthFileResponse(bookId: string, fileName: keyof typeof TRUTH_FIL
 }
 
 function writeTruthFile(bookId: string, fileName: keyof typeof TRUTH_FILE_MAP, rawContent: string) {
-  const filePath = getTruthFilePath(bookId, fileName);
+  const { manager, store } = getStateContext();
 
-  if (TRUTH_FILE_MAP[fileName].kind === 'json') {
+  // 处理 JSON Manifest：必须通过 RuntimeStateStore 以确保 versionToken 正确递增
+  if (fileName === 'manifest') {
     const parsed = JSON.parse(rawContent) as Manifest;
-    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf-8');
-    return parsed;
+    store.saveRuntimeStateSnapshot(bookId, parsed);
+    return store.loadManifest(bookId);
   }
 
-  let nextContent = rawContent;
+  // 提取 Markdown 内容
+  let markdownContent = rawContent;
   try {
     const parsed = JSON.parse(rawContent) as { markdown?: string };
     if (typeof parsed.markdown === 'string') {
-      nextContent = parsed.markdown;
+      markdownContent = parsed.markdown;
     }
   } catch {
     // Accept plain markdown body.
   }
 
-  fs.writeFileSync(filePath, nextContent, 'utf-8');
-  return { markdown: nextContent };
+  // 尝试通过 StateImporter 应用变更，这会自动更新 Manifest 并递增 versionToken
+  const importTarget = toImportTarget(fileName);
+  if (importTarget) {
+    const importer = new StateImporter(manager, store);
+    const result = importer.applyImport(bookId, markdownContent, importTarget);
+    if (result.success && result.actionsCount > 0) {
+      return { markdown: markdownContent };
+    }
+  }
+
+  // 如果不支持导入，或者导入没有产生结构性变更（可能只是格式/注释修改），
+  // 我们仍然写入文件，并手动触发一次快照保存以确保 versionToken 递增，
+  // 保持内存与磁盘版本的一致性。
+  const filePath = getTruthFilePath(bookId, fileName);
+  fs.writeFileSync(filePath, markdownContent, 'utf-8');
+
+  const currentManifest = store.loadManifest(bookId);
+  store.saveRuntimeStateSnapshot(bookId, currentManifest);
+
+  return { markdown: markdownContent };
 }
 
 function getProjectionStatus(bookId: string) {
@@ -147,8 +171,8 @@ function getProjectionStatus(bookId: string) {
   const report = validator.checkSync(bookId);
   const diff = validator.generateDiff(bookId);
   const manifest = store.loadManifest(bookId);
-  const markdownFiles = KNOWN_FILES.filter((name) => TRUTH_FILE_MAP[name].kind === 'markdown').map((name) =>
-    getTruthFilePath(bookId, name)
+  const markdownFiles = KNOWN_FILES.filter((name) => TRUTH_FILE_MAP[name].kind === 'markdown').map(
+    (name) => getTruthFilePath(bookId, name)
   );
   const markdownMtime = markdownFiles
     .filter((filePath) => fs.existsSync(filePath))
@@ -173,7 +197,9 @@ function toImportTarget(fileName: keyof typeof TRUTH_FILE_MAP): ImportFileTarget
   return target ?? null;
 }
 
-function summarizeImportDiff(actions: Array<{ type: string; payload: Record<string, unknown> }>): string[] {
+function summarizeImportDiff(
+  actions: Array<{ type: string; payload: Record<string, unknown> }>
+): string[] {
   return actions.map((action) => {
     switch (action.type) {
       case 'set_focus':

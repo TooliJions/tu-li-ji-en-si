@@ -17,6 +17,7 @@ import {
   Zap,
   Map as MapIcon,
   Clock,
+  Globe,
 } from 'lucide-react';
 import {
   fetchTruthFiles,
@@ -26,7 +27,11 @@ import {
   importMarkdown,
   fetchHooks,
   fetchMemoryPreview,
+  fetchChapterSnapshots,
+  rollbackChapter,
 } from '../lib/api';
+import WorldRulesEditor, { type EditableWorldRule } from '../components/world-rules-editor';
+import TimeDial from '../components/time-dial';
 
 interface TruthFileEntry {
   name: string;
@@ -88,6 +93,13 @@ interface TimelineEvent {
   characters: string[];
 }
 
+interface ChapterSnapshot {
+  id: string;
+  chapter: number;
+  label: string;
+  timestamp: string;
+}
+
 export default function TruthFiles() {
   const [searchParams] = useSearchParams();
   const bookId = searchParams.get('bookId') || '';
@@ -108,6 +120,9 @@ export default function TruthFiles() {
   const [selectedFile, setSelectedFile] = useState<TruthFileContent | null>(null);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const [snapshots, setSnapshots] = useState<ChapterSnapshot[]>([]);
+  const [timeDialOpen, setTimeDialOpen] = useState(false);
+  const [rollbackChapterNumber, setRollbackChapterNumber] = useState<number | null>(null);
 
   // Import
   const [importFile, setImportFile] = useState('current_state');
@@ -166,16 +181,39 @@ export default function TruthFiles() {
       .finally(() => setLoading(false));
   }, [bookId]);
 
-  async function openFile(fileName: string) {
+  function normalizeTruthFile(
+    fileName: string,
+    data: { name?: string; content: Record<string, any>; versionToken: number }
+  ): TruthFileContent {
+    return {
+      name: data.name ?? fileName,
+      content: data.content,
+      versionToken: data.versionToken,
+    };
+  }
+
+  async function openFile(
+    fileName: string,
+    options?: { activateJsonTab?: boolean; startEditing?: boolean }
+  ) {
     if (!bookId) return;
+
+    if (options?.activateJsonTab) {
+      setActiveTab('json');
+    }
+
     try {
-      const data = await fetchTruthFile(bookId, fileName);
+      const data = normalizeTruthFile(fileName, await fetchTruthFile(bookId, fileName));
       setSelectedFile(data);
-      setEditing(false);
+      setEditing(Boolean(options?.startEditing));
       setEditContent(JSON.stringify(data.content, null, 2));
     } catch (err) {
       console.error('Failed to open file:', err);
     }
+  }
+
+  async function openCurrentStateJson(startEditing = false) {
+    await openFile('current_state', { activateJsonTab: true, startEditing });
   }
 
   async function saveFile() {
@@ -218,6 +256,47 @@ export default function TruthFiles() {
     }
   }
 
+  async function openRollbackDial() {
+    const currentChapter = Number(worldState?.chapter);
+    if (!bookId || !Number.isFinite(currentChapter) || currentChapter <= 0) return;
+
+    const snapshotList = await fetchChapterSnapshots(bookId, currentChapter);
+    setRollbackChapterNumber(currentChapter);
+    setSnapshots(snapshotList);
+    setTimeDialOpen(true);
+  }
+
+  async function handleRollbackConfirm(snapshotId: string) {
+    if (!bookId || rollbackChapterNumber === null) return;
+
+    const ok = await rollbackChapter(bookId, rollbackChapterNumber, snapshotId);
+    if (ok) {
+      const [list, status, currentState] = await Promise.all([
+        fetchTruthFiles(bookId),
+        fetchProjectionStatus(bookId),
+        fetchTruthFile(bookId, 'current_state').catch(() => null),
+      ]);
+
+      setFiles(list.files || []);
+      setProjection(status);
+      setWorldState(currentState?.content ?? null);
+
+      if (currentState && selectedFile?.name === 'current_state') {
+        const normalized = normalizeTruthFile('current_state', currentState);
+        setSelectedFile(normalized);
+        setEditContent(JSON.stringify(normalized.content, null, 2));
+        setEditing(false);
+      }
+    }
+
+    setTimeDialOpen(false);
+    setRollbackChapterNumber(null);
+    setSnapshots([]);
+  }
+
+  const currentStateChapter = Number(worldState?.chapter);
+  const canRollbackWorldState = Number.isFinite(currentStateChapter) && currentStateChapter > 0;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -234,6 +313,7 @@ export default function TruthFiles() {
     { id: 'relations', label: '关系图', icon: GitBranch },
     { id: 'geography', label: '地理', icon: MapIcon },
     { id: 'timeline', label: '时间线', icon: Clock },
+    { id: 'world-rules', label: '世界规则', icon: Globe },
     { id: 'subplots', label: '副线管理', icon: GitBranch },
     { id: 'conflicts', label: '冲突检查', icon: Search },
   ];
@@ -335,13 +415,29 @@ export default function TruthFiles() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="px-3 py-1.5 text-sm border rounded hover:bg-accent">
+                    <button
+                      onClick={() => {
+                        void openCurrentStateJson(true);
+                      }}
+                      className="px-3 py-1.5 text-sm border rounded hover:bg-accent"
+                    >
                       编辑
                     </button>
-                    <button className="px-3 py-1.5 text-sm border rounded hover:bg-accent">
+                    <button
+                      onClick={() => {
+                        void openCurrentStateJson(false);
+                      }}
+                      className="px-3 py-1.5 text-sm border rounded hover:bg-accent"
+                    >
                       从 JSON 查看
                     </button>
-                    <button className="px-3 py-1.5 text-sm border rounded hover:bg-accent">
+                    <button
+                      onClick={() => {
+                        void openRollbackDial();
+                      }}
+                      disabled={!canRollbackWorldState}
+                      className="px-3 py-1.5 text-sm border rounded hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       回滚到上一章状态
                     </button>
                   </div>
@@ -726,6 +822,8 @@ export default function TruthFiles() {
           </div>
         )}
 
+        {activeTab === 'world-rules' && <WorldRulesTab bookId={bookId} />}
+
         {activeTab === 'subplots' && (
           <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
@@ -846,6 +944,18 @@ export default function TruthFiles() {
           </div>
         )}
       </div>
+
+      <TimeDial
+        open={timeDialOpen}
+        snapshots={snapshots}
+        currentChapter={rollbackChapterNumber ?? 0}
+        onConfirm={handleRollbackConfirm}
+        onClose={() => {
+          setTimeDialOpen(false);
+          setRollbackChapterNumber(null);
+          setSnapshots([]);
+        }}
+      />
     </div>
   );
 }
@@ -957,4 +1067,31 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-bold">{value}</p>
     </div>
   );
+}
+
+/**
+ * PRD-014: World rules editor tab — integrates WorldRulesEditor with localStorage fallback.
+ */
+function WorldRulesTab({ bookId }: { bookId: string }) {
+  const [rules, setRules] = useState<EditableWorldRule[]>([]);
+
+  useEffect(() => {
+    if (!bookId) return;
+    const stored = localStorage.getItem(`world-rules-${bookId}`);
+    if (stored) {
+      try {
+        setRules(JSON.parse(stored));
+      } catch {
+        // Use defaults
+      }
+    }
+  }, [bookId]);
+
+  function handleSave(savedRules: EditableWorldRule[]) {
+    if (!bookId) return;
+    setRules(savedRules);
+    localStorage.setItem(`world-rules-${bookId}`, JSON.stringify(savedRules));
+  }
+
+  return <WorldRulesEditor rules={rules} onSave={handleSave} />;
 }

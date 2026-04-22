@@ -1,36 +1,61 @@
-import { Lightbulb, Info, AlertTriangle } from 'lucide-react';
+import { Lightbulb, Info, AlertTriangle, ArrowRight } from 'lucide-react';
 
-const TYPE_CONFIG: Record<string, { bg: string; icon: typeof Info; label: string }> = {
+const TYPE_CONFIG: Record<
+  string,
+  { bg: string; border: string; icon: typeof Info; label: string }
+> = {
   warning: {
-    bg: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
     icon: AlertTriangle,
     label: '建议',
   },
-  info: { bg: 'bg-blue-50 border-blue-200 text-blue-800', icon: Info, label: '提示' },
-  action: { bg: 'bg-green-50 border-green-200 text-green-800', icon: Lightbulb, label: '操作' },
+  info: { bg: 'bg-blue-50', border: 'border-blue-200', icon: Info, label: '提示' },
+  action: { bg: 'bg-green-50', border: 'border-green-200', icon: Lightbulb, label: '操作' },
 };
 
 /**
- * Suggestion bubble — soft suggestion display with float-in animation feel.
- * Replaces harsh alert flashing with gentle, colored bubbles.
+ * Suggestion bubble — PRD-083b quality drift suggestion with float-in styling.
+ * Supports simple message or rich content with reasons and action slots.
  */
 export default function SuggestionBubble({
-  type,
+  type = 'warning',
+  title,
   message,
+  reasons,
+  actions,
 }: {
-  type: 'warning' | 'info' | 'action';
+  type?: 'warning' | 'info' | 'action';
+  title?: string;
   message: string;
+  reasons?: string[];
+  actions?: React.ReactNode;
 }) {
   const config = TYPE_CONFIG[type];
   const Icon = config.icon;
 
   return (
-    <div
-      className={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm ${config.bg}`}
-    >
-      <Icon size={14} />
-      <span className="text-xs opacity-70">{config.label}:</span>
-      <span>{message}</span>
+    <div className={`rounded-lg ${config.bg} ${config.border} border p-4 relative mt-6`}>
+      {/* Arrow pointer */}
+      <div
+        className={`absolute -top-2 left-8 w-4 h-4 ${config.bg} border-l border-t ${config.border} transform rotate-45`}
+      />
+      <div className="flex items-start gap-2 mb-2">
+        <Icon size={16} className="text-amber-700 shrink-0 mt-0.5" />
+        <p className="text-sm font-medium text-amber-800">{title || config.label}</p>
+      </div>
+      <p className="text-sm text-amber-700 mb-2">{message}</p>
+      {reasons && reasons.length > 0 && (
+        <ul className="text-sm text-amber-700 space-y-1 mb-3">
+          {reasons.map((r, i) => (
+            <li key={i} className="flex items-start gap-1">
+              <ArrowRight size={12} className="mt-1 shrink-0 opacity-60" />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {actions && <div className="flex flex-wrap gap-2 mt-3">{actions}</div>}
     </div>
   );
 }

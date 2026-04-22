@@ -20,10 +20,19 @@ describe('Sidebar', () => {
     );
 
     expect(screen.getByRole('link', { name: '仪表盘' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: '章节管理' })).toHaveAttribute('href', '/chapters');
-    expect(screen.getByRole('link', { name: '创作' })).toHaveAttribute('href', '/writing');
-    expect(screen.getByRole('link', { name: '伏笔面板' })).toHaveAttribute('href', '/hooks');
-    expect(screen.getByRole('link', { name: '数据分析' })).toHaveAttribute('href', '/analytics');
+    expect(screen.getByRole('link', { name: '我的书籍' })).toHaveAttribute('href', '/chapters');
+    expect(screen.getByRole('link', { name: '创作' })).toHaveAttribute(
+      'href',
+      '/writing?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '伏笔面板' })).toHaveAttribute(
+      'href',
+      '/hooks?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '数据分析' })).toHaveAttribute(
+      'href',
+      '/analytics?bookId=book-001'
+    );
   });
   it('shows active book progress information', () => {
     render(
@@ -42,7 +51,21 @@ describe('Sidebar', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: '真相文件' })).toHaveAttribute('href', '/truth-files');
-    expect(screen.getByRole('link', { name: '守护进程' })).toHaveAttribute('href', '/daemon');
+    expect(screen.getByRole('link', { name: '真相文件' })).toHaveAttribute(
+      'href',
+      '/truth-files?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '守护进程' })).toHaveAttribute(
+      'href',
+      '/daemon?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '自然Agent' })).toHaveAttribute(
+      'href',
+      '/natural-agent?bookId=book-001'
+    );
+    expect(screen.getByRole('link', { name: '提示词版本' })).toHaveAttribute(
+      'href',
+      '/prompts/book-001'
+    );
   });
 });

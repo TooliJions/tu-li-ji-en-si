@@ -1,27 +1,27 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { fetchBooks } from '../../lib/api';
 import {
   LayoutDashboard,
   BookOpen,
   PenTool,
-  FileCheck,
-  Package,
+  FileText,
+  FileDown,
   Tags,
   Palette,
   FolderCheck,
   GitBranch,
-  BarChart3,
   Settings,
   Server,
   Stethoscope,
-  FileDown,
+  BarChart3,
   FileUp,
   Terminal,
   Bot,
   FileCode,
 } from 'lucide-react';
 
-interface SidebarBook {
+export interface SidebarBook {
   id: string;
   title: string;
   chapterCount: number;
@@ -30,31 +30,31 @@ interface SidebarBook {
 }
 
 export interface SidebarProps {
-  currentBook?: SidebarBook;
+  currentBook?: SidebarBook | null;
 }
 
 async function fetchActiveBook(): Promise<SidebarBook | null> {
-  const res = await fetch('/api/books?status=active');
-  if (!res.ok) return null;
-  const data = await res.json();
-  const books = (data.data || []) as SidebarBook[];
+  const books = (await fetchBooks({ status: 'active' })) as SidebarBook[];
   return books.length > 0 ? books[0] : null;
 }
 
 const mainNavItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { to: '/chapters', icon: BookOpen, label: '章节管理' },
+  { to: '/chapters', icon: BookOpen, label: '我的书籍' },
   { to: '/writing', icon: PenTool, label: '创作' },
-  { to: '/hooks', icon: GitBranch, label: '伏笔面板' },
-  { to: '/analytics', icon: BarChart3, label: '数据分析' },
+  { to: '/review', icon: FileText, label: '审阅' },
+  { to: '/export', icon: FileDown, label: '导出' },
 ];
 
 const secondaryNavItems = [
+  { to: '/genres', icon: Tags, label: '题材管理' },
   { to: '/style-manager', icon: Palette, label: '文风管理' },
   { to: '/truth-files', icon: FolderCheck, label: '真相文件' },
+  { to: '/hooks', icon: GitBranch, label: '伏笔面板' },
   { to: '/hooks/timeline', icon: GitBranch, label: '伏笔时间线' },
-  { to: '/export', icon: FileDown, label: '导出' },
+  { to: '/analytics', icon: BarChart3, label: '数据分析' },
   { to: '/import', icon: FileUp, label: '导入' },
+  { to: '/writing-plan', icon: PenTool, label: '创作计划' },
   { to: '/prompts/:bookId', icon: FileCode, label: '提示词版本' },
 ];
 
@@ -65,6 +65,37 @@ const systemNavItems = [
   { to: '/logs', icon: Terminal, label: '日志' },
   { to: '/natural-agent', icon: Bot, label: '自然Agent' },
 ];
+
+const bookScopedQueryRoutes = new Set([
+  '/writing',
+  '/export',
+  '/truth-files',
+  '/hooks',
+  '/hooks/timeline',
+  '/analytics',
+  '/import',
+  '/writing-plan',
+  '/daemon',
+  '/logs',
+  '/natural-agent',
+  '/style-manager',
+]);
+
+function resolveNavTarget(to: string, activeBook: SidebarBook | null) {
+  if (!activeBook) {
+    return to;
+  }
+
+  if (to.includes(':bookId')) {
+    return to.replace(':bookId', encodeURIComponent(activeBook.id));
+  }
+
+  if (bookScopedQueryRoutes.has(to)) {
+    return `${to}?bookId=${encodeURIComponent(activeBook.id)}`;
+  }
+
+  return to;
+}
 
 function NavItem({
   to,
@@ -94,7 +125,11 @@ export default function Sidebar({ currentBook }: SidebarProps) {
   const [activeBook, setActiveBook] = useState<SidebarBook | null>(currentBook ?? null);
 
   useEffect(() => {
-    if (currentBook) return; // Use prop if provided
+    if (currentBook !== undefined) {
+      setActiveBook(currentBook ?? null);
+      return;
+    }
+
     fetchActiveBook()
       .then(setActiveBook)
       .catch(() => {});
@@ -118,7 +153,7 @@ export default function Sidebar({ currentBook }: SidebarProps) {
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {/* 主导航 */}
         {mainNavItems.map(({ to, icon: Icon, label }) => (
-          <NavItem key={to} to={to} icon={Icon} label={label} />
+          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
         ))}
 
         {/* 分隔符 */}
@@ -126,7 +161,7 @@ export default function Sidebar({ currentBook }: SidebarProps) {
 
         {/* 二级导航 */}
         {secondaryNavItems.map(({ to, icon: Icon, label }) => (
-          <NavItem key={to} to={to} icon={Icon} label={label} />
+          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
         ))}
 
         {/* 分隔符 */}
@@ -134,7 +169,7 @@ export default function Sidebar({ currentBook }: SidebarProps) {
 
         {/* 系统导航 */}
         {systemNavItems.map(({ to, icon: Icon, label }) => (
-          <NavItem key={to} to={to} icon={Icon} label={label} />
+          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
         ))}
       </nav>
 

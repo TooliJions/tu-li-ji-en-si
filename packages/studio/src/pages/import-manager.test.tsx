@@ -81,7 +81,7 @@ describe('ImportManager Page', () => {
 
     await waitFor(() => {
       expect(api.fetchStateDiff).toHaveBeenCalledWith('current_state');
-      expect(screen.getByText('检测到 2 项状态差异')).toBeTruthy();
+      expect(screen.getByText(/设定变更/)).toBeTruthy();
       expect(screen.getByText('系统发现您在文本中将【林晨】的心情改为了【自信】。')).toBeTruthy();
     });
   });

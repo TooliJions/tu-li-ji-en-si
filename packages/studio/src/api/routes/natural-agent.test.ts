@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { createNaturalAgentRouter } from './natural-agent';
+import { resetStudioCoreBridgeForTests, initializeStudioBookRuntime } from '../core-bridge';
 
 function createTestApp() {
   const app = new Hono();
@@ -12,7 +13,35 @@ describe('Natural Agent Route', () => {
   let app: ReturnType<typeof createTestApp>;
 
   beforeEach(() => {
+    resetStudioCoreBridgeForTests();
+    initializeStudioBookRuntime({
+      id: 'book-001',
+      title: '测试小说',
+      genre: 'urban',
+      targetWords: 30000,
+      targetChapterCount: 10,
+      targetWordsPerChapter: 3000,
+      currentWords: 0,
+      chapterCount: 0,
+      status: 'active',
+      language: 'zh',
+      platform: 'qidian',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      fanficMode: null,
+      promptVersion: 'v2',
+      modelConfig: {
+        useGlobalDefaults: true,
+        writer: 'DashScope',
+        auditor: 'OpenAI',
+        planner: 'DashScope',
+      },
+    });
     app = createTestApp();
+  });
+
+  afterEach(() => {
+    resetStudioCoreBridgeForTests();
   });
 
   describe('POST /api/books/:bookId/natural-agent/command', () => {

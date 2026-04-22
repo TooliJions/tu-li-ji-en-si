@@ -90,12 +90,11 @@ export default function ChaptersPage() {
         </Link>
       </div>
 
-      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-5">
-        <h2 className="text-base font-semibold text-amber-900">阶段性入口说明</h2>
-        <div className="mt-3 space-y-2 text-sm text-amber-900/90">
-          <p>已开放入口：书籍详情、章节阅读、写作、伏笔面板、文风配置、同人模式、情感弧线。</p>
+      <section className="rounded-xl border bg-card p-5">
+        <h2 className="text-base font-semibold">页面说明</h2>
+        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
           <p>
-            暂未开放独立页面：导出工作台、题材独立管理。当前题材配置并入新建书籍与文风配置，导出能力保持后端可用但暂不在 Studio 暴露独立页。
+            所有核心页面已开放：书籍详情、章节阅读、写作、伏笔面板、伏笔时间线、数据分析、真相文件、题材管理、文风管理、导出、导入、守护进程、系统诊断、日志、创作计划、情感弧线、同人模式、提示词版本、自然Agent。
           </p>
         </div>
       </section>
@@ -134,7 +133,9 @@ export default function ChaptersPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           {visibleBooks.map((book) => {
             const progress =
-              book.targetWords > 0 ? Math.min((book.currentWords / book.targetWords) * 100, 100) : 0;
+              book.targetWords > 0
+                ? Math.min((book.currentWords / book.targetWords) * 100, 100)
+                : 0;
 
             return (
               <section key={book.id} className="rounded-xl border bg-card p-5 shadow-sm">

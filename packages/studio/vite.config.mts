@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createApp } from './src/api/server';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,7 +10,8 @@ export default defineConfig({
     react(),
     {
       name: 'hono-api',
-      configureServer(server) {
+      async configureServer(server) {
+        const { createApp } = await import('./src/api/server');
         const app = createApp();
         server.middlewares.use(async (req, res, next) => {
           if (!req.url?.startsWith('/api')) {

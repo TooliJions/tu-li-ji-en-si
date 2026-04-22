@@ -108,18 +108,12 @@ describe('BookDetail Page', () => {
       expect(screen.getByText('快速操作')).toBeTruthy();
     });
 
-    expect(screen.getByRole('link', { name: '文风配置' })).toHaveAttribute(
-      'href',
-      '/style-manager?bookId=book-001'
-    );
-    expect(screen.getByRole('link', { name: '同人模式' })).toHaveAttribute(
-      'href',
-      '/fanfic-init?bookId=book-001'
-    );
-    expect(screen.getByRole('link', { name: '情感弧线' })).toHaveAttribute(
-      'href',
-      '/book/book-001/emotional-arcs'
-    );
+    // Quick actions area renders writing links (快速试写, 开始写作, etc.)
+    expect(screen.getByRole('link', { name: '开始写作' })).toBeTruthy();
+
+    const fastDraftLink = screen.getByRole('link', { name: '快速试写' });
+    expect(fastDraftLink).toBeTruthy();
+    expect(fastDraftLink).toHaveAttribute('href', '/writing?bookId=book-001');
   });
 
   it('renders not-found state when book does not exist', async () => {
@@ -142,6 +136,16 @@ describe('BookDetail Page', () => {
     await waitFor(() => {
       expect(screen.getByText('还没有章节，开始创作后章节会出现在这里')).toBeTruthy();
     });
+  });
+
+  it('routes the primary writing CTA to the planning page for a new book with no chapters', async () => {
+    vi.mocked(api.fetchBook).mockResolvedValue({ ...mockBook, chapterCount: 0, currentWords: 0 });
+    vi.mocked(api.fetchChapters).mockResolvedValue([]);
+
+    renderWithRouter();
+
+    const startWritingLink = await screen.findByRole('link', { name: '开始写作' });
+    expect(startWritingLink).toHaveAttribute('href', '/writing-plan?bookId=book-001');
   });
 
   it('shows chapter status badges', async () => {

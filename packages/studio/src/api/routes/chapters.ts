@@ -418,118 +418,44 @@ export function writeAuditReport(bookId: string, chapterNumber: number, report: 
   fs.writeFileSync(auditPath, JSON.stringify(report, null, 2), 'utf-8');
 }
 
+function isLegacyAuditReport(report: unknown): boolean {
+  if (!report || typeof report !== 'object') {
+    return false;
+  }
+
+  const radarScores = (report as { radarScores?: Array<{ dimension?: string }> }).radarScores;
+  return (
+    Array.isArray(radarScores) &&
+    radarScores.some(
+      (score) => score && typeof score === 'object' && score.dimension === 'creativity'
+    )
+  );
+}
+
+function readNormalizedAuditReport(
+  bookId: string,
+  chapterNumber: number,
+  content: string
+): unknown | null {
+  const report = readAuditReport(bookId, chapterNumber);
+  if (!report) {
+    return null;
+  }
+
+  if (!isLegacyAuditReport(report)) {
+    return report;
+  }
+
+  const normalizedReport = buildChapterAuditReport(chapterNumber, content);
+  writeAuditReport(bookId, chapterNumber, normalizedReport);
+  return normalizedReport;
+}
+
 function removeAuditReport(bookId: string, chapterNumber: number): void {
   const auditPath = getChapterAuditPath(bookId, chapterNumber);
   if (fs.existsSync(auditPath)) {
     fs.unlinkSync(auditPath);
   }
-}
-
-// AI pattern detection keywords
-const AI_PATTERN_KEYWORDS = [
-  '首先我们需要明确的是',
-  '从宏观角度来看',
-  '从微观角度来看',
-  '总而言之，这个故事告诉我们',
-  '总而言之，',
-  '人生就像一场梦',
-  '携手共进',
-  '华灯初上',
-  '霓虹闪烁',
-  '夜幕降临',
-  '不难发现',
-  '显而易见',
-  '毋庸置疑',
-  '值得注意的是',
-  '综上所述',
-  '由此可见',
-  '换句话说，',
-  '总的来说',
-  '总体来说',
-];
-
-function buildAuditReport(chapter: ChapterRecord) {
-  const content = chapter.content || '';
-  const blockerItems: Array<{ rule: string; severity: string; message: string }> = [];
-  const warningItems: Array<{ rule: string; severity: string; message: string }> = [];
-  const suggestionItems: Array<{ rule: string; severity: string; message: string }> = [];
-
-  // Check for AI patterns
-  const foundPatterns: string[] = [];
-  for (const keyword of AI_PATTERN_KEYWORDS) {
-    if (content.includes(keyword)) {
-      foundPatterns.push(keyword);
-    }
-  }
-
-  if (foundPatterns.length > 0) {
-    warningItems.push({
-      rule: 'AI_PATTERN_DETECTED',
-      severity: 'warning',
-      message: `检测到 AI 常用过渡词: ${foundPatterns.slice(0, 3).join('、')}`,
-    });
-  }
-
-  // Check content length
-  if (content.length < 50) {
-    blockerItems.push({
-      rule: 'CONTENT_TOO_SHORT',
-      severity: 'blocker',
-      message: `章节内容过短 (${content.length} 字)`,
-    });
-  }
-
-  // Check for POV consistency (basic heuristic)
-  const paragraphCount = content.split('\n').filter((p) => p.trim()).length;
-  if (paragraphCount === 0 && content.length > 0) {
-    suggestionItems.push({
-      rule: 'NO_PARAGRAPHS',
-      severity: 'suggestion',
-      message: '建议增加段落分隔以提高可读性',
-    });
-  }
-
-  const blockerFailed = blockerItems.length;
-  const warningFailed = warningItems.length;
-  const suggestionFailed = suggestionItems.length;
-
-  const overallStatus =
-    blockerFailed > 0 ? 'needs_revision' : warningFailed > 0 ? 'needs_revision' : 'passed';
-
-  return {
-    chapterNumber: chapter.number,
-    overallStatus,
-    tiers: {
-      blocker: {
-        total: 12,
-        passed: 12 - blockerFailed,
-        failed: blockerFailed,
-        items: blockerItems,
-      },
-      warning: {
-        total: 12,
-        passed: 12 - warningFailed,
-        failed: warningFailed,
-        items: warningItems,
-      },
-      suggestion: {
-        total: 9,
-        passed: 9 - suggestionFailed,
-        failed: suggestionFailed,
-        items: suggestionItems,
-      },
-    },
-    radarScores: [
-      { dimension: 'ai_trace', label: 'AI 痕迹', score: foundPatterns.length > 0 ? 0.6 : 0.1 },
-      { dimension: 'coherence', label: '连贯性', score: 0.9 },
-      { dimension: 'pacing', label: '节奏', score: 0.8 },
-      { dimension: 'dialogue', label: '对话', score: 0.85 },
-      { dimension: 'description', label: '描写', score: 0.75 },
-      { dimension: 'emotion', label: '情感', score: 0.8 },
-      { dimension: 'creativity', label: '创新', score: 0.7 },
-      { dimension: 'completeness', label: '完整性', score: 0.85 },
-    ],
-  };
 }
 
 export function readChapterRecord(bookId: string, chapterNumber: number): ChapterRecord | null {
@@ -547,7 +473,7 @@ export function readChapterRecord(bookId: string, chapterNumber: number): Chapte
   const raw = fs.readFileSync(filePath, 'utf-8');
   const parsed = parseChapterFile(raw);
   const stat = fs.statSync(filePath);
-  const auditReport = readAuditReport(bookId, chapterNumber);
+  const auditReport = readNormalizedAuditReport(bookId, chapterNumber, parsed.content);
 
   return {
     number: chapterNumber,
@@ -923,7 +849,7 @@ export function createChapterRouter(): Hono {
       return c.json({ error: { code: 'CHAPTER_NOT_FOUND', message: '章节不存在' } }, 404);
     }
 
-    const report = buildAuditReport(chapter);
+    const report = buildChapterAuditReport(chapterNumber, chapter.content);
     writeAuditReport(bookId, chapterNumber, report);
 
     return c.json({ data: report });
@@ -942,7 +868,7 @@ export function createChapterRouter(): Hono {
       return c.json({ error: { code: 'CHAPTER_NOT_FOUND', message: '章节不存在' } }, 404);
     }
 
-    const auditReport = readAuditReport(bookId, chapterNumber);
+    const auditReport = readNormalizedAuditReport(bookId, chapterNumber, chapter.content);
     if (!auditReport) {
       return c.json({ data: { overallStatus: 'not_audited' } });
     }

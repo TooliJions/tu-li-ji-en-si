@@ -99,7 +99,7 @@ describe('State Route', () => {
       };
       expect(data.data.name).toBe('current_state');
       expect(data.data.content.markdown).toContain('手动修订');
-      expect(data.data.versionToken).toBe(1);
+      expect(data.data.versionToken).toBe(2);
 
       const runtimeRoot = getStudioRuntimeRootDir();
       const filePath = path.join(runtimeRoot, bookId, 'story', 'state', 'current_state.md');
@@ -110,7 +110,13 @@ describe('State Route', () => {
       const bookId = await createBook(app);
       const res = await app.request(`/api/books/${bookId}/state/manifest`, {
         method: 'PUT',
-        body: JSON.stringify({ content: '{"bookId":"' + bookId + '","versionToken":9,"lastChapterWritten":3,"hooks":[],"facts":[],"characters":[],"worldRules":[],"updatedAt":"2026-04-19T00:00:00.000Z"}', versionToken: 1 }),
+        body: JSON.stringify({
+          content:
+            '{"bookId":"' +
+            bookId +
+            '","versionToken":9,"lastChapterWritten":3,"hooks":[],"facts":[],"characters":[],"worldRules":[],"updatedAt":"2026-04-19T00:00:00.000Z"}',
+          versionToken: 1,
+        }),
         headers: { 'Content-Type': 'application/json' },
       });
 

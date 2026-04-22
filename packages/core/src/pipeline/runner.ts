@@ -51,6 +51,8 @@ export interface PlanChapterResult {
   title?: string;
   summary?: string;
   keyEvents?: string[];
+  characters?: string[];
+  hooks?: string[];
   error?: string;
 }
 
@@ -217,11 +219,15 @@ export class PipelineRunner {
 
     // 调用 ChapterPlanner
     const planPrompt = this.#buildChapterPlanPrompt(input, genre, outline);
-    await this.provider.generateJSON<{
+    const chapterPlan = await this.provider.generateJSON<{
       scenes: Array<{ description: string; targetWords: number; mood: string }>;
       characters: string[];
       hooks: string[];
     }>({ prompt: planPrompt });
+
+    const plannedHooks = Array.from(
+      new Set([...(outline.hooks ?? []), ...(chapterPlan.hooks ?? [])])
+    );
 
     // 更新状态：添加章节到索引
     const index = this.stateManager.readIndex(input.bookId);
@@ -252,6 +258,8 @@ export class PipelineRunner {
       title: outline.title,
       summary: outline.summary,
       keyEvents: outline.keyEvents,
+      characters: chapterPlan.characters,
+      hooks: plannedHooks,
     };
   }
 

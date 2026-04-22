@@ -6,6 +6,7 @@ vi.mock('../lib/api', () => ({
   fetchConfig: vi.fn(),
   updateConfig: vi.fn(),
   testProvider: vi.fn(),
+  fetchAvailableModels: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -55,6 +56,10 @@ function renderWithRouter() {
 describe('ConfigView Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.fetchAvailableModels).mockResolvedValue({
+      models: [],
+      defaultProvider: 'DashScope',
+    });
   });
 
   it('shows loading state', () => {
@@ -320,10 +325,12 @@ describe('ConfigView Page', () => {
 
     renderWithRouter();
 
-    await screen.findByText(/通知配置/, {}, { timeout: 3000 });
+    await waitFor(() => {
+      expect(screen.getByText('通知配置')).toBeTruthy();
+    });
 
-    expect(screen.getByText('Telegram Bot Token')).toBeTruthy();
-    expect(screen.getByText('Chat ID')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Bot Token')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Chat ID')).toBeTruthy();
     expect(screen.getByText('测试推送')).toBeTruthy();
   });
 
@@ -348,7 +355,9 @@ describe('ConfigView Page', () => {
 
     renderWithRouter();
 
-    await screen.findByText(/通知配置/, {}, { timeout: 3000 });
+    await waitFor(() => {
+      expect(screen.getByText('通知配置')).toBeTruthy();
+    });
 
     const tokenInput = screen.getByPlaceholderText('Bot Token');
     expect(tokenInput).toBeTruthy();

@@ -188,23 +188,23 @@ cybernovelist/
 │       │   │       └── sse.ts             # SSE 推送
 │       │   ├── components/        # 可复用组件
 │       │   │   ├── sidebar.tsx
-│       │   │   ├── flow-mode-toggle.tsx   # 心流模式切换按钮
+│       │   │   ├── flow-mode-toggle.tsx   # 心流模式切换按钮（已内联于 writing.tsx / chapter-reader.tsx）
 │       │   │   ├── context-popup.tsx      # 上下文悬浮卡片（悬停触发，心流模式专属）
 │       │   │   ├── entity-highlight.tsx   # 实体词汇虚线底纹高亮（心流模式被动感知）
 │       │   │   ├── memory-wordcloud.tsx   # 记忆抽取词云（渐隐渐显动画，置信度布局）
+│       │   │   │                          # 注：memory-preview.tsx 已合并至此组件
 │       │   │   ├── audit-report.tsx       # 33 维审计报告（三级折叠+雷达图）
-│       │   │   ├── memory-preview.tsx     # 记忆抽取透视（词云动画，正文生成前展示）
 │       │   │   ├── state-diff-view.tsx    # 自然语言差异对比（技术数据→语义化翻译）
 │       │   │   ├── pollution-badge.tsx    # 污染隔离视觉组件（橙色边框+斜纹背景）
 │       │   │   ├── time-dial.tsx          # 时间回溯拨盘（拖拽旋转+阻力感）
-│       │   │   ├── quality-dashboard.tsx
+│       │   │   ├── quality-dashboard.tsx  # 质量仪表盘 8 维度（已内联于 writing.tsx）
 │       │   │   ├── baseline-chart.tsx     # 基线趋势图（虚线基线+琥珀渐变关注区）
 │       │   │   ├── suggestion-bubble.tsx  # 柔和建议气泡（飘出动画，替代告警闪烁）
 │       │   │   ├── inspiration-shuffle.tsx# 灵感洗牌（三种重写方案对比）
 │       │   │   ├── daemon-panel.tsx
 │       │   │   ├── log-viewer.tsx
 │       │   │   ├── world-rules-editor.tsx
-│       │   │   └── contract-editor.tsx
+│       │   │   └── daemon-log-stream.tsx  # 守护进程日志流
 │       │   ├── hooks/             # React Hooks
 │       │   │   ├── use-api.ts
 │       │   │   ├── use-sse.ts

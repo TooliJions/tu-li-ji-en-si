@@ -45,18 +45,6 @@
       "status": "connected",
       "apiKey": "sk-078807a1fb8e4a81b10feb67864d4880",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    },
-    {
-      "name": "OpenAI",
-      "status": "disconnected",
-      "apiKey": "",
-      "baseUrl": "https://api.openai.com/v1"
-    },
-    {
-      "name": "Gemini",
-      "status": "disconnected",
-      "apiKey": "",
-      "baseUrl": "https://generativelanguage.googleapis.com"
     }
   ],
   "notifications": {

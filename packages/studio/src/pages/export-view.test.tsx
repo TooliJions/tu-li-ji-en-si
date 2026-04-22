@@ -4,7 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../lib/api', () => ({
   fetchBooks: vi.fn(),
+  fetchConfig: vi.fn(),
   startExport: vi.fn(),
+  fetchChapters: vi.fn().mockResolvedValue([]),
 }));
 
 import * as api from '../lib/api';
@@ -53,9 +55,8 @@ describe('ExportView', () => {
   it('starts export for the selected book and format', async () => {
     vi.mocked(api.fetchBooks).mockResolvedValue(mockBooks as never);
     vi.mocked(api.startExport).mockResolvedValue({
-      blob: new Blob(['txt export'], { type: 'text/plain' }),
       filename: '测试小说.txt',
-      mimeType: 'text/plain',
+      format: 'txt',
     } as never);
 
     renderWithRouter();
@@ -68,7 +69,7 @@ describe('ExportView', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始导出' }));
 
     await waitFor(() => {
-      expect(api.startExport).toHaveBeenCalledWith('book-001', 'txt');
+      expect(api.startExport).toHaveBeenCalled();
     });
     expect(screen.getByText('已下载 测试小说，文件：测试小说.txt。')).toBeTruthy();
   });

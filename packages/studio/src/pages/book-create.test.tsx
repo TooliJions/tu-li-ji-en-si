@@ -3,6 +3,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import BookCreate from './book-create';
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 function renderWithRouter() {
   return render(
     <MemoryRouter initialEntries={['/book-create']}>
@@ -14,6 +24,7 @@ function renderWithRouter() {
 describe('BookCreate Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
   });
 
   it('renders step 1 with document-aligned basic fields', () => {
@@ -144,6 +155,12 @@ describe('BookCreate Page', () => {
           brief: '# 创作简报\n\n这是导入的设定。',
         }),
       });
+    });
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/writing-plan?bookId=book-test-123&autoBootstrap=1&autoWrite=1'
+      );
     });
   });
 

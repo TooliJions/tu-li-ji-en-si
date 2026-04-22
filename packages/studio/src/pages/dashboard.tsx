@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, PenTool, TrendingUp, AlertCircle, Plus, Activity } from 'lucide-react';
-import { fetchBooks, fetchAiTrace, deleteBook } from '../lib/api';
+import {
+  BookOpen,
+  PenTool,
+  TrendingUp,
+  AlertCircle,
+  Plus,
+  Activity,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { fetchBooks, fetchAiTrace, deleteBook, fetchHooks } from '../lib/api';
 import BaselineChart from '../components/baseline-chart';
 
 interface Book {
@@ -33,9 +42,13 @@ export default function Dashboard() {
   const [books, setBooks] = useState<Book[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [pendingHooks, setPendingHooks] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ bookId: string; title: string } | null>(
+    null
+  );
 
   useEffect(() => {
     async function fetchData() {
@@ -69,6 +82,14 @@ export default function Dashboard() {
             baseline: traceData.average, // Use average as a simple baseline
           }));
           setTrendData(last7);
+
+          // Fetch pending hooks count
+          try {
+            const hooksData = await fetchHooks(activeBook.id, 'open');
+            setPendingHooks(Array.isArray(hooksData) ? hooksData.length : 0);
+          } catch {
+            // Non-critical — dashboard still works
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -83,13 +104,19 @@ export default function Dashboard() {
   const totalWords = books.reduce((sum, b) => sum + b.currentWords, 0);
   const activeBooks = books.filter((b) => b.status === 'active').length;
 
-  async function handleDeleteBook(bookId: string, e: React.MouseEvent) {
-    e.preventDefault(); // Don't navigate
+  function requestDeleteBook(bookId: string, title: string, e: React.MouseEvent) {
+    e.preventDefault();
     e.stopPropagation();
+    setDeleteConfirm({ bookId, title });
+  }
+
+  async function confirmDeleteBook() {
+    if (!deleteConfirm) return;
     setDeleteError(null);
     try {
-      await deleteBook(bookId);
-      setBooks((prev) => prev.filter((b) => b.id !== bookId));
+      await deleteBook(deleteConfirm.bookId);
+      setBooks((prev) => prev.filter((b) => b.id !== deleteConfirm.bookId));
+      setDeleteConfirm(null);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : '删除失败');
     }
@@ -145,7 +172,12 @@ export default function Dashboard() {
           value={totalWords.toLocaleString()}
           color="text-purple-500"
         />
-        <StatCard icon={AlertCircle} label="待处理伏笔" value={0} color="text-amber-500" />
+        <StatCard
+          icon={AlertCircle}
+          label="待处理伏笔"
+          value={pendingHooks}
+          color="text-amber-500"
+        />
       </div>
 
       {/* Books and Activity/Trend Grid */}
@@ -198,7 +230,7 @@ export default function Dashboard() {
                     <button
                       className="p-4 text-muted-foreground opacity-0 group-hover:opacity-100 hover:!opacity-100 hover:text-destructive transition-all"
                       title="删除书籍"
-                      onClick={(e) => handleDeleteBook(book.id, e)}
+                      onClick={(e) => requestDeleteBook(book.id, book.title, e)}
                     >
                       ×
                     </button>
@@ -260,6 +292,45 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Delete Book Confirmation Dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg border p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Trash2 size={18} className="text-destructive" />
+                <h3 className="text-lg font-semibold">确认删除</h3>
+              </div>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              您确定要删除「
+              <span className="font-medium text-foreground">{deleteConfirm.title}</span>」吗？
+            </p>
+            <p className="text-xs text-amber-600 mb-6">⚠ 此操作不可逆，书籍将被移入回收站。</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 border rounded text-sm hover:bg-accent"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDeleteBook}
+                className="px-4 py-2 bg-destructive text-destructive-foreground rounded text-sm hover:bg-destructive/90"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

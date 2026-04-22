@@ -12,6 +12,7 @@ const mockDiff = {
       oldValue: '教室',
       newValue: '办公室',
       naturalLanguage: '林晨的位置已从「教室」变更为「办公室」',
+      category: 'character' as const,
     },
     {
       character: '苏小雨',
@@ -19,6 +20,7 @@ const mockDiff = {
       oldValue: '陌生人',
       newValue: '好友',
       naturalLanguage: '苏小雨与主角的关系已从「陌生人」变更为「好友」',
+      category: 'relation' as const,
     },
   ],
   severity: 'warning',
@@ -26,95 +28,53 @@ const mockDiff = {
 
 describe('StateDiffView', () => {
   it('renders diff summary', () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
     expect(screen.getByText(/设定变更/)).toBeTruthy();
   });
 
   it('shows natural language descriptions', () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
     expect(screen.getByText(/林晨的位置/)).toBeTruthy();
-    // 苏小雨 appears in both natural language and character tag, use getAllByText
     expect(screen.getAllByText(/苏小雨/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows old/new value comparison', () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
     expect(screen.getByText('教室')).toBeTruthy();
     expect(screen.getByText('办公室')).toBeTruthy();
   });
 
-  it('shows side-by-side left/right panels for each change', () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
-
-    // Should have "当前" (current/old) and "新值" (new) column labels
-    expect(screen.getAllByText('当前').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('新值').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('allows selecting changes for merge', async () => {
-    const onMerge = vi.fn();
-    render(<StateDiffView diff={mockDiff} onMerge={onMerge} />);
-
-    // Checkboxes should be present
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes.length).toBeGreaterThanOrEqual(2);
-
-    // Select first change
-    await act(async () => {
-      fireEvent.click(checkboxes[0]);
-    });
-
-    // Merge button should be enabled
-    await act(async () => {
-      fireEvent.click(screen.getByText('合并选中'));
-    });
-
-    await waitFor(() => {
-      expect(onMerge).toHaveBeenCalled();
-    });
-  });
-
-  it('passes selected indices to onMerge', async () => {
-    const onMerge = vi.fn();
-    render(<StateDiffView diff={mockDiff} onMerge={onMerge} />);
-
-    const checkboxes = screen.getAllByRole('checkbox');
-    // Select second change only
-    await act(async () => {
-      fireEvent.click(checkboxes[1]);
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText('合并选中'));
-    });
-
-    await waitFor(() => {
-      expect(onMerge).toHaveBeenCalledWith([1]);
-    });
-  });
-
-  it('shows empty state when no changes', () => {
-    const { container } = render(
-      <StateDiffView diff={{ ...mockDiff, changes: [] }} onMerge={() => {}} />
+  it('shows category grouping', () => {
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
     );
-    expect(container.textContent).toContain('无差异');
+    expect(screen.getByText('角色状态')).toBeTruthy();
+    expect(screen.getByText('关系变更')).toBeTruthy();
   });
 
-  it('displays severity badge', () => {
-    const { container } = render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
-    expect(container.textContent).toContain('warning');
+  it('shows radio buttons for adopt/ignore per change', () => {
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
+    const radios = screen.getAllByRole('radio');
+    expect(radios.length).toBeGreaterThanOrEqual(4); // 2 per change
   });
 
-  it('allows selecting multiple changes', async () => {
+  it('calls onMerge with adopted indices', async () => {
     const onMerge = vi.fn();
-    render(<StateDiffView diff={mockDiff} onMerge={onMerge} />);
+    render(
+      <StateDiffView diff={mockDiff} onMerge={onMerge} onIgnore={() => {}} onReRead={() => {}} />
+    );
 
-    const checkboxes = screen.getAllByRole('checkbox');
+    // Default: all adopted. Click 确认同步
     await act(async () => {
-      fireEvent.click(checkboxes[0]);
-      fireEvent.click(checkboxes[1]);
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText('合并选中'));
+      fireEvent.click(screen.getByText('确认同步'));
     });
 
     await waitFor(() => {
@@ -122,35 +82,81 @@ describe('StateDiffView', () => {
     });
   });
 
-  it('hides merge button when nothing selected', () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
-    expect(screen.queryByText('合并选中')).not.toBeInTheDocument();
+  it('calls onMerge with only adopted indices when some ignored', async () => {
+    const onMerge = vi.fn();
+    render(
+      <StateDiffView diff={mockDiff} onMerge={onMerge} onIgnore={() => {}} onReRead={() => {}} />
+    );
+
+    // Set second change to ignore
+    const radios = screen.getAllByRole('radio');
+    // radios order: [adopt0, ignore0, adopt1, ignore1]
+    // Click ignore for second change (index 3)
+    await act(async () => {
+      fireEvent.click(radios[3]);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('确认同步'));
+    });
+
+    await waitFor(() => {
+      expect(onMerge).toHaveBeenCalledWith([0]);
+    });
   });
 
-  it('shows selected count', async () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
-
-    const checkboxes = screen.getAllByRole('checkbox');
-    await act(async () => {
-      fireEvent.click(checkboxes[0]);
-    });
-
-    expect(screen.getByText(/已选择/)).toBeTruthy();
+  it('shows empty state when no changes', () => {
+    const { container } = render(
+      <StateDiffView
+        diff={{ ...mockDiff, changes: [] }}
+        onMerge={() => {}}
+        onIgnore={() => {}}
+        onReRead={() => {}}
+      />
+    );
+    expect(container.textContent).toContain('无差异');
   });
 
-  it('toggles selection off when clicking checkbox again', async () => {
-    render(<StateDiffView diff={mockDiff} onMerge={() => {}} />);
+  it('displays severity badge', () => {
+    const { container } = render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
+    expect(container.textContent).toContain('warning');
+  });
 
-    const checkboxes = screen.getAllByRole('checkbox');
-    // Select then deselect
-    await act(async () => {
-      fireEvent.click(checkboxes[0]);
-    });
-    expect(screen.getByText(/已选择/)).toBeTruthy();
+  it('shows summary count', () => {
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={() => {}} />
+    );
+    expect(screen.getByText(/将采纳/)).toBeTruthy();
+  });
+
+  it('calls onIgnore when ignore all clicked', async () => {
+    const onIgnore = vi.fn();
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={onIgnore} onReRead={() => {}} />
+    );
 
     await act(async () => {
-      fireEvent.click(checkboxes[0]);
+      fireEvent.click(screen.getByText('全部忽略'));
     });
-    expect(screen.queryByText(/已选择/)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(onIgnore).toHaveBeenCalled();
+    });
+  });
+
+  it('calls onReRead when re-read clicked', async () => {
+    const onReRead = vi.fn();
+    render(
+      <StateDiffView diff={mockDiff} onMerge={() => {}} onIgnore={() => {}} onReRead={onReRead} />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('重新阅读文本'));
+    });
+
+    await waitFor(() => {
+      expect(onReRead).toHaveBeenCalled();
+    });
   });
 });

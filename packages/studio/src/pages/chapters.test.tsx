@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 vi.mock('../lib/api', () => ({
   fetchBooks: vi.fn(),
+  fetchChapters: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -52,7 +53,7 @@ describe('Chapters Page', () => {
     });
 
     expect(screen.queryByText('页面开发中…')).toBeNull();
-    expect(screen.getByText('阶段性入口说明')).toBeTruthy();
+    expect(screen.getByText('页面说明')).toBeTruthy();
     expect(screen.getByText('测试小说')).toBeTruthy();
     expect(screen.getByRole('link', { name: '打开章节列表' })).toHaveAttribute(
       'href',

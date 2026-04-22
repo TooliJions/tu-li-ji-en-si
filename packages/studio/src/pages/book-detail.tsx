@@ -10,10 +10,8 @@ import {
   Play,
   Stethoscope,
   Trash2,
-  Palette,
-  Sparkles,
-  Heart,
-  Clock,
+  Zap,
+  Download,
 } from 'lucide-react';
 import {
   fetchBook,
@@ -247,52 +245,32 @@ export default function BookDetail() {
         <h2 className="text-lg font-semibold mb-4">快速操作</h2>
         <div className="flex flex-wrap gap-3">
           <Link
-            to={`/book/${bookId}/chapter/${Math.max(book.chapterCount, 1)}`}
+            to={`/writing-plan?bookId=${bookId}`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
           >
             <Pencil size={14} />
-            继续写作
+            开始写作
           </Link>
           <Link
             to={`/writing?bookId=${bookId}`}
             className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
           >
             <FileText size={14} />
+            连续写章
+          </Link>
+          <Link
+            to={`/writing?bookId=${bookId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
+          >
+            <Zap size={14} />
             快速试写
           </Link>
           <Link
-            to={`/hooks?bookId=${bookId}`}
+            to={`/export?bookId=${bookId}`}
             className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
           >
-            伏笔管理
-          </Link>
-          <Link
-            to={`/style-manager?bookId=${bookId}`}
-            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
-          >
-            <Palette size={14} />
-            文风配置
-          </Link>
-          <Link
-            to={`/fanfic-init?bookId=${bookId}`}
-            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
-          >
-            <Sparkles size={14} />
-            同人模式
-          </Link>
-          <Link
-            to={`/book/${bookId}/emotional-arcs`}
-            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
-          >
-            <Heart size={14} />
-            情感弧线
-          </Link>
-          <Link
-            to={`/book/${bookId}/prompts`}
-            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
-          >
-            <Clock size={14} />
-            提示词版本
+            <Download size={14} />
+            导出
           </Link>
           <Link
             to={`/daemon?bookId=${bookId}`}

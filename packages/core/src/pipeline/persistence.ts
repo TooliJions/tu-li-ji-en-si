@@ -107,8 +107,12 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
       let snapshotId: string | undefined;
       try {
         snapshotId = this.createSnapshot(input.bookId, input.chapterNumber);
-      } catch {
+      } catch (err) {
         // Snapshot failure is non-fatal — log but continue
+        console.warn(
+          `[PipelinePersistence] Snapshot creation failed for chapter ${input.chapterNumber}:`,
+          err
+        );
       }
 
       // Step 3: 原子替换（fs.rename）
