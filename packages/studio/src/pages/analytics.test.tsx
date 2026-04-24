@@ -38,21 +38,25 @@ const mockAiTraceLow = {
 describe('Analytics - AI Trace Attention Zone', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchWordCount as any).mockResolvedValue({
       totalWords: 10000,
       averagePerChapter: 3000,
       chapters: [],
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAuditRate as any).mockResolvedValue({
       totalAudits: 5,
       passRate: 0.8,
       perChapter: [],
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchTokenUsage as any).mockResolvedValue({
       totalTokens: 5000,
       perChannel: { writer: 2000, auditor: 1000, planner: 500, composer: 500, reviser: 1000 },
       perChapter: [],
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchQualityBaseline as any).mockResolvedValue({
       baseline: {
         version: 1,
@@ -68,11 +72,14 @@ describe('Analytics - AI Trace Attention Zone', () => {
         alert: false,
       },
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBaselineAlert as any).mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchEmotionalArcs as any).mockResolvedValue({ characters: [], alerts: [] });
   });
 
   it('shows attention zone on AI trace chart', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceHigh);
 
     render(
@@ -88,6 +95,7 @@ describe('Analytics - AI Trace Attention Zone', () => {
   });
 
   it('shows suggestion bubble when recent chapters enter attention zone', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceHigh);
 
     render(
@@ -103,6 +111,7 @@ describe('Analytics - AI Trace Attention Zone', () => {
   });
 
   it('does NOT show suggestion bubble when all scores are below threshold', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAiTrace as any).mockResolvedValue(mockAiTraceLow);
 
     render(

@@ -76,11 +76,13 @@ export default function Dashboard() {
           }));
 
           // Map ai-trace trend to chart format (last 7 chapters)
-          const last7 = (traceData.trend || []).slice(-7).map((t: any) => ({
-            chapter: t.chapter,
-            score: t.score,
-            baseline: traceData.average, // Use average as a simple baseline
-          }));
+          const last7 = (traceData.trend || [])
+            .slice(-7)
+            .map((t: { chapter?: number; score?: number }) => ({
+              chapter: t.chapter,
+              score: t.score,
+              baseline: traceData.average, // Use average as a simple baseline
+            }));
           setTrendData(last7);
 
           // Fetch pending hooks count

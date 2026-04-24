@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   FileJson,
-  Save,
-  X,
   Edit3,
   Upload,
   RefreshCw,
@@ -14,7 +12,6 @@ import {
   Layers,
   FileText,
   Search,
-  Zap,
   Map as MapIcon,
   Clock,
   Globe,
@@ -41,6 +38,7 @@ interface TruthFileEntry {
 
 interface TruthFileContent {
   name: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   content: Record<string, any>;
   versionToken: number;
 }
@@ -111,6 +109,7 @@ export default function TruthFiles() {
   const [projection, setProjection] = useState<ProjectionStatus | null>(null);
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [worldState, setWorldState] = useState<Record<string, any> | null>(null);
   const [relations, setRelations] = useState<CharacterRelation[]>([]);
   const [locations, setLocations] = useState<LocationEntry[]>([]);
@@ -148,6 +147,7 @@ export default function TruthFiles() {
         setFiles(list.files || []);
         setProjection(status);
         setHooks(hooksList || []);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setCharacters(memory.memories.filter((m: any) => m.entityType === 'character') || []);
         setWorldState(ws?.content ?? null);
 
@@ -159,6 +159,7 @@ export default function TruthFiles() {
           const chars = Object.keys(ws.content.characters);
           const inferred: CharacterRelation[] = [];
           for (const c of chars) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const data = ws.content.characters[c] as any;
             if (data?.relationships) {
               for (const [target, relType] of Object.entries(data.relationships)) {
@@ -183,6 +184,7 @@ export default function TruthFiles() {
 
   function normalizeTruthFile(
     fileName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { name?: string; content: Record<string, any>; versionToken: number }
   ): TruthFileContent {
     return {
@@ -230,7 +232,7 @@ export default function TruthFiles() {
       setEditing(false);
       const list = await fetchTruthFiles(bookId);
       setFiles(list.files || []);
-    } catch (err) {
+    } catch {
       alert('保存失败，请检查 JSON 格式');
     }
   }
@@ -370,35 +372,38 @@ export default function TruthFiles() {
                   {worldState.characters && (
                     <div className="space-y-3 mb-4">
                       <p className="text-xs text-muted-foreground font-medium">角色:</p>
-                      {Object.entries(worldState.characters).map(([name, data]: [string, any]) => (
-                        <div key={name} className="rounded border bg-muted p-3">
-                          <h4 className="font-medium text-sm mb-2">{name}</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="text-muted-foreground">位置:</span>{' '}
-                              {(data as any).location ?? '未知'}
+                      {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        Object.entries(worldState.characters).map(([name, data]: [string, any]) => (
+                          <div key={name} className="rounded border bg-muted p-3">
+                            <h4 className="font-medium text-sm mb-2">{name}</h4>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-muted-foreground">位置:</span>{' '}
+                                {data.location ?? '未知'}
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">健康:</span>{' '}
+                                {data.health ?? '良好'}
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">情感状态:</span>{' '}
+                                {data.emotion ?? '未知'}
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">资源:</span>{' '}
+                                {data.inventory?.join('、') ?? '无'}
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-muted-foreground">健康:</span>{' '}
-                              {(data as any).health ?? '良好'}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">情感状态:</span>{' '}
-                              {(data as any).emotion ?? '未知'}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">资源:</span>{' '}
-                              {(data as any).inventory?.join('、') ?? '无'}
-                            </div>
+                            {data.knownInfo && data.knownInfo.length > 0 && (
+                              <div className="mt-2 text-xs">
+                                <span className="text-muted-foreground">已知信息:</span>{' '}
+                                {data.knownInfo.join('、')}
+                              </div>
+                            )}
                           </div>
-                          {(data as any).knownInfo && (data as any).knownInfo.length > 0 && (
-                            <div className="mt-2 text-xs">
-                              <span className="text-muted-foreground">已知信息:</span>{' '}
-                              {(data as any).knownInfo.join('、')}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        ))
+                      }
                     </div>
                   )}
                   <div className="grid grid-cols-3 gap-4 text-xs text-muted-foreground mb-4">
@@ -1021,7 +1026,7 @@ function RelationshipGraph({
       })}
 
       {/* Character nodes */}
-      {positions.map((pos, i) => (
+      {positions.map((pos) => (
         <g key={pos.name}>
           <circle cx={pos.x} cy={pos.y} r={28} fill="#f8fafc" stroke="#3b82f6" strokeWidth={2} />
           <text
@@ -1055,17 +1060,6 @@ function RelationshipGraph({
         </text>
       </g>
     </svg>
-  );
-}
-
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-3 rounded-md bg-muted/30 border">
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">
-        {label}
-      </p>
-      <p className="text-sm font-bold">{value}</p>
-    </div>
   );
 }
 

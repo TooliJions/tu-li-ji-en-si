@@ -9,26 +9,10 @@ import {
   setStudioRuntimeRootDir,
   isManagedTempDir,
 } from '../runtime/runtime-config';
-import {
-  type StudioRuntimeBookRecord,
-  hasStudioBookRuntime,
-  initializeStudioBookRuntime,
-  updateStudioBookRuntime,
-  deleteStudioBookRuntime,
-  readStudioBookRuntime,
-  listStudioBookRuntimes,
-} from '../runtime/book-repository';
-
-import {
-  setStudioDaemon,
-  getStudioDaemon,
-  clearStudioDaemon,
-  stopAllStudioDaemons,
-  clearAllStudioDaemons,
-} from '../daemon/daemon-registry';
+import { stopAllStudioDaemons, clearAllStudioDaemons } from '../daemon/daemon-registry';
 
 // Re-export everything for backward compatibility
-export type { StudioRuntimeBookRecord } from '../runtime/book-repository';
+
 export { getStudioRuntimeRootDir } from '../runtime/runtime-config';
 export {
   hasStudioBookRuntime,

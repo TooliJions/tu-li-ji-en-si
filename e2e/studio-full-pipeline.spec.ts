@@ -113,7 +113,6 @@ test.describe('完整创作流程 E2E', () => {
     await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
 
     // 2. 验证当前状态
-    const statusText = page.locator('[class*="status"], [class*="Status"]').first();
     await page.waitForTimeout(1000);
 
     // 3. 点击启动守护进程

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeProvider } from './claude-provider';
-import Anthropic from '@anthropic-ai/sdk';
 
 // Hoisted mock factory
 const mockCreate = vi.fn();

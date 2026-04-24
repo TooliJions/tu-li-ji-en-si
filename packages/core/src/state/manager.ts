@@ -224,7 +224,7 @@ export class StateManager {
     chapterNumber: number,
     title: string,
     content: string,
-    status: 'draft' | 'final'
+    _status: 'draft' | 'final'
   ): void {
     const index = this.readIndex(bookId);
     const existingEntry = this.findChapterEntry(index.chapters, chapterNumber);

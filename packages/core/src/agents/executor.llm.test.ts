@@ -181,6 +181,7 @@ function runGenreAlignmentTests(
       const content = await generateAndGetContent(getExecutor(), input);
       const { covered, missed } = checkEntityCoverage(content, plan.characters);
 
+      // eslint-disable-next-line no-console
       console.log(`[角色覆盖] 命中: ${covered.join(', ')} | 缺失: ${missed.join(', ') || '无'}`);
       expect(covered.length).toBeGreaterThanOrEqual(
         Math.ceil(plan.characters.length * thresholds.characterCoverageMin)
@@ -195,6 +196,7 @@ function runGenreAlignmentTests(
       const content = await generateAndGetContent(getExecutor(), input);
       const { covered, missed } = checkKeyEventCoverage(content, plan.keyEvents);
 
+      // eslint-disable-next-line no-console
       console.log(
         `[事件覆盖] 命中: ${covered.join(' | ')}\n          缺失: ${missed.join(' | ') || '无'}`
       );
@@ -212,6 +214,7 @@ function runGenreAlignmentTests(
       const wordCount = countChineseWords(content);
       const ratio = wordCount / plan.wordCountTarget;
 
+      // eslint-disable-next-line no-console
       console.log(
         `[字数] 实际: ${wordCount} | 目标: ${plan.wordCountTarget} | 比率: ${(ratio * 100).toFixed(1)}%`
       );
@@ -227,6 +230,7 @@ function runGenreAlignmentTests(
       const content = await generateAndGetContent(getExecutor(), input);
       const { found, missing } = checkEmotionalBeatKeywords(content, plan.emotionalBeat);
 
+      // eslint-disable-next-line no-console
       console.log(`[情感节拍] 直接命中: ${found.join(', ')} | 未直接出现: ${missing.join(', ')}`);
       expect(content.length).toBeGreaterThan(100);
     },
@@ -241,6 +245,7 @@ function runGenreAlignmentTests(
       const matchedKeywords = uniqueKeywords.filter((k) => content.includes(k));
       const ratio = matchedKeywords.length / uniqueKeywords.length;
 
+      // eslint-disable-next-line no-console
       console.log(
         `[世界观] 关键词匹配率: ${(ratio * 100).toFixed(1)}% (${matchedKeywords.length}/${uniqueKeywords.length})`
       );
@@ -256,6 +261,7 @@ function runGenreAlignmentTests(
       const hookDescriptions = plan.hooks.map((h) => h.description);
       const { covered } = checkKeyEventCoverage(content, hookDescriptions);
 
+      // eslint-disable-next-line no-console
       console.log(`[伏笔] 覆盖: ${covered.join(' | ')} | 总计: ${hookDescriptions.length}`);
       expect(covered.length).toBeGreaterThanOrEqual(thresholds.hookCoverageMin);
     },
@@ -268,6 +274,7 @@ function runGenreAlignmentTests(
       const content = await generateAndGetContent(getExecutor(), input);
       const foundForbidden = config.forbiddenWords.filter((w) => content.includes(w));
 
+      // eslint-disable-next-line no-console
       console.log(
         `[文风一致性] ${config.genre}文中出现违禁词: ${foundForbidden.join(', ') || '无'}`
       );
@@ -283,6 +290,7 @@ function runGenreAlignmentTests(
       const paragraphs = content.split(/\n+/).filter((p) => p.trim().length > 0);
       const hasDialogue = /[""「」『』"]/.test(content);
 
+      // eslint-disable-next-line no-console
       console.log(`[段落结构] 段落数: ${paragraphs.length} | 包含对话: ${hasDialogue}`);
       expect(paragraphs.length).toBeGreaterThanOrEqual(thresholds.minParagraphCount);
       expect(hasDialogue).toBe(true);
@@ -311,6 +319,7 @@ function runGenreAlignmentTests(
       const validPositions = positions.filter((p) => p !== -1);
       const sortedPositions = [...validPositions].sort((a, b) => a - b);
 
+      // eslint-disable-next-line no-console
       console.log(
         `[事件顺序] 位置: ${positions.map((p) => (p === -1 ? '未找到' : p)).join(' → ')}`
       );
@@ -345,6 +354,7 @@ describe('ChapterExecutor — 真实 LLM 集成测试', () => {
   describe('环境配置', () => {
     it('LLM 环境变量配置说明', () => {
       if (!llmAvailable) {
+        // eslint-disable-next-line no-console
         console.log(`
 ┌─────────────────────────────────────────────────────────┐
 │  LLM 集成测试被跳过 — 未检测到环境变量                    │

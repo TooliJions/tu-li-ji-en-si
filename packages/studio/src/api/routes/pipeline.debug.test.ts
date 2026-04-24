@@ -39,12 +39,14 @@ describe('pipeline debug', () => {
       const statusRes = await app.request(`/api/books/${bookId}/pipeline/${data.data.pipelineId}`);
       const statusData = await statusRes.json();
       if (statusData.data.status !== 'running') {
+        // eslint-disable-next-line no-console
         console.log('DEBUG_PIPELINE_RESULT', JSON.stringify(statusData, null, 2));
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
+    // eslint-disable-next-line no-console
     console.log('DEBUG_PIPELINE_RESULT timeout');
   });
 });

@@ -5,10 +5,6 @@ import { z } from 'zod';
 import { PromptRegistry, type PromptTemplate } from '@cybernovelist/core';
 
 const setVersionSchema = z.object({ version: z.enum(['v1', 'v2', 'latest']) });
-const getPromptSchema = z.object({
-  name: z.string(),
-  version: z.enum(['v1', 'v2', 'latest']).optional(),
-});
 const diffSchema = z.object({
   from: z.enum(['v1', 'v2', 'latest']),
   to: z.enum(['v1', 'v2', 'latest']),
@@ -94,14 +90,6 @@ export function createPromptsRouter(): Hono {
     const registry = getOrCreateRegistry();
     const templates = listPromptTemplates(registry);
     const manifest = registry.loadManifest();
-
-    // Build versions array for frontend compatibility
-    const versions = templates.map((tpl) => ({
-      version: tpl.name,
-      label: tpl.name,
-      date: '',
-      agentCount: 0,
-    }));
 
     // Add explicit version entries for known versions (v1, v2)
     const knownVersions = [

@@ -30,7 +30,9 @@ describe('PromptVersionView', () => {
   });
 
   it('renders loading state initially', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockReturnValue(new Promise(() => {}));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockReturnValue(new Promise(() => {}));
 
     render(
@@ -45,7 +47,9 @@ describe('PromptVersionView', () => {
   });
 
   it('renders prompt versions after loading', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockResolvedValue(mockPromptData);
 
     render(
@@ -65,8 +69,11 @@ describe('PromptVersionView', () => {
   });
 
   it('handles switching versions', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockResolvedValue(mockPromptData);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.setPromptVersion as any).mockResolvedValue({ success: true });
 
     render(
@@ -88,8 +95,11 @@ describe('PromptVersionView', () => {
   });
 
   it('handles version comparison', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockResolvedValue(mockPromptData);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptDiff as any).mockResolvedValue({
       from: 'v1',
       to: 'v2',
@@ -118,8 +128,11 @@ describe('PromptVersionView', () => {
   });
 
   it('shows a visible error when switching version fails', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockResolvedValue(mockPromptData);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.setPromptVersion as any).mockRejectedValue(new Error('切换失败：版本不存在'));
 
     render(
@@ -142,8 +155,11 @@ describe('PromptVersionView', () => {
   });
 
   it('shows a visible error when comparison fails', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptVersions as any).mockResolvedValue(mockPromptData);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchPromptDiff as any).mockRejectedValue(new Error('对比失败：缺少版本差异数据'));
 
     render(

@@ -88,8 +88,6 @@ export default function ExportView() {
           }
         : undefined;
       const result = await startExport(selectedBookId, selectedFormat, options);
-      const formatLabel =
-        EXPORT_FORMATS.find((item) => item.value === result.format)?.label ?? result.format;
       setResultMessage(`已下载 ${selectedBook?.title ?? '当前书籍'}，文件：${result.filename}。`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '启动导出失败');

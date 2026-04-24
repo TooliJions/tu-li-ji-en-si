@@ -95,7 +95,7 @@ export default function DaemonControl() {
     if (savedConfig) {
       try {
         setNotifyConfig(JSON.parse(savedConfig));
-      } catch (e) {
+      } catch {
         setNotifyConfig(DEFAULT_NOTIFY_CONFIG);
       }
     }

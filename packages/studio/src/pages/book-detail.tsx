@@ -561,12 +561,3 @@ export default function BookDetail() {
     </div>
   );
 }
-
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-lg font-bold mt-1">{value}</p>
-    </div>
-  );
-}

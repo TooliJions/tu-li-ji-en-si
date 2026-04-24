@@ -3,7 +3,7 @@ import * as path from 'path';
 import type { StateManager } from '../state/manager';
 import type { RuntimeStateStore } from '../state/runtime-store';
 import { applyRuntimeStateDelta } from '../state/reducer';
-import type { Manifest, ChapterPlanStore } from '../models/state';
+import type { Manifest } from '../models/state';
 import type { LLMProvider } from '../llm/provider';
 import { GENRE_WRITER_STYLE_MAP } from '../agents/genre-guidance';
 import {

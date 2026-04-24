@@ -43,7 +43,7 @@ describe('Pipeline Schemas', () => {
     it('should accept custom values', () => {
       const config: PipelineRuntimeConfig = PipelineConfigSchema.parse({
         maxRevisionRetries: 5,
-        fallbackAction: 'pause' as any,
+        fallbackAction: 'pause' as unknown,
         enableAudit: false,
       });
       expect(config.maxRevisionRetries).toBe(5);

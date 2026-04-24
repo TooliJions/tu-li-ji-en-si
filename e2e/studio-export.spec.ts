@@ -54,7 +54,7 @@ test.describe('EPUB 3.0 导出（PRD-070）', () => {
     }
   });
 
-  test('EPUB 包含 OPF 元数据', async ({ page, request }) => {
+  test('EPUB 包含 OPF 元数据', async ({ page: _page, request }) => {
     // 通过 API 触发导出，验证响应包含 OPF 结构
     const res = await request.get(`/api/export/${bookId}/epub`);
     // 允许 200 或 404（未实现时）
@@ -67,7 +67,7 @@ test.describe('EPUB 3.0 导出（PRD-070）', () => {
     }
   });
 
-  test('EPUB 章节 XHTML 结构完整', async ({ page, request }) => {
+  test('EPUB 章节 XHTML 结构完整', async ({ page: _page, request }) => {
     const res = await request.get(`/api/export/${bookId}/epub`);
     if (res.status() === 200) {
       const body = await res.text();
@@ -120,7 +120,7 @@ test.describe('TXT / Markdown 导出（PRD-071）', () => {
     }
   });
 
-  test('TXT 导出包含章节标题', async ({ page, request }) => {
+  test('TXT 导出包含章节标题', async ({ page: _page, request }) => {
     const res = await request.get(`/api/export/${bookId}/txt`);
     expect([200, 404, 501]).toContain(res.status());
 
@@ -131,7 +131,7 @@ test.describe('TXT / Markdown 导出（PRD-071）', () => {
     }
   });
 
-  test('Markdown 导出包含章节标题标记', async ({ page, request }) => {
+  test('Markdown 导出包含章节标题标记', async ({ page: _page, request }) => {
     const res = await request.get(`/api/export/${bookId}/md`);
     expect([200, 404, 501]).toContain(res.status());
 
@@ -184,7 +184,7 @@ test.describe('平台适配导出（PRD-072）', () => {
     }
   });
 
-  test('平台特定格式细节符合规范', async ({ page, request }) => {
+  test('平台特定格式细节符合规范', async ({ page: _page, request }) => {
     // 验证起点导出 API
     const qidianRes = await request.get(`/api/export/${bookId}/platform/qidian`);
     expect([200, 404, 501]).toContain(qidianRes.status());
@@ -238,13 +238,13 @@ test.describe('批量导出与章节范围（PRD-073）', () => {
     }
   });
 
-  test('指定章节范围导出', async ({ page, request }) => {
+  test('指定章节范围导出', async ({ page: _page, request }) => {
     // 通过 API 测试章节范围参数
     const res = await request.get(`/api/export/${bookId}/epub?chapterStart=1&chapterEnd=5`);
     expect([200, 404, 501]).toContain(res.status());
   });
 
-  test('导出全部章节（无范围限制）', async ({ page, request }) => {
+  test('导出全部章节（无范围限制）', async ({ page: _page, request }) => {
     const res = await request.get(`/api/export/${bookId}/epub`);
     expect([200, 404, 501]).toContain(res.status());
   });

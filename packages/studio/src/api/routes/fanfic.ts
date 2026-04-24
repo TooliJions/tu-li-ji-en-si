@@ -15,10 +15,6 @@ const initFanficSchema = z.object({
   canonReference: z.string().optional().default(''),
 });
 
-const getFanficSchema = z.object({
-  bookId: z.string().min(1),
-});
-
 const generatePromptSchema = z.object({
   basePrompt: z.string().min(1),
   canonReference: z.string().optional().default(''),

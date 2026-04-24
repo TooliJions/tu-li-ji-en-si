@@ -96,7 +96,6 @@ test.describe('创作规划流程（PRD-010~015）', () => {
 test.describe('章节阅读器与回滚（PRD-063, PRD-092）', () => {
   const testBookTitle = `E2E-章节阅读-${Date.now()}`;
   let bookId: string;
-  let chapterNumber: string;
 
   test.beforeAll(async ({ request }) => {
     const res = await request.post('/api/books', {

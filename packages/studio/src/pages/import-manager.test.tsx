@@ -53,12 +53,16 @@ function renderWithRouter(entry = '/import-manager?bookId=book-001') {
 describe('ImportManager Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(api.fetchTruthFiles).mockResolvedValue(mockFiles as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(api.fetchProjectionStatus).mockResolvedValue(mockProjection as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(api.fetchStateDiff).mockResolvedValue(mockDiff as any);
     vi.mocked(api.importMarkdown).mockResolvedValue({
       parsed: { versionToken: 14, diff: ['emotion'] },
       preview: '成功同步 1 项变更',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
   });
 

@@ -12,12 +12,6 @@ const exportRangeSchema = z.object({
     .optional(),
 });
 
-const exportSchema = z.object({
-  format: z.enum(['markdown', 'txt', 'epub']),
-  chapterFrom: z.number().int().positive().optional(),
-  chapterTo: z.number().int().positive().optional(),
-});
-
 function getChapterContent(runtimeRoot: string, bookId: string, chapterNumber: number): string {
   const padded = String(chapterNumber).padStart(4, '0');
   const filePath = path.join(runtimeRoot, bookId, 'story', 'chapters', `chapter-${padded}.md`);
@@ -99,7 +93,17 @@ function buildRange(from?: number, to?: number) {
   return { from: Math.min(from, to), to: Math.max(from, to) };
 }
 
-async function dispatchExport(c: any, runtimeRoot: string) {
+async function dispatchExport(
+  c: {
+    req: {
+      param: (name: string) => string | undefined;
+      query: (name: string) => string | undefined;
+    };
+    json: (data: unknown, status?: number) => Response;
+    body: (data: Uint8Array, status?: number, headers?: Record<string, string>) => Response;
+  },
+  runtimeRoot: string
+) {
   const bookId = c.req.param('bookId');
   if (!bookId) return c.json({ error: '缺少 bookId' }, 400);
 

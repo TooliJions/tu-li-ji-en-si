@@ -508,15 +508,6 @@ async function getFallbackPrompt(
   return provider.generate.mock.calls[0][0].prompt;
 }
 
-/** 创建带 mock 追踪能力的 deps */
-function createMockDeps(overrides: { context?: string; scene?: string } = {}) {
-  const buildContext = vi.fn().mockResolvedValue(overrides.context ?? 'ctx');
-  const generateScene = vi.fn().mockResolvedValue(overrides.scene ?? 'content');
-  return { buildContext, generateScene, mock: generateScene.mock } as AgentDependencies & {
-    generateScene: typeof generateScene;
-  };
-}
-
 // ════════════════════════════════════════════════════════════════
 // 新增：正文写作核心能力测试
 // ════════════════════════════════════════════════════════════════
@@ -731,6 +722,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.sceneBreakdown).toHaveLength(xianxia.plan.sceneBreakdown.length);
       expect(receivedPlan.sceneBreakdown[0].title).toBe(xianxia.plan.sceneBreakdown[0].title);
@@ -749,6 +741,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.openingHook).toBe(xianxia.plan.openingHook);
       expect(receivedPlan.closingHook).toBe(xianxia.plan.closingHook);
@@ -764,6 +757,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.hookActions).toHaveLength(xianxia.plan.hookActions.length);
       for (let i = 0; i < xianxia.plan.hookActions.length; i++) {
@@ -785,6 +779,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.pacingTag).toBe(customTag);
     });
@@ -806,6 +801,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.characterGrowthBeat).toBe(customBeat);
     });
@@ -1127,6 +1123,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       expect(receivedPlan.hookActions).toHaveLength(customActions.length);
       for (let i = 0; i < customActions.length; i++) {
@@ -1156,6 +1153,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
           },
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
         expect(receivedPlan.pacingTag).toBe(tag);
       });
@@ -1175,6 +1173,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       for (let i = 0; i < xianxia.plan.sceneBreakdown.length; i++) {
         expect(receivedPlan.sceneBreakdown[i].characters).toEqual(
@@ -1193,6 +1192,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       for (const sb of xianxia.plan.sceneBreakdown) {
         const received = receivedPlan.sceneBreakdown.find((s) => s.title === sb.title);
@@ -1212,6 +1212,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         promptContext: { input: buildInput(xianxia), dependencies: deps },
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const receivedPlan = (deps.generateScene as any).mock.calls[0][0] as ChapterPlan;
       const titles = receivedPlan.sceneBreakdown.map((s) => s.title);
       const expectedTitles = xianxia.plan.sceneBreakdown.map((s) => s.title);

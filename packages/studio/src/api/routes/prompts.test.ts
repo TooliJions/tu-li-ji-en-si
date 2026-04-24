@@ -1,7 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { createPromptsRouter } from './prompts';
 
 function createTestApp() {

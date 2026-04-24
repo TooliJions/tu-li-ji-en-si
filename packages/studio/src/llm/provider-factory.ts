@@ -1,6 +1,6 @@
 import { LLMProvider, RoutedLLMProvider } from '@cybernovelist/core';
 import { DeterministicProvider } from './deterministic-provider';
-import { readStudioBookRuntime, type StudioRuntimeBookRecord } from '../runtime/book-repository';
+import { type StudioRuntimeBookRecord } from '../runtime/book-repository';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

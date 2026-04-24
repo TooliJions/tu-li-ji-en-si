@@ -22,7 +22,9 @@ vi.mock('../lib/api', () => ({
 const eventSources: MockEventSource[] = [];
 
 class MockEventSource {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onmessage: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onerror: any;
   addEventListener = vi.fn();
   close = vi.fn();
@@ -30,6 +32,7 @@ class MockEventSource {
     eventSources.push(this);
   }
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).EventSource = MockEventSource;
 
 const mockBook = {
@@ -43,15 +46,22 @@ describe('Writing Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     eventSources.length = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBook as any).mockResolvedValue(mockBook);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchChapters as any).mockResolvedValue([]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchMemoryPreview as any).mockResolvedValue({
       summary: { facts: 0, hooks: 0, characters: 0 },
       memories: [],
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchTruthFiles as any).mockResolvedValue({ versionToken: 1, files: [] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchTokenUsage as any).mockResolvedValue({ total: 1000, prompt: 500, completion: 500 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAiTrace as any).mockResolvedValue({ score: 0.1, labels: ['自然'] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAuditRate as any).mockResolvedValue({ passed: 10, failed: 1, total: 11 });
   });
 
@@ -82,6 +92,7 @@ describe('Writing Page', () => {
   });
 
   it('handles write next and starts pipeline', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-123' });
 
     render(
@@ -100,10 +111,13 @@ describe('Writing Page', () => {
   });
 
   it('consumes planning query params to prefill intent and drive chapter-aware calls', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchChapters as any).mockResolvedValue([
       { number: 45, title: '首次测验', status: 'published' },
     ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-123' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteDraft as any).mockResolvedValue({ number: 46, content: 'draft content' });
 
     render(
@@ -140,9 +154,11 @@ describe('Writing Page', () => {
   });
 
   it('auto-associates title characters and hooks into writing intents when explicit intent is absent', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchChapters as any).mockResolvedValue([
       { number: 45, title: '首次测验', status: 'published' },
     ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startFastDraft as any).mockResolvedValue({
       content: 'draft content',
       wordCount: 800,
@@ -150,6 +166,7 @@ describe('Writing Page', () => {
       llmCalls: 1,
       draftId: 'draft-1',
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-123' });
 
     const autoIntent =
@@ -184,9 +201,11 @@ describe('Writing Page', () => {
   });
 
   it('auto-starts the write-next pipeline when autoStart=1 is present', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchChapters as any).mockResolvedValue([
       { number: 45, title: '首次测验', status: 'published' },
     ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-auto-1' });
 
     render(
@@ -231,6 +250,7 @@ describe('Writing Page', () => {
   });
 
   it('does not crash when pipeline progress events omit stages', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.startWriteNext as any).mockResolvedValue({ pipelineId: 'pipe-123' });
 
     render(

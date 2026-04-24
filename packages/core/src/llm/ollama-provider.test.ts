@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OllamaProvider } from './ollama-provider';
-import OpenAI from 'openai';
 
 // Hoisted mock factory
 const mockCreate = vi.fn();
@@ -96,11 +95,14 @@ describe('OllamaProvider', () => {
   describe('default config', () => {
     it('should use default baseURL when not provided', () => {
       const p = new OllamaProvider({ apiKey: 'test', model: 'llama3' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((p as any).config.baseURL).toBe('http://localhost:11434/v1');
     });
 
     it('should use default apiKey when not provided', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const p = new OllamaProvider({ model: 'llama3' } as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((p as any).config.apiKey).toBe('ollama');
     });
   });

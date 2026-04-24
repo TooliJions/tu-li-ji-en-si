@@ -107,7 +107,7 @@ test.describe('33 维连续性审计（PRD-036, PRD-036a）', () => {
     }
   });
 
-  test('单维 LLM 失败自动降级', async ({ page, request }) => {
+  test('单维 LLM 失败自动降级', async ({ page: _page, request }) => {
     // 通过 API 验证审计降级逻辑
     const res = await request.get(`/api/audit/${bookId}/chapter/1`);
     expect([200, 404, 501]).toContain(res.status());

@@ -220,7 +220,6 @@ export function createStyleRouter(): Hono {
       return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
     }
 
-    const book = readStudioBookRuntime(bookId);
     const allText = readAllChapterText(bookId);
     if (!allText) {
       return c.json({ data: { fingerprint: null, chapterCount: 0 } });

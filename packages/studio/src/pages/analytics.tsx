@@ -4,7 +4,6 @@ import {
   BarChart3,
   TrendingDown,
   Zap,
-  AlertTriangle,
   AlertCircle,
   Shuffle,
   CheckCircle,
@@ -152,8 +151,10 @@ export default function Analytics() {
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   const [aiTrace, setAiTrace] = useState<AiTraceData | null>(null);
   const [qualityBaseline, setQualityBaseline] = useState<QualityBaselineData | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [baselineAlert, setBaselineAlert] = useState<BaselineAlertData | null>(null);
   const [emotionalArcs, setEmotionalArcs] = useState<EmotionalArcData | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [inspirationResults, setInspirationResults] = useState<InspirationShuffleData | null>(null);
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);

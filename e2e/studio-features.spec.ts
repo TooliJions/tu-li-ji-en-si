@@ -328,7 +328,6 @@ test.describe('仪表盘功能', () => {
     await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
 
     // 验证书籍列表容器存在
-    const bookList = page.locator('[class*="book"], [class*="Book"]');
     await page.waitForTimeout(1000); // 等待加载
   });
 

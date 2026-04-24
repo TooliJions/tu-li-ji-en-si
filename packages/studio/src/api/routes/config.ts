@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { OpenAICompatibleProvider, LLMConfig } from '@cybernovelist/core';
+import { OpenAICompatibleProvider } from '@cybernovelist/core';
 
 interface ProviderEntry {
   name: string;
@@ -89,22 +89,6 @@ function saveConfig(cfg: ConfigState) {
 function findProviderConfig(name: string): ProviderEntry | undefined {
   const config = loadConfig();
   return config.providers.find((p) => p.name === name);
-}
-
-function resolveProviderConfig(entry: ProviderEntry): {
-  config: LLMConfig;
-  effectiveModel: string;
-} {
-  const model = entry.model || defaultConfig.defaultModel;
-  const baseUrl = entry.baseUrl;
-  const llmConfig: LLMConfig = {
-    apiKey: entry.apiKey,
-    baseURL: baseUrl,
-    model,
-    temperature: 0.7,
-    maxTokens: 100,
-  };
-  return { config: llmConfig, effectiveModel: model };
 }
 
 export function createConfigRouter(): Hono {

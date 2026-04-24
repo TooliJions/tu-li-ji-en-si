@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './dashboard';
 import * as api from '../lib/api';
@@ -37,9 +37,13 @@ const mockTrace = {
 describe('Dashboard Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBooks as any).mockResolvedValue(mockBooks);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchAiTrace as any).mockResolvedValue(mockTrace);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.deleteBook as any).mockResolvedValue(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBookActivity as any).mockResolvedValue([]);
     vi.stubGlobal(
       'confirm',
@@ -89,6 +93,7 @@ describe('Dashboard Page', () => {
   });
 
   it('shows a visible error when deleting a book fails', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.deleteBook as any).mockRejectedValue(new Error('删除书籍失败：状态目录被占用'));
 
     render(
@@ -120,6 +125,7 @@ describe('Dashboard Page', () => {
 
   // TODO: Add error toast for activity fetch failures. Component currently silently ignores them.
   it.skip('shows a visible warning when recent activity loading fails', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBookActivity as any).mockRejectedValue(new Error('最近活动暂不可用'));
 
     render(

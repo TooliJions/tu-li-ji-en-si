@@ -1,7 +1,7 @@
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
 
-import { OpenAICompatibleProvider, LLMProvider, type LLMConfig } from '../llm/provider';
+import { OpenAICompatibleProvider, LLMProvider } from '../llm/provider';
 import { TelemetryLogger } from '../telemetry/logger';
 import { ChapterRestructurer } from './restructurer';
 import type { MergeChaptersInput, SplitChapterInput, RestructureResult } from './restructurer';
@@ -19,7 +19,6 @@ export {
   type WriteNextChapterInput,
   type ChapterResult,
   type AuditDraftInput,
-  type RunnerAuditIssue,
   type AuditResult,
   type ReviseDraftInput,
   MergeChaptersInput,
@@ -41,7 +40,6 @@ import type {
   AuditDraftInput,
   AuditResult,
   ReviseDraftInput,
-  RunnerAuditIssue,
 } from './types';
 import { DefaultDraftManager, type DraftManager } from './orchestrators/draft-manager';
 import {

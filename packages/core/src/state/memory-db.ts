@@ -1,4 +1,4 @@
-import initSqlJs, { type Database, type Statement, type SqlJsStatic } from 'sql.js';
+import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 import * as fs from 'fs';
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -96,6 +96,7 @@ export class MemoryDB {
 
     const instance = new MemoryDB(db, SQL);
     instance.#saveToDisk(dbPath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (instance as any)._dbPath = dbPath;
     return instance;
   }
@@ -109,6 +110,7 @@ export class MemoryDB {
   }
 
   #persist(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const path = (this as any)._dbPath as string | undefined;
     if (path) this.#saveToDisk(path);
   }

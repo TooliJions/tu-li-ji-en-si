@@ -124,8 +124,8 @@ function buildContextSummary(bookId: string): string {
 
 function buildCommandActions(
   message: string,
-  chapterContent: string,
-  contextSummary: string
+  _chapterContent: string,
+  _contextSummary: string
 ): string {
   const lower = message.toLowerCase();
   const actions: string[] = [];
@@ -196,6 +196,7 @@ export function createNaturalAgentRouter(): Hono {
 
     const output = intentResult.success
       ? JSON.stringify({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           narrativeGoal: (intentResult.data as any)?.narrativeGoal ?? result.data.message,
           actions,
           contextSummary,

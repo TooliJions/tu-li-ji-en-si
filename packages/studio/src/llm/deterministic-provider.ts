@@ -205,7 +205,7 @@ export class DeterministicProvider extends LLMProvider {
   }
 
   #buildTextResponse(prompt: string): string {
-    const brief = this.#extractBrief(prompt);
+    this.#extractBrief(prompt);
     const genre = this.#extractGenre(prompt);
     const title = this.#extractTitle(prompt);
     const defaults = this.#getGenreDefaults(genre);
