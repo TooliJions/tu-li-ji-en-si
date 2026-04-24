@@ -189,7 +189,11 @@ export class ReorgLock {
     try {
       const raw = fs.readFileSync(sentinelPath, 'utf-8');
       return JSON.parse(raw) as ReorgSentinelData;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[reorg-lock] Failed to read sentinel for ${bookId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return null;
     }
   }
@@ -347,7 +351,11 @@ export class ReorgLock {
     try {
       const raw = fs.readFileSync(lockPath, 'utf-8');
       return JSON.parse(raw) as Omit<ReorgLockInfo, 'isZombie'>;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[reorg-lock] Corrupted lock file:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return null;
     }
   }
@@ -356,7 +364,11 @@ export class ReorgLock {
     try {
       process.kill(pid, 0);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[reorg-lock] Failed to check process:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return false;
     }
   }

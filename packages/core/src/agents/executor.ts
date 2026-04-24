@@ -144,3 +144,6 @@ ${input.userIntent ? `\n## 用户创作意图\n${input.userIntent}` : ''}
     return response;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('chapter-executor', (p) => new ChapterExecutor(p));

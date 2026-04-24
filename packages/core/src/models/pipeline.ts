@@ -22,20 +22,20 @@ export type PipelineState = z.infer<typeof PipelineStateSchema>;
 
 // ─── Fallback Action ─────────────────────────────────────────
 
-export const FallbackActionEnumSchema = z.enum(['accept_with_warnings', 'pause']);
+export const FallbackActionSchema = z.enum(['accept_with_warnings', 'pause']);
 
-export type FallbackActionEnum = z.infer<typeof FallbackActionEnumSchema>;
+export type FallbackAction = z.infer<typeof FallbackActionSchema>;
 
 // ─── Pipeline Config ─────────────────────────────────────────
 
 export const PipelineConfigSchema = z.object({
   maxRevisionRetries: z.number().int().min(0).default(2),
-  fallbackAction: FallbackActionEnumSchema.default('accept_with_warnings'),
+  fallbackAction: FallbackActionSchema.default('accept_with_warnings'),
   enableAudit: z.boolean().default(true),
   enableRevision: z.boolean().default(true),
 });
 
-export type PipelineConfigSchemaType = z.infer<typeof PipelineConfigSchema>;
+export type PipelineRuntimeConfig = z.infer<typeof PipelineConfigSchema>;
 
 // ─── Pipeline Step Record ────────────────────────────────────
 

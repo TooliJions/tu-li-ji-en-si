@@ -14,7 +14,7 @@ export interface EntityIssue {
   suggestion: string;
 }
 
-export interface AuditInput {
+export interface EntityAuditInput {
   chapterContent: string;
   chapterNumber: number;
   genre: string;
@@ -24,7 +24,7 @@ export interface AuditInput {
   registeredOrganizations?: string[];
 }
 
-export interface AuditOutput {
+export interface EntityAuditOutput {
   issues: EntityIssue[];
   detectedEntities: EntityRecord[];
   overallStatus: 'pass' | 'warning' | 'fail';
@@ -51,7 +51,7 @@ export class EntityAuditor extends BaseAgent {
   readonly temperature = 0.1;
 
   async execute(ctx: AgentContext): Promise<AgentResult> {
-    const input = ctx.promptContext?.input as AuditInput | undefined;
+    const input = ctx.promptContext?.input as EntityAuditInput | undefined;
     if (!input) {
       return { success: false, error: '缺少实体审核输入' };
     }
@@ -64,7 +64,7 @@ export class EntityAuditor extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<AuditOutput>(prompt);
+      const result = await this.generateJSON<EntityAuditOutput>(prompt);
 
       return {
         success: true,
@@ -76,7 +76,7 @@ export class EntityAuditor extends BaseAgent {
     }
   }
 
-  #validate(input: AuditInput): string | null {
+  #validate(input: EntityAuditInput): string | null {
     if (!input.chapterContent || input.chapterContent.trim().length === 0) {
       return '章节内容不能为空';
     }
@@ -86,7 +86,7 @@ export class EntityAuditor extends BaseAgent {
     return null;
   }
 
-  #buildPrompt(input: AuditInput): string {
+  #buildPrompt(input: EntityAuditInput): string {
     const genreHint = GENRE_ENTITY_TYPES[input.genre] ?? '';
     const lines: string[] = [];
 

@@ -4,8 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EpubExporter } from '@cybernovelist/core';
 import { getStudioRuntimeRootDir } from '../core-bridge';
-
-export type ExportFormat = 'markdown' | 'txt' | 'epub';
+import type { ExportFormat } from '../../lib/api';
 
 const exportRangeSchema = z.object({
   chapterRange: z

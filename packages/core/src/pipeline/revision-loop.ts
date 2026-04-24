@@ -1,14 +1,15 @@
 import type { LLMProvider } from '../llm/provider';
+import { buildAuditPrompt, buildRevisePrompt } from '../prompts/audit-prompts';
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type FallbackAction = 'accept_with_warnings' | 'pause';
+export type RevisionFallbackAction = 'accept_with_warnings' | 'pause';
 export type FinalAction = 'accepted' | 'accepted_with_warnings' | 'paused';
 
 export interface RevisionLoopConfig {
   provider: LLMProvider;
   maxRevisionRetries?: number;
-  fallbackAction?: FallbackAction;
+  fallbackAction?: RevisionFallbackAction;
   /** Minimum audit score to accept without warnings (default: 60) */
   minPassScore?: number;
 }
@@ -30,6 +31,12 @@ export interface RevisionResult {
   warnings: string[];
   isContaminated: boolean;
   finalScore: number;
+  /** Accumulated usage from all revision generate calls */
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
 interface AuditReport {
@@ -44,7 +51,7 @@ interface AuditReport {
 export class RevisionLoop {
   readonly #provider: LLMProvider;
   readonly #maxRevisionRetries: number;
-  readonly #fallbackAction: FallbackAction;
+  readonly #fallbackAction: RevisionFallbackAction;
   readonly #minPassScore: number;
 
   constructor(config: RevisionLoopConfig) {
@@ -62,6 +69,7 @@ export class RevisionLoop {
     let revisionAttempts = 0;
     let isContaminated = false;
     const warnings: string[] = [];
+    const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     // ── initial audit ────────────────────────────────────────────
     let audit: AuditReport;
@@ -93,11 +101,17 @@ export class RevisionLoop {
       // Revise
       let revised: string;
       try {
-        revised = await this.#revise(currentContent, audit.issues, input.genre);
+        const reviseResult = await this.#revise(currentContent, audit.issues, input.genre);
+        revised = reviseResult.text;
+        if (reviseResult.usage) {
+          usage.promptTokens += reviseResult.usage.promptTokens;
+          usage.completionTokens += reviseResult.usage.completionTokens;
+          usage.totalTokens += reviseResult.usage.totalTokens;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         warnings.push(msg);
-        return this.#errorResult(originalContent, warnings);
+        return this.#errorResult(originalContent, warnings, usage);
       }
 
       revisionAttempts++;
@@ -109,7 +123,7 @@ export class RevisionLoop {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         warnings.push(msg);
-        return this.#errorResult(originalContent, warnings);
+        return this.#errorResult(originalContent, warnings, usage);
       }
 
       // Contamination check — revision made things worse
@@ -136,6 +150,7 @@ export class RevisionLoop {
           warnings: [],
           isContaminated: false,
           finalScore: newAudit.overallScore,
+          usage: usage.totalTokens > 0 ? usage : undefined,
         };
       }
     }
@@ -157,6 +172,7 @@ export class RevisionLoop {
       warnings,
       isContaminated,
       finalScore: lastCleanScore,
+      usage: usage.totalTokens > 0 ? usage : undefined,
     };
   }
 
@@ -166,7 +182,11 @@ export class RevisionLoop {
     return audit.overallScore >= this.#minPassScore;
   }
 
-  #errorResult(originalContent: string, warnings: string[]): RevisionResult {
+  #errorResult(
+    originalContent: string,
+    warnings: string[],
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  ): RevisionResult {
     return {
       action: 'paused',
       content: originalContent,
@@ -175,34 +195,17 @@ export class RevisionLoop {
       warnings,
       isContaminated: false,
       finalScore: 0,
+      usage: usage && usage.totalTokens > 0 ? usage : undefined,
     };
   }
 
   async #audit(content: string, genre: string, chapterNumber: number): Promise<AuditReport> {
-    const prompt = `你是一位专业的网络小说质量审计师。请对以下章节进行质量检测。
-
-## 基本信息
-- **章节**: 第 ${chapterNumber} 章
-- **题材**: ${genre}
-
-## 章节内容
-${content.substring(0, 5000)}
-
-## 检测要求
-1. 检测逻辑连贯性
-2. 检测角色一致性
-3. 检测文风问题
-4. 检测冗余和重复
-
-请以 JSON 格式输出：
-{
-  "issues": [
-    { "severity": "blocking|warning|suggestion", "description": "问题描述" }
-  ],
-  "overallScore": 85,
-  "overallStatus": "pass|warning|fail",
-  "summary": "审计总结"
-}`;
+    const prompt = buildAuditPrompt({
+      content,
+      genre,
+      chapterNumber,
+      format: 'withOverallStatus',
+    });
 
     return this.#provider.generateJSON<AuditReport>({ prompt });
   }
@@ -211,21 +214,13 @@ ${content.substring(0, 5000)}
     content: string,
     issues: Array<{ severity: string; description: string }>,
     genre: string
-  ): Promise<string> {
-    const prompt = `请根据以下审计问题修订章节内容：
-
-## 审计问题
-${issues.map((i) => `- [${i.severity}] ${i.description}`).join('\n')}
-
-## 题材
-${genre}
-
-## 当前内容
-${content}
-
-请修订后输出完整正文。`;
+  ): Promise<{
+    text: string;
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  }> {
+    const prompt = buildRevisePrompt({ content, issues, genre });
 
     const result = await this.#provider.generate({ prompt });
-    return result.text;
+    return result;
   }
 }

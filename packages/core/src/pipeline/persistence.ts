@@ -332,6 +332,7 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 
     if (existingEntry) {
       existingEntry.title = input.title;
+      existingEntry.wordCount = countChineseWords(input.content);
     } else {
       const padded = String(input.chapterNumber).padStart(4, '0');
       index.chapters.push({

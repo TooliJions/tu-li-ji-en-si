@@ -15,11 +15,8 @@ import {
   type BaselineAlertMetric,
 } from '@cybernovelist/core';
 import type { ChapterIndex, Manifest } from '@cybernovelist/core';
-import {
-  getStudioRuntimeRootDir,
-  getStudioLLMProvider,
-  hasStudioBookRuntime,
-} from '../core-bridge';
+import { getStudioRuntimeRootDir, hasStudioBookRuntime } from '../core-bridge';
+import { getRequestContext } from '../context';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -484,7 +481,7 @@ export function createAnalyticsRouter(): Hono {
       },
     ];
 
-    const provider = getStudioLLMProvider();
+    const { provider } = getRequestContext(c);
     const start = Date.now();
 
     const contentForPrompt = latestContent.substring(0, 4000);

@@ -3,9 +3,11 @@ import { Hono } from 'hono';
 import { createPipelineRouter, pipelineStore } from './pipeline';
 import { createBookRouter, resetBookStoreForTests } from './books';
 import { resetStudioCoreBridgeForTests } from '../core-bridge';
+import { createBookContextMiddleware } from '../context';
 
 function createTestApp() {
   const app = new Hono();
+  app.use('/api/books/:bookId/*', createBookContextMiddleware());
   app.route('/api/books', createBookRouter());
   app.route('/api/books/:bookId/pipeline', createPipelineRouter());
   return app;

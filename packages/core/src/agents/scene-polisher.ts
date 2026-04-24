@@ -142,3 +142,6 @@ ${input.draftContent}
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('scene-polisher', (p) => new ScenePolisher(p));

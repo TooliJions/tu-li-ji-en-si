@@ -32,7 +32,7 @@ export class TelemetryLogger {
     bookId: string,
     chapterNumber: number,
     channel: TelemetryChannel,
-    usage: { promptTokens: number; completionTokens: number; totalTokens: number },
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number }
   ): ChapterTelemetry {
     const existing = this.read(bookId, chapterNumber);
     const now = new Date().toISOString();
@@ -52,7 +52,10 @@ export class TelemetryLogger {
     entry.totalTokens += usage.totalTokens;
     entry.calls += 1;
 
-    telemetry.totalTokens = CHANNELS.reduce((sum, ch) => sum + telemetry.channels[ch].totalTokens, 0);
+    telemetry.totalTokens = CHANNELS.reduce(
+      (sum, ch) => sum + telemetry.channels[ch].totalTokens,
+      0
+    );
     telemetry.updatedAt = now;
 
     this.writeFile(bookId, chapterNumber, telemetry);
@@ -64,7 +67,11 @@ export class TelemetryLogger {
     if (!fs.existsSync(filePath)) return null;
     try {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ChapterTelemetry;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[telemetry] Failed to read telemetry for ${bookId}/${chapterNumber}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return null;
     }
   }
@@ -82,7 +89,11 @@ export class TelemetryLogger {
       .map((name) => {
         try {
           return JSON.parse(fs.readFileSync(path.join(dir, name), 'utf-8')) as ChapterTelemetry;
-        } catch {
+        } catch (err) {
+          console.warn(
+            `[telemetry] Failed to read telemetry file ${name}:`,
+            err instanceof Error ? err.message : String(err)
+          );
           return null;
         }
       })

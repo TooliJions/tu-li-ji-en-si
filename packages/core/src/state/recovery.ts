@@ -156,7 +156,11 @@ export class SessionRecovery {
     try {
       process.kill(pid, 0);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[recovery] Failed to check process alive:',
+        err instanceof Error ? err.message : String(err)
+      );
       return false;
     }
   }
@@ -180,8 +184,12 @@ export class SessionRecovery {
     let index: ChapterIndex;
     try {
       index = this.manager.readIndex(bookId);
-    } catch {
-      return; // No index yet
+    } catch (err) {
+      console.warn(
+        `[recovery] Failed to read index for ${bookId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
+      return;
     }
 
     for (let i = index.chapters.length - 1; i >= 0; i--) {
@@ -268,7 +276,11 @@ export class SessionRecovery {
     let index: ChapterIndex;
     try {
       index = this.manager.readIndex(bookId);
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[recovery] Failed to read index for ${bookId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return;
     }
 

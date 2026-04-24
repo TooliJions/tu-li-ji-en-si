@@ -5,9 +5,11 @@ import * as path from 'node:path';
 import { createDaemonRouter } from './daemon';
 import { createBookRouter, resetBookStoreForTests } from './books';
 import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
+import { createBookContextMiddleware } from '../context';
 
 function createTestApp() {
   const app = new Hono();
+  app.use('/api/books/:bookId/*', createBookContextMiddleware());
   app.route('/api/books', createBookRouter());
   app.route('/api/books/:bookId/daemon', createDaemonRouter());
   return app;

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   EntityAuditor,
-  type AuditInput,
-  type AuditOutput,
+  type EntityAuditInput,
+  type EntityAuditOutput,
   type EntityIssue,
 } from './entity-auditor';
 import type { LLMProvider } from '../llm/provider';
@@ -44,7 +44,7 @@ describe('EntityAuditor', () => {
   // ── execute() — happy path ────────────────────────────────
 
   describe('execute()', () => {
-    const validInput: AuditInput = {
+    const validInput: EntityAuditInput = {
       chapterContent: '林风走进青云门大殿，见到了李长老和师姐苏瑶。他从储物袋中取出了灵剑。',
       chapterNumber: 3,
       genre: 'xianxia',
@@ -67,7 +67,7 @@ describe('EntityAuditor', () => {
       });
 
       expect(result.success).toBe(true);
-      const data = result.data as AuditOutput;
+      const data = result.data as EntityAuditOutput;
       expect(data.issues).toHaveLength(0);
       expect(data.overallStatus).toBe('pass');
     });
@@ -98,7 +98,7 @@ describe('EntityAuditor', () => {
       });
 
       expect(result.success).toBe(true);
-      const data = result.data as AuditOutput;
+      const data = result.data as EntityAuditOutput;
       expect(data.issues).toHaveLength(1);
       expect(data.overallStatus).toBe('warning');
     });
@@ -125,7 +125,7 @@ describe('EntityAuditor', () => {
         promptContext: { input: validInput },
       });
 
-      const data = result.data as AuditOutput;
+      const data = result.data as EntityAuditOutput;
       expect(data.issues.some((i) => i.severity === 'critical')).toBe(true);
     });
 
@@ -144,7 +144,7 @@ describe('EntityAuditor', () => {
         promptContext: { input: validInput },
       });
 
-      const data = result.data as AuditOutput;
+      const data = result.data as EntityAuditOutput;
       expect(data.detectedEntities).toHaveLength(2);
     });
   });
@@ -251,7 +251,7 @@ describe('EntityAuditor', () => {
     it('returns error when chapter content is missing', async () => {
       const result = await auditor.execute({
         promptContext: {
-          input: { chapterNumber: 1, genre: 'xianxia' } as AuditInput,
+          input: { chapterNumber: 1, genre: 'xianxia' } as EntityAuditInput,
         },
       });
 
@@ -273,7 +273,7 @@ describe('EntityAuditor', () => {
     it('returns error when genre is missing', async () => {
       const result = await auditor.execute({
         promptContext: {
-          input: { chapterContent: 'some content', chapterNumber: 1 } as AuditInput,
+          input: { chapterContent: 'some content', chapterNumber: 1 } as EntityAuditInput,
         },
       });
 
@@ -359,7 +359,7 @@ describe('EntityAuditor', () => {
   });
 });
 
-function validInput(): AuditInput {
+function validInput(): EntityAuditInput {
   return {
     chapterContent: '林风走进青云门大殿，见到了李长老和师姐苏瑶。他从储物袋中取出了灵剑。',
     chapterNumber: 3,

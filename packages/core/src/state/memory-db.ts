@@ -1,7 +1,5 @@
-import initSqlJs, { type Database } from 'sql.js';
+import initSqlJs, { type Database, type Statement, type SqlJsStatic } from 'sql.js';
 import * as fs from 'fs';
-
-type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -73,13 +71,11 @@ export interface HookRecord {
 export class MemoryDB {
   private db: Database;
   private closed = false;
-  private sqlJs: SqlJsModule;
-  private dbPath?: string;
+  private sqlJs: SqlJsStatic;
 
-  private constructor(db: Database, sqlJs: SqlJsModule, dbPath?: string) {
+  private constructor(db: Database, sqlJs: SqlJsStatic) {
     this.db = db;
     this.sqlJs = sqlJs;
-    this.dbPath = dbPath;
     this.#initTables();
   }
 
@@ -98,8 +94,9 @@ export class MemoryDB {
     db.run('PRAGMA journal_mode = WAL');
     db.run('PRAGMA foreign_keys = ON');
 
-    const instance = new MemoryDB(db, SQL, dbPath);
+    const instance = new MemoryDB(db, SQL);
     instance.#saveToDisk(dbPath);
+    (instance as any)._dbPath = dbPath;
     return instance;
   }
 
@@ -112,7 +109,8 @@ export class MemoryDB {
   }
 
   #persist(): void {
-    if (this.dbPath) this.#saveToDisk(this.dbPath);
+    const path = (this as any)._dbPath as string | undefined;
+    if (path) this.#saveToDisk(path);
   }
 
   // ── Schema ──────────────────────────────────────────────

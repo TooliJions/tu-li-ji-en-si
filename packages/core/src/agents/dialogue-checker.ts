@@ -12,7 +12,7 @@ export type IssueSeverity = 'critical' | 'warning' | 'suggestion';
 export type ConflictDepth = 'none' | 'weak' | 'moderate' | 'strong';
 export type DialogueQuality = 'poor' | 'acceptable' | 'good' | 'excellent';
 
-export interface IssueLocation {
+export interface DialogueIssueLocation {
   lineStart: number;
   lineEnd: number;
 }
@@ -21,7 +21,7 @@ export interface DialogueIssue {
   type: DialogueIssueType;
   severity: IssueSeverity;
   description: string;
-  location: IssueLocation;
+  location: DialogueIssueLocation;
   suggestion: string;
 }
 

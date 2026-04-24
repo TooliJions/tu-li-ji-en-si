@@ -545,3 +545,6 @@ ${deferred.map((h) => `- [延期] ${h.hookId} → 第 ${h.wakeAtChapter} 章唤�
     return prompt;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('chapter-planner', (p) => new ChapterPlanner(p));

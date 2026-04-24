@@ -4,11 +4,11 @@ import { DaemonScheduler, DaemonState as CoreDaemonState } from '@cybernovelist/
 import {
   clearStudioDaemon,
   getStudioDaemon,
-  getStudioPipelineRunner,
   hasStudioBookRuntime,
   readStudioBookRuntime,
   setStudioDaemon,
 } from '../core-bridge';
+import { getRequestContext } from '../context';
 import { eventHub } from '../sse';
 
 interface DaemonState {
@@ -97,6 +97,7 @@ export function createDaemonRouter(): Hono {
       minIntervalMs: intervalMs,
       maxIntervalMs: intervalMs,
       bookTitle: book?.title,
+      genre: book?.genre,
     });
 
     daemon.on('state_change', (event) => {
@@ -118,7 +119,8 @@ export function createDaemonRouter(): Hono {
     });
 
     setStudioDaemon(bookId, daemon);
-    daemon.start(getStudioPipelineRunner());
+    const { runner } = getRequestContext(c);
+    daemon.start(runner);
 
     return c.json({ data: toApiState(daemon) });
   });

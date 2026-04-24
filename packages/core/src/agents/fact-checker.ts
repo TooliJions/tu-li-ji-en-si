@@ -157,3 +157,6 @@ severity 分级：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('fact-checker', (p) => new FactChecker(p));

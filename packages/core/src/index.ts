@@ -58,6 +58,7 @@ export {
   type IntentResult,
   type WakeResult as HookGovernanceWakeResult,
 } from './governance/hook-governance';
+export { AgentRegistry, agentRegistry, type AgentFactory } from './agents/registry';
 export * from './agents/base';
 export * from './agents/planner';
 export * from './agents/character';
@@ -70,7 +71,7 @@ export * from './agents/intent-director';
 export * from './agents/memory-extractor';
 export {
   QualityReviewer,
-  type IssueLocation as QualityIssueLocation,
+  type QualityIssueLocation,
   type QualityIssue,
   type ChapterPlanContext,
   type ReviewInput,
@@ -81,14 +82,14 @@ export {
   EntityAuditor,
   type EntityRecord,
   type EntityIssue,
-  type AuditInput as EntityAuditInput,
-  type AuditOutput as EntityAuditOutput,
+  type EntityAuditInput,
+  type EntityAuditOutput,
 } from './agents/entity-auditor';
 export * from './agents/style-auditor';
 export * from './agents/title-voice-auditor';
 export {
   ComplianceReviewer,
-  type IssueLocation as ComplianceIssueLocation,
+  type ComplianceIssueLocation,
   type ComplianceIssue,
   type ComplianceInput,
   type ComplianceOutput,
@@ -116,11 +117,6 @@ export {
   type PipelineExecutionResult,
 } from './pipeline/scheduler';
 export * from './pipeline/restructurer';
-export {
-  ChapterReviewCycle,
-  type ReviewInput as ChapterReviewInput,
-  type ReviewReport as ChapterReviewReport,
-} from './pipeline/review-cycle';
 export * from './pipeline/revision-loop';
 export { AtomicPipelineOps, type AtomicOperationResult } from './pipeline/atomic-ops';
 export * from './pipeline/truth-validation';

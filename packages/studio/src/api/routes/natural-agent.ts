@@ -6,9 +6,9 @@ import { IntentDirector, RuntimeStateStore, StateManager } from '@cybernovelist/
 import {
   hasStudioBookRuntime,
   readStudioBookRuntime,
-  getStudioLLMProvider,
   getStudioRuntimeRootDir,
 } from '../core-bridge';
+import { getRequestContext } from '../context';
 
 const commandSchema = z.object({ message: z.string().min(1) });
 const askSchema = z.object({ question: z.string().min(1) });
@@ -181,7 +181,8 @@ export function createNaturalAgentRouter(): Hono {
     const actions = buildCommandActions(result.data.message, chapterContent, contextSummary);
 
     // Use IntentDirector to parse the command into structured guidance
-    const director = new IntentDirector(getStudioLLMProvider());
+    const { provider } = getRequestContext(c);
+    const director = new IntentDirector(provider);
     const intentResult = await director.execute({
       bookId,
       promptContext: {
@@ -255,7 +256,7 @@ ${result.data.question}
 
 请基于设定数据给出准确回答。如果设定中没有相关信息，请明确说明。`;
 
-    const provider = getStudioLLMProvider();
+    const { provider } = getRequestContext(c);
     let answer: string;
     try {
       const response = await provider.generate({ prompt });

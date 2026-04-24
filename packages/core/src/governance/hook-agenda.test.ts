@@ -514,10 +514,13 @@ describe('HookAgenda', () => {
         }),
       ];
 
-      agenda.onChapterReached(hooks, 5);
+      const result = agenda.onChapterReached(hooks, 5);
 
-      expect(hooks[0].status).toBe('open');
-      expect(hooks[0].updatedAt).not.toBe('2026-01-01T00:00:00Z');
+      // G1 修复后：不再原地修改 hooks，通过 statusChanges 返回变更指令
+      expect(result.statusChanges).toHaveLength(1);
+      expect(result.statusChanges[0].hookId).toBe('h1');
+      expect(result.statusChanges[0].newStatus).toBe('open');
+      expect(result.statusChanges[0].updatedAt).not.toBe('2026-01-01T00:00:00Z');
     });
 
     it('sets deferred hooks with wakeAtChapter via smoothing', () => {
@@ -564,8 +567,14 @@ describe('HookAgenda', () => {
       expect(result.deferred).toHaveLength(2);
       expect(result.deferred[0].wakeAtChapter).toBe(7);
       expect(result.deferred[1].wakeAtChapter).toBe(7);
-      // h1 → open, h2/h3 → still dormant (deferred via smoothing queue, not status change)
-      expect(hooks[0].status).toBe('open');
+      // G1 修复后：onChapterReached 不再原地修改 hooks，而是通过 statusChanges 返回变更指令
+      // 调用方应自行根据 statusChanges 更新 hooks 状态
+      expect(result.statusChanges).toHaveLength(1);
+      expect(result.statusChanges[0]).toEqual({
+        hookId: hooks[0].id,
+        newStatus: 'open',
+        updatedAt: expect.any(String),
+      });
     });
 
     it('wakes deferred hooks from queue when chapter is reached', () => {
@@ -600,15 +609,17 @@ describe('HookAgenda', () => {
 
       // First call: h1 woken, h2 deferred to chapter 7
       agenda.onChapterReached(hooks, 5);
-      expect(hooks[1].status).toBe('dormant');
 
       // Manually set h2 to deferred (simulating external state change)
       hooks[1].status = 'deferred';
       hooks[1].wakeAtChapter = 7;
 
       // Second call at chapter 7: h2 should wake
-      agenda.onChapterReached(hooks, 7);
-      expect(hooks[1].status).toBe('open');
+      const result2 = agenda.onChapterReached(hooks, 7);
+      // G1 修复后：通过 statusChanges 获取变更，而非依赖原地修改
+      expect(
+        result2.statusChanges.some((c) => c.hookId === hooks[1].id && c.newStatus === 'open')
+      ).toBe(true);
     });
 
     it('includes thunderingHerd flag and notification when triggered', () => {

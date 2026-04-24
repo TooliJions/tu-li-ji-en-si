@@ -1,8 +1,7 @@
-// ── Types ────────────────────────────────────────────────────────────
-
 export type SchedulerMode = 'local' | 'cloud';
 
-export type RateLimitHeaders = Record<string, string | string[] | undefined>;
+import type { RateLimitHeaders } from './types';
+export type { RateLimitHeaders };
 
 export interface SmartIntervalConfig {
   mode?: SchedulerMode;

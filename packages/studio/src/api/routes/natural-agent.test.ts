@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { createNaturalAgentRouter } from './natural-agent';
 import { resetStudioCoreBridgeForTests, initializeStudioBookRuntime } from '../core-bridge';
+import { createBookContextMiddleware } from '../context';
 
 function createTestApp() {
   const app = new Hono();
+  app.use('/api/books/:bookId/*', createBookContextMiddleware());
   app.route('/api/books/:bookId/natural-agent', createNaturalAgentRouter());
   return app;
 }

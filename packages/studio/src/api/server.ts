@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
 import { eventHub, SSEClient } from './sse';
+import { registerRequestContext } from './context';
 import { createBookRouter } from './routes/books';
 import { createChapterRouter } from './routes/chapters';
 import { createPipelineRouter } from './routes/pipeline';
@@ -38,6 +39,9 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     app.use('*', logger());
   }
   app.use('*', prettyJSON());
+
+  // Request context for book-scoped routes
+  registerRequestContext(app);
 
   // Health check
   app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));

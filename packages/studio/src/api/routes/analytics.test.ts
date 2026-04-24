@@ -4,9 +4,11 @@ import * as path from 'node:path';
 import { Hono } from 'hono';
 import { getStudioRuntimeRootDir, resetStudioCoreBridgeForTests } from '../core-bridge';
 import { createAnalyticsRouter } from './analytics';
+import { createBookContextMiddleware } from '../context';
 
 function createTestApp() {
   const app = new Hono();
+  app.use('/api/books/:bookId/*', createBookContextMiddleware());
   app.route('/api/books/:bookId/analytics', createAnalyticsRouter());
   return app;
 }
@@ -27,7 +29,7 @@ function createTestBookRuntime(bookId: string) {
   // book.json — required by hasStudioBookRuntime
   fs.writeFileSync(
     path.join(bookDir, 'book.json'),
-    JSON.stringify({ id: bookId, title: 'Test Book' }, null, 2),
+    JSON.stringify({ id: bookId, title: 'Test Book' }, null, 2)
   );
 
   // index.json — empty chapter list
@@ -42,8 +44,8 @@ function createTestBookRuntime(bookId: string) {
         lastUpdated: new Date().toISOString(),
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 
   // manifest.json
@@ -61,17 +63,12 @@ function createTestBookRuntime(bookId: string) {
         updatedAt: new Date().toISOString(),
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 
-function addTestChapter(
-  bookId: string,
-  chapterNumber: number,
-  title: string,
-  content: string,
-) {
+function addTestChapter(bookId: string, chapterNumber: number, title: string, content: string) {
   const root = getStudioRuntimeRootDir();
   const padded = String(chapterNumber).padStart(4, '0');
   const chaptersDir = path.join(root, bookId, 'story', 'chapters');
@@ -84,7 +81,13 @@ function addTestChapter(
   // Update index
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
     bookId: string;
-    chapters: Array<{ number: number; title: string | null; fileName: string; wordCount: number; createdAt: string }>;
+    chapters: Array<{
+      number: number;
+      title: string | null;
+      fileName: string;
+      wordCount: number;
+      createdAt: string;
+    }>;
     totalChapters: number;
     totalWords: number;
     lastUpdated: string;
@@ -102,12 +105,7 @@ function addTestChapter(
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
 }
 
-function addAuditReport(
-  bookId: string,
-  chapterNumber: number,
-  passed: number,
-  total: number,
-) {
+function addAuditReport(bookId: string, chapterNumber: number, passed: number, total: number) {
   const root = getStudioRuntimeRootDir();
   const auditsDir = path.join(root, bookId, 'story', 'state', 'audits');
   const padded = String(chapterNumber).padStart(4, '0');
@@ -126,8 +124,8 @@ function addAuditReport(
         },
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 
@@ -159,7 +157,11 @@ describe('Analytics Route', () => {
       const res = await app.request('/api/books/book-001/analytics/word-count');
       expect(res.status).toBe(200);
       const data = (await res.json()) as {
-        data: { totalWords: number; averagePerChapter: number; chapters: Array<{ number: number; words: number }> };
+        data: {
+          totalWords: number;
+          averagePerChapter: number;
+          chapters: Array<{ number: number; words: number }>;
+        };
       };
       expect(data.data.totalWords).toBeGreaterThan(0);
       expect(data.data.chapters.length).toBe(2);
@@ -184,7 +186,7 @@ describe('Analytics Route', () => {
     function writeTelemetry(
       bookId: string,
       chapterNumber: number,
-      channels: Partial<Record<'writer' | 'auditor' | 'planner' | 'composer' | 'reviser', number>>,
+      channels: Partial<Record<'writer' | 'auditor' | 'planner' | 'composer' | 'reviser', number>>
     ) {
       const root = getStudioRuntimeRootDir();
       const dir = path.join(root, bookId, 'story', 'state', 'telemetry');
@@ -217,7 +219,7 @@ describe('Analytics Route', () => {
           totalTokens: total,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        }),
+        })
       );
     }
 
@@ -292,7 +294,12 @@ describe('Analytics Route', () => {
     });
 
     it('detects AI traces from real chapter content', async () => {
-      addTestChapter('book-001', 1, '第一章', '林晨坐在教室里，望着窗外的雨幕，心中涌起一阵莫名的感觉。');
+      addTestChapter(
+        'book-001',
+        1,
+        '第一章',
+        '林晨坐在教室里，望着窗外的雨幕，心中涌起一阵莫名的感觉。'
+      );
 
       const res = await app.request('/api/books/book-001/analytics/ai-trace');
       expect(res.status).toBe(200);
@@ -327,28 +334,28 @@ describe('Analytics Route', () => {
         'book-001',
         1,
         '第一章',
-        '林晨推门。桌上摊着一叠厚厚的试卷，边角被雨水泡皱。走廊尽头忽然传来急促脚步声，他下意识把纸页塞进书包最底层。',
+        '林晨推门。桌上摊着一叠厚厚的试卷，边角被雨水泡皱。走廊尽头忽然传来急促脚步声，他下意识把纸页塞进书包最底层。'
       );
       addAuditReport('book-001', 1, 10, 12);
       addTestChapter(
         'book-001',
         2,
         '第二章',
-        '苏小雨压低声音提醒他钥匙不见了。林晨没有立刻回答。他只是盯着纸条末尾那串极短的编号，忽然想起昨晚自己漏看的那一页名单。',
+        '苏小雨压低声音提醒他钥匙不见了。林晨没有立刻回答。他只是盯着纸条末尾那串极短的编号，忽然想起昨晚自己漏看的那一页名单。'
       );
       addAuditReport('book-001', 2, 9, 12);
       addTestChapter(
         'book-001',
         3,
         '第三章',
-        '档案室的灯很暗。风从窗缝里灌进来。林晨借着那点摇晃的光，终于在名单最末尾看见了那个被反复划掉的名字。',
+        '档案室的灯很暗。风从窗缝里灌进来。林晨借着那点摇晃的光，终于在名单最末尾看见了那个被反复划掉的名字。'
       );
       addAuditReport('book-001', 3, 11, 12);
       addTestChapter(
         'book-001',
         4,
         '第四章',
-        '夜幕降临，华灯初上。岁月如梭，光阴似箭。综上所述，让我们来看看接下来会发生什么。林晨心中涌起一阵莫名的感觉。',
+        '夜幕降临，华灯初上。岁月如梭，光阴似箭。综上所述，让我们来看看接下来会发生什么。林晨心中涌起一阵莫名的感觉。'
       );
       addAuditReport('book-001', 4, 4, 12);
 
@@ -366,7 +373,9 @@ describe('Analytics Route', () => {
 
       expect(data.data.baseline.basedOnChapters).toEqual([1, 2, 3]);
       expect(data.data.baseline.metrics.aiTraceScore).not.toBe(data.data.current.aiTraceScore);
-      expect(data.data.baseline.metrics.avgParagraphLength).not.toBe(data.data.current.avgParagraphLength);
+      expect(data.data.baseline.metrics.avgParagraphLength).not.toBe(
+        data.data.current.avgParagraphLength
+      );
     });
   });
 
@@ -384,7 +393,7 @@ describe('Analytics Route', () => {
 
     it('accepts custom metric and window query params', async () => {
       const res = await app.request(
-        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=5',
+        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=5'
       );
       expect(res.status).toBe(200);
       const data = (await res.json()) as { data: { metric: string; windowSize: number } };
@@ -397,29 +406,24 @@ describe('Analytics Route', () => {
         'book-001',
         1,
         '第一章',
-        '林晨推门。桌上摊着一叠厚厚的试卷，边角被雨水泡皱。走廊尽头忽然传来急促脚步声，他下意识把纸页塞进书包最底层。',
+        '林晨推门。桌上摊着一叠厚厚的试卷，边角被雨水泡皱。走廊尽头忽然传来急促脚步声，他下意识把纸页塞进书包最底层。'
       );
       addTestChapter(
         'book-001',
         2,
         '第二章',
-        '苏小雨压低声音提醒他钥匙不见了。林晨没有立刻回答。他只是盯着纸条末尾那串极短的编号，忽然想起昨晚自己漏看的那一页名单。',
+        '苏小雨压低声音提醒他钥匙不见了。林晨没有立刻回答。他只是盯着纸条末尾那串极短的编号，忽然想起昨晚自己漏看的那一页名单。'
       );
       addTestChapter(
         'book-001',
         3,
         '第三章',
-        '档案室的灯很暗。风从窗缝里灌进来。林晨借着那点摇晃的光，终于在名单最末尾看见了那个被反复划掉的名字。',
+        '档案室的灯很暗。风从窗缝里灌进来。林晨借着那点摇晃的光，终于在名单最末尾看见了那个被反复划掉的名字。'
       );
-      addTestChapter(
-        'book-001',
-        4,
-        '第四章',
-        '他看着它。他想着它。他念着它。他等着它。',
-      );
+      addTestChapter('book-001', 4, '第四章', '他看着它。他想着它。他念着它。他等着它。');
 
       const res = await app.request(
-        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=2',
+        '/api/books/book-001/analytics/baseline-alert?metric=sentenceDiversity&window=2'
       );
       expect(res.status).toBe(200);
       const data = (await res.json()) as {

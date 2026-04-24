@@ -84,7 +84,11 @@ export class PromptRegistry {
     let concrete: string;
     try {
       concrete = this.resolveVersion(version);
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[prompts] Failed to resolve version ${version}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return false;
     }
     return fs.existsSync(this.#promptPath(name, concrete));

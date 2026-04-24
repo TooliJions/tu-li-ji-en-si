@@ -7,6 +7,7 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
   mkdirSync: vi.fn(),
   writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
   readFileSync: vi.fn((filePath: string) => {
     // Return different data based on path
     if (filePath.includes('meta.json')) {
@@ -493,16 +494,12 @@ describe('PipelineRunner', () => {
         model: 'test-model',
       });
 
-      // Audit: generateJSONWithMeta × 1
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 85,
-          status: 'pass',
-          summary: '质量良好',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test-model',
+      // Audit: generateJSON × 1
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '质量良好',
       });
 
       // Memory extraction: generateJSON × 1
@@ -547,15 +544,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit fail
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [{ severity: 'blocking', description: '问题' }],
-          overallScore: 40,
-          status: 'fail',
-          summary: '失败',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [{ severity: 'blocking', description: '问题' }],
+        overallScore: 40,
+        status: 'fail',
+        summary: '失败',
       });
       // Revision
       mockProvider.generate.mockResolvedValueOnce({
@@ -564,15 +557,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 80,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 80,
+        status: 'pass',
+        summary: '通过',
       });
       // Memory extraction
       mockProvider.generateJSON.mockResolvedValueOnce({
@@ -615,15 +604,11 @@ describe('PipelineRunner', () => {
       });
 
       for (let i = 0; i < 3; i++) {
-        mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-          data: {
-            issues: [{ severity: 'blocking', description: `问题 ${i}` }],
-            overallScore: 30 + i * 5,
-            status: 'fail',
-            summary: '失败',
-          },
-          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-          model: 'test',
+        mockProvider.generateJSON.mockResolvedValueOnce({
+          issues: [{ severity: 'blocking', description: `问题 ${i}` }],
+          overallScore: 30 + i * 5,
+          status: 'fail',
+          summary: '失败',
         });
         mockProvider.generate.mockResolvedValueOnce({
           text: `修订稿 ${i}`,
@@ -631,6 +616,12 @@ describe('PipelineRunner', () => {
           model: 'test',
         });
       }
+
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
+      });
 
       const result = await runner.writeNextChapter({
         bookId: 'test-book',
@@ -684,15 +675,11 @@ describe('PipelineRunner', () => {
 
       // 3 audit failures (max retries + 1) — all fail
       for (let i = 0; i < 3; i++) {
-        mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-          data: {
-            issues: [{ severity: 'blocking', description: `问题 ${i}` }],
-            overallScore: 30,
-            status: 'fail',
-            summary: '失败',
-          },
-          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-          model: 'test',
+        mockProvider.generateJSON.mockResolvedValueOnce({
+          issues: [{ severity: 'blocking', description: `问题 ${i}` }],
+          overallScore: 30,
+          status: 'fail',
+          summary: '失败',
         });
         mockProvider.generate.mockResolvedValueOnce({
           text: `修订稿 ${i}`,
@@ -736,15 +723,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 80,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 80,
+        status: 'pass',
+        summary: '通过',
       });
       // Memory extraction throws
       mockProvider.generateJSON.mockRejectedValueOnce(new Error('memory extract failed'));
@@ -784,15 +767,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 85,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '通过',
       });
       // Memory extraction
       mockProvider.generateJSON.mockResolvedValueOnce({
@@ -871,15 +850,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 80,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 80,
+        status: 'pass',
+        summary: '通过',
       });
       mockProvider.generateJSON.mockResolvedValueOnce({
         facts: [],
@@ -987,15 +962,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 85,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '通过',
       });
       // Memory extraction
       mockProvider.generateJSON.mockResolvedValueOnce({
@@ -1062,15 +1033,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit fail
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [{ severity: 'blocking', description: '需要修订' }],
-          overallScore: 40,
-          status: 'fail',
-          summary: '需修订',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [{ severity: 'blocking', description: '需要修订' }],
+        overallScore: 40,
+        status: 'fail',
+        summary: '需修订',
       });
       // Revision
       mockProvider.generate.mockResolvedValueOnce({
@@ -1079,15 +1046,11 @@ describe('PipelineRunner', () => {
         model: 'test',
       });
       // Audit pass
-      mockProvider.generateJSONWithMeta.mockResolvedValueOnce({
-        data: {
-          issues: [],
-          overallScore: 80,
-          status: 'pass',
-          summary: '通过',
-        },
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-        model: 'test',
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 80,
+        status: 'pass',
+        summary: '通过',
       });
       // Memory extraction
       mockProvider.generateJSON.mockResolvedValueOnce({
@@ -1146,7 +1109,7 @@ describe('PipelineRunner', () => {
       expect(writerCall?.[3]).toEqual(expect.objectContaining({ totalTokens: 150 }));
     });
 
-    it('returns error when composeChapter throws unexpected exception', async () => {
+    it('returns usage when composeChapter fails during atomic persistence', async () => {
       // IntentDirector: generateJSON × 1
       mockProvider.generateJSON.mockResolvedValueOnce({
         narrativeGoal: '推进主线情节发展',
@@ -1161,8 +1124,29 @@ describe('PipelineRunner', () => {
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         model: 'test',
       });
-      // ScenePolisher crash
-      mockProvider.generate.mockRejectedValueOnce(new Error('ScenePolisher crash'));
+      // ScenePolisher 正常
+      mockProvider.generate.mockResolvedValueOnce({
+        text: '润色稿',
+        usage: { promptTokens: 120, completionTokens: 80, totalTokens: 200 },
+        model: 'test',
+      });
+      // Audit pass
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        issues: [],
+        overallScore: 85,
+        status: 'pass',
+        summary: '通过',
+      });
+      // Memory extraction
+      mockProvider.generateJSON.mockResolvedValueOnce({
+        facts: [],
+        newHooks: [],
+        updatedHooks: [],
+      });
+
+      (fs.renameSync as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+        throw new Error('rename failed');
+      });
 
       const result = await runner.writeNextChapter({
         bookId: 'test-book',
@@ -1174,6 +1158,15 @@ describe('PipelineRunner', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('章节创作失败');
+      expect(result.usage).toEqual(
+        expect.objectContaining({
+          promptTokens: expect.any(Number),
+          completionTokens: expect.any(Number),
+          totalTokens: expect.any(Number),
+          breakdown: expect.any(Object),
+        })
+      );
+      expect(result.usage?.totalTokens).toBeGreaterThan(0);
       // Lock should be released
       const unlinkCalls = (fs.unlinkSync as ReturnType<typeof vi.fn>).mock.calls;
       expect(unlinkCalls.length).toBeGreaterThan(0);
@@ -1219,7 +1212,13 @@ describe('PipelineRunner', () => {
       expect(result.chapterNumber).toBe(1);
       expect(result.title).toBe('第一章');
       expect(result.characters).toEqual(['林风', '师父']);
-      expect(result.hooks).toEqual(['灵剑线索']);
+      expect(result.hooks).toEqual([
+        expect.objectContaining({
+          description: '灵剑线索',
+          type: 'plot',
+          priority: 'major',
+        }),
+      ]);
     });
 
     it('writes planned chapter entries using canonical index fields', async () => {
@@ -1264,6 +1263,99 @@ describe('PipelineRunner', () => {
       );
       expect(payload.chapters[0]).not.toHaveProperty('chapterNumber');
       expect(payload).toHaveProperty('lastUpdated');
+    });
+
+    it('persists hook status changes together with planned chapter data', async () => {
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+        if (String(filePath).includes('meta.json')) {
+          return JSON.stringify({
+            title: 'Test Novel',
+            genre: 'xianxia',
+            synopsis: '测试小说简介',
+          });
+        }
+        if (String(filePath).includes('index.json')) {
+          return JSON.stringify({
+            bookId: 'test-book',
+            chapters: [],
+            totalChapters: 0,
+            totalWords: 0,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+        return JSON.stringify({
+          bookId: 'test-book',
+          versionToken: 1,
+          lastChapterWritten: 0,
+          hooks: [
+            {
+              id: 'hook-1',
+              description: '远古玉佩会在本章唤醒',
+              type: 'plot',
+              status: 'dormant',
+              priority: 'major',
+              plantedChapter: 1,
+              expectedResolutionMin: 1,
+              expectedResolutionMax: 10,
+              wakeAtChapter: 3,
+              relatedCharacters: [],
+              relatedChapters: [1],
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          facts: [],
+          characters: [],
+          worldRules: [],
+          chapterPlans: {},
+          outline: [],
+          updatedAt: new Date().toISOString(),
+        });
+      });
+
+      mockProvider.generateJSON.mockResolvedValue({
+        plan: {
+          chapterNumber: 3,
+          title: '第三章',
+          intention: '玉佩苏醒，主角首次察觉异常',
+          wordCountTarget: 3000,
+          characters: ['林风'],
+          keyEvents: ['玉佩异动', '主角起疑'],
+          hooks: [],
+          worldRules: [],
+          emotionalBeat: '平静→警觉',
+          sceneTransition: '自然过渡',
+        },
+      });
+
+      await runner.planChapter({
+        bookId: 'test-book',
+        chapterNumber: 3,
+        outlineContext: '伏笔推进章节',
+      });
+
+      const writeCalls = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls;
+      const manifestWrites = writeCalls.filter((call: unknown[]) =>
+        String(call[0]).includes('manifest.json')
+      );
+      expect(manifestWrites.length).toBeGreaterThan(0);
+
+      const manifestPayloads = manifestWrites.map(
+        (call) =>
+          JSON.parse(String(call[1])) as {
+            hooks: Array<{ id: string; status: string }>;
+            chapterPlans: Record<string, unknown>;
+          }
+      );
+
+      expect(
+        manifestPayloads.some((manifestPayload) =>
+          manifestPayload.hooks.some((hook) => hook.id === 'hook-1' && hook.status === 'open')
+        )
+      ).toBe(true);
+      expect(
+        manifestPayloads.some((manifestPayload) => manifestPayload.chapterPlans['3'] !== undefined)
+      ).toBe(true);
     });
   });
 

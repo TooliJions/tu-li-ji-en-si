@@ -116,7 +116,11 @@ export class SnapshotManager {
 
     try {
       return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as SnapshotMetadata;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[snapshot] Corrupted metadata for ${bookId}/${snapshotId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return null;
     }
   }

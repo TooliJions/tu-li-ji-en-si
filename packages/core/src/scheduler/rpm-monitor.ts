@@ -1,6 +1,5 @@
-// ── Types ────────────────────────────────────────────────────────────
-
-export type RateLimitHeaders = Record<string, string | string[] | undefined>;
+import type { RateLimitHeaders } from './types';
+export type { RateLimitHeaders };
 
 export interface RpmMonitorConfig {
   /** 基础间隔（ms），默认 1000 */

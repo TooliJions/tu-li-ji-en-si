@@ -157,3 +157,6 @@ export class ContextCard extends BaseAgent {
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('context-card', (p) => new ContextCard(p));

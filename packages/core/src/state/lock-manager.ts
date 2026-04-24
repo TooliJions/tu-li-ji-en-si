@@ -155,7 +155,11 @@ export class LockManager {
     let lockData: Record<string, unknown>;
     try {
       lockData = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[lock-manager] Corrupted lock file for ${bookId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return null;
     }
 
@@ -192,7 +196,11 @@ export class LockManager {
     try {
       process.kill(pid, 0);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[lock-manager] Failed to check process for lock:`,
+        err instanceof Error ? err.message : String(err)
+      );
       return false;
     }
   }

@@ -236,7 +236,7 @@ describe('Chapters Route', () => {
       };
       expect(data.data.content).toBe('new content');
       expect(data.data.title).toBe('Updated Title');
-      expect(data.data.wordCount).toBe(11); // "new content" length
+      expect(data.data.wordCount).toBe(2); // countChineseWords('new content') = 2 English words
     });
 
     it('returns 404 for non-existent chapter', async () => {

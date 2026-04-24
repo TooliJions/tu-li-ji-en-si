@@ -3,9 +3,9 @@ import {
   PipelineStepSchema,
   PipelineStateSchema,
   PipelineConfigSchema,
-  PipelineConfigSchemaType,
+  PipelineRuntimeConfig,
   PipelineStepRecordSchema,
-  FallbackActionEnumSchema,
+  FallbackActionSchema,
 } from './pipeline';
 
 describe('Pipeline Schemas', () => {
@@ -33,7 +33,7 @@ describe('Pipeline Schemas', () => {
 
   describe('PipelineConfigSchema', () => {
     it('should use defaults', () => {
-      const config: PipelineConfigSchemaType = PipelineConfigSchema.parse({});
+      const config: PipelineRuntimeConfig = PipelineConfigSchema.parse({});
       expect(config.maxRevisionRetries).toBe(2);
       expect(config.fallbackAction).toBe('accept_with_warnings');
       expect(config.enableAudit).toBe(true);
@@ -41,7 +41,7 @@ describe('Pipeline Schemas', () => {
     });
 
     it('should accept custom values', () => {
-      const config: PipelineConfigSchemaType = PipelineConfigSchema.parse({
+      const config: PipelineRuntimeConfig = PipelineConfigSchema.parse({
         maxRevisionRetries: 5,
         fallbackAction: 'pause' as any,
         enableAudit: false,
@@ -64,10 +64,10 @@ describe('Pipeline Schemas', () => {
     });
   });
 
-  describe('FallbackActionEnumSchema', () => {
+  describe('FallbackActionSchema', () => {
     it('should accept valid actions', () => {
-      expect(FallbackActionEnumSchema.parse('accept_with_warnings')).toBe('accept_with_warnings');
-      expect(FallbackActionEnumSchema.parse('pause')).toBe('pause');
+      expect(FallbackActionSchema.parse('accept_with_warnings')).toBe('accept_with_warnings');
+      expect(FallbackActionSchema.parse('pause')).toBe('pause');
     });
   });
 });

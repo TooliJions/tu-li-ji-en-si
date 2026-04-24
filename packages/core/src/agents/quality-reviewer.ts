@@ -1,6 +1,6 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
 
-export interface IssueLocation {
+export interface QualityIssueLocation {
   paragraph?: number;
   sentence?: number;
   quote?: string;
@@ -11,7 +11,7 @@ export interface QualityIssue {
   category: string;
   description: string;
   suggestion: string;
-  location: IssueLocation;
+  location: QualityIssueLocation;
 }
 
 export interface ChapterPlanContext {
@@ -157,3 +157,6 @@ severity 分级：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('quality-reviewer', (p) => new QualityReviewer(p));

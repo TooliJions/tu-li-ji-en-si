@@ -270,3 +270,6 @@ ${extra.join('\n')}
     return `${strategyLabel}：处理了 ${issueCount} 个问题（${categories.slice(0, 3).join('、')}${categories.length > 3 ? ' 等' : ''}）`;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('surgical-rewriter', (p) => new SurgicalRewriter(p));

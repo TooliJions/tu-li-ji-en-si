@@ -7,6 +7,8 @@ import {
 } from './executor';
 import type { ChapterPlan } from './chapter-planner';
 import type { LLMProvider } from '../llm/provider';
+import { GENRE_WRITER_STYLE_MAP } from './genre-guidance';
+import { countChineseWords } from '../utils';
 import { GENRE_TEST_PLANS, buildPlan, buildInput } from './executor.test-config';
 
 /** 旧测试中 minimal plan 缺失字段的补全默认值 */
@@ -414,7 +416,7 @@ describe('ChapterExecutor', () => {
       });
 
       const callArgs = mockProvider.generate.mock.calls[0][0];
-      expect(callArgs.prompt).toContain('言情');
+      expect(callArgs.prompt).toContain(GENRE_WRITER_STYLE_MAP.romance);
     });
 
     it('handles unknown genre in fallback', async () => {
@@ -924,14 +926,14 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
         plan: buildPlan(xianxia, { worldRules: [] }),
       });
 
-      expect(prompt).not.toContain('世界观设定');
+      expect(prompt).not.toContain('- **世界观设定**:');
     });
   });
 
   // ── 9. 生成内容的元数据 ────────────────────────────────
 
   describe('生成内容的元数据', () => {
-    it('返回正确的 wordCount（使用 content.length）', async () => {
+    it('返回正确的 wordCount（使用 countChineseWords）', async () => {
       const content = '这是一段测试内容，大约二十个字左右吧';
       const deps: AgentDependencies = {
         buildContext: vi.fn().mockResolvedValue('ctx'),
@@ -943,7 +945,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
       });
 
       const data = result.data as ChapterExecutionResult;
-      expect(data.wordCount).toBe(content.length);
+      expect(data.wordCount).toBe(countChineseWords(content));
     });
 
     it('plan.title 为空时使用默认章节标题', async () => {
@@ -1069,7 +1071,7 @@ describe('ChapterExecutor — 大纲结构对齐与正文生成', () => {
 
       const data = result.data as ChapterExecutionResult;
       expect(data.content).toBe(longContent);
-      expect(data.wordCount).toBe(longContent.length);
+      expect(data.wordCount).toBe(countChineseWords(longContent));
     });
 
     it('fallback LLM 返回空内容仍算成功', async () => {

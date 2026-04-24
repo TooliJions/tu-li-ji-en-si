@@ -27,10 +27,12 @@ describe('MemoryDB', () => {
     });
 
     it('creates all four tables', () => {
-      const tables = db['db'].exec(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-      );
-      const names = tables[0].values.map((v) => v[0] as string);
+      const result = (
+        db as unknown as {
+          db: { exec: (sql: string) => Array<{ columns: string[]; values: unknown[][] }> };
+        }
+      ).db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+      const names = result[0]?.values.map((v) => v[0] as string) ?? [];
       expect(names).toContain('facts');
       expect(names).toContain('chapter_summaries');
       expect(names).toContain('hooks');
@@ -38,10 +40,12 @@ describe('MemoryDB', () => {
     });
 
     it('creates expected indexes', () => {
-      const indexes = db['db'].exec(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
-      );
-      expect(indexes[0].values.length).toBe(3);
+      const result = (
+        db as unknown as {
+          db: { exec: (sql: string) => Array<{ columns: string[]; values: unknown[][] }> };
+        }
+      ).db.exec("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'");
+      expect(result[0]?.values.length ?? 0).toBe(3);
     });
   });
 

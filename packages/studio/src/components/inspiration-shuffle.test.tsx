@@ -19,7 +19,7 @@ describe('InspirationShuffle', () => {
 
   it('shows word counts for each option', () => {
     render(<InspirationShuffle options={mockOptions} onSelect={() => {}} />);
-    expect(screen.getByText(/字数:/)).toBeTruthy();
+    expect(screen.getAllByText(/字数:/).length).toBe(mockOptions.length);
   });
 
   it('selects an option', async () => {

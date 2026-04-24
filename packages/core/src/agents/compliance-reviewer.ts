@@ -1,6 +1,6 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
 
-export interface IssueLocation {
+export interface ComplianceIssueLocation {
   paragraph?: number;
   sentence?: number;
   quote?: string;
@@ -17,7 +17,7 @@ export interface ComplianceIssue {
     | 'illegal-activity';
   severity: 'critical' | 'warning' | 'suggestion';
   description: string;
-  location: IssueLocation;
+  location: ComplianceIssueLocation;
   suggestion: string;
 }
 

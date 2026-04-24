@@ -6,9 +6,9 @@ import { StyleRefiner, type StyleFingerprint } from '@cybernovelist/core';
 import {
   hasStudioBookRuntime,
   readStudioBookRuntime,
-  getStudioLLMProvider,
   getStudioRuntimeRootDir,
 } from '../core-bridge';
+import { getRequestContext } from '../context';
 
 const extractSchema = z.object({
   referenceText: z.string().min(1),
@@ -175,7 +175,8 @@ export function createStyleRouter(): Hono {
         ? readChapterContent(bookId, result.data.chapterNumber - 1)
         : undefined;
 
-    const refiner = new StyleRefiner(getStudioLLMProvider());
+    const { provider } = getRequestContext(c);
+    const refiner = new StyleRefiner(provider);
 
     const refinerResult = await refiner.execute({
       promptContext: {

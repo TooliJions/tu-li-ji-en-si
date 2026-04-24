@@ -11,7 +11,7 @@ export type AICategory =
   | 'false-emotion'
   | 'hollow-description';
 
-export interface DetectionIssue {
+export interface AIDetectionIssue {
   text: string;
   detail?: string;
   startOffset?: number;
@@ -22,10 +22,10 @@ export interface CategoryResult {
   category: AICategory;
   score: number; // 0-100
   severity: 'none' | 'low' | 'medium' | 'high';
-  issues: DetectionIssue[];
+  issues: AIDetectionIssue[];
 }
 
-export interface DetectionReport {
+export interface AIDetectionReport {
   text: string;
   categories: CategoryResult[];
   overallScore: number;
@@ -73,13 +73,13 @@ function classifySeverity(score: number): 'none' | 'low' | 'medium' | 'high' {
 // ─── Detectors ─────────────────────────────────────────────────────
 
 interface DetectorFn {
-  (text: string): { score: number; issues: DetectionIssue[] };
+  (text: string): { score: number; issues: AIDetectionIssue[] };
 }
 
 /**
  * AI套话检测：识别常见AI生成套话模式。
  */
-function detectClichePhrases(text: string): { score: number; issues: DetectionIssue[] } {
+function detectClichePhrases(text: string): { score: number; issues: AIDetectionIssue[] } {
   const patterns = [
     { re: /夜幕降临|华灯初上|霓虹闪烁|灯火通明/, label: '夜景套话' },
     { re: /在这个.*时代|日新月异|前所未有|机遇与挑战/, label: '时代套话' },
@@ -89,7 +89,7 @@ function detectClichePhrases(text: string): { score: number; issues: DetectionIs
     { re: /让我们一起|携手共进|为实现.*而.*奋斗/, label: '口号套话' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { re, label } of patterns) {
@@ -118,7 +118,7 @@ function detectClichePhrases(text: string): { score: number; issues: DetectionIs
 /**
  * 句式单调检测：识别重复句型结构。
  */
-function detectMonotonousSyntax(text: string): { score: number; issues: DetectionIssue[] } {
+function detectMonotonousSyntax(text: string): { score: number; issues: AIDetectionIssue[] } {
   // Split by sentence terminators (both Chinese and Western)
   const sentences = text.split(/[。！？.\n]+/).filter((l) => l.trim().length > 2);
   if (sentences.length < 3) return { score: 0, issues: [] };
@@ -136,7 +136,7 @@ function detectMonotonousSyntax(text: string): { score: number; issues: Detectio
     starterCounts.set(s, (starterCounts.get(s) ?? 0) + 1);
   }
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let maxRepeat = 0;
   for (const [starter, count] of starterCounts) {
     if (count >= 3) {
@@ -173,7 +173,7 @@ function detectMonotonousSyntax(text: string): { score: number; issues: Detectio
 /**
  * 分析报告体检测：识别论文/报告式表达。
  */
-function detectAnalyticalReport(text: string): { score: number; issues: DetectionIssue[] } {
+function detectAnalyticalReport(text: string): { score: number; issues: AIDetectionIssue[] } {
   const patterns = [
     { re: /首先[^，]{0,20}我们需要|首先[^，]{0,20}明确的是/, label: '首先...需要' },
     { re: /其次|再次|最后[^，]{0,10}从.*来看/, label: '其次/再次' },
@@ -183,7 +183,7 @@ function detectAnalyticalReport(text: string): { score: number; issues: Detectio
     { re: /形势.*严峻|前景.*乐观|不懈努力|中国梦/, label: '政治套话' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { re, label } of patterns) {
@@ -206,7 +206,7 @@ function detectAnalyticalReport(text: string): { score: number; issues: Detectio
 /**
  * 元叙事检测：识别作者跳出来对读者讲话的模式。
  */
-function detectMetaNarrative(text: string): { score: number; issues: DetectionIssue[] } {
+function detectMetaNarrative(text: string): { score: number; issues: AIDetectionIssue[] } {
   const patterns = [
     { re: /这个故事告诉.*|这个故事说明.*|这个故事给我们/, label: '故事告诉' },
     { re: /让我们来看看|接下来会|让我们把目光转向/, label: '引导读者' },
@@ -216,7 +216,7 @@ function detectMetaNarrative(text: string): { score: number; issues: DetectionIs
     { re: /这一切都源于|一切都将从.*开始/, label: '命运宣言' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { re, label } of patterns) {
@@ -239,7 +239,7 @@ function detectMetaNarrative(text: string): { score: number; issues: DetectionIs
 /**
  * 意象重复检测：识别同一意象反复出现。
  */
-function detectImageryRepetition(text: string): { score: number; issues: DetectionIssue[] } {
+function detectImageryRepetition(text: string): { score: number; issues: AIDetectionIssue[] } {
   const imageryKeywords = [
     '月光',
     '月色',
@@ -272,7 +272,7 @@ function detectImageryRepetition(text: string): { score: number; issues: Detecti
   ];
 
   const found: Map<string, number> = new Map();
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
 
   for (const keyword of imageryKeywords) {
     let idx = 0;
@@ -299,7 +299,7 @@ function detectImageryRepetition(text: string): { score: number; issues: Detecti
 /**
  * 语义重复检测：识别同义反复。
  */
-function detectSemanticRepetition(text: string): { score: number; issues: DetectionIssue[] } {
+function detectSemanticRepetition(text: string): { score: number; issues: AIDetectionIssue[] } {
   const semanticGroups = [
     { group: ['高兴', '喜悦', '快乐', '愉悦', '开心', '欢喜', '愉快'], label: '快乐语义' },
     { group: ['悲伤', '痛苦', '悲伤', '难过', '哀伤', '悲痛', '忧伤'], label: '悲伤语义' },
@@ -309,7 +309,7 @@ function detectSemanticRepetition(text: string): { score: number; issues: Detect
     { group: ['爱', '温暖', '温馨', '关爱', '温情', '柔情'], label: '温情语义' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { group, label } of semanticGroups) {
@@ -338,11 +338,11 @@ function detectSemanticRepetition(text: string): { score: number; issues: Detect
 /**
  * 逻辑跳跃检测：识别缺少过渡的情节推进。
  */
-function detectLogicGaps(text: string): { score: number; issues: DetectionIssue[] } {
+function detectLogicGaps(text: string): { score: number; issues: AIDetectionIssue[] } {
   const lines = text.split(/[。\n]+/).filter((l) => l.trim().length > 2);
   if (lines.length < 3) return { score: 0, issues: [] };
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
 
   // Detect rapid state changes without transition
   const stateMarkers = [
@@ -383,7 +383,7 @@ function detectLogicGaps(text: string): { score: number; issues: DetectionIssue[
 /**
  * 情感虚假检测：识别堆砌情感词汇但缺少具体描写。
  */
-function detectFalseEmotion(text: string): { score: number; issues: DetectionIssue[] } {
+function detectFalseEmotion(text: string): { score: number; issues: AIDetectionIssue[] } {
   const emotionStackPatterns = [
     { re: /悲痛欲绝|心如刀绞|痛不欲生|肝肠寸断/, label: '极端悲伤' },
     { re: /无比幸福|无比快乐|无比激动|无比兴奋/, label: '「无比」强化' },
@@ -393,7 +393,7 @@ function detectFalseEmotion(text: string): { score: number; issues: DetectionIss
     { re: /泪水.*流下|止不住.*泪|泪如雨下|潸然泪下/, label: '泪水描写' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { re, label } of emotionStackPatterns) {
@@ -444,7 +444,7 @@ function detectFalseEmotion(text: string): { score: number; issues: DetectionIss
 /**
  * 描述空洞检测：识别缺少具体细节的抽象描写。
  */
-function detectHollowDescriptions(text: string): { score: number; issues: DetectionIssue[] } {
+function detectHollowDescriptions(text: string): { score: number; issues: AIDetectionIssue[] } {
   const hollowPatterns = [
     { re: /非常非常.*好看|特别特别.*好看|十分.*好看/, label: '叠词修饰' },
     { re: /说不出的感觉|总之就是.*特别|就是.*不一样/, label: '含糊表达' },
@@ -454,7 +454,7 @@ function detectHollowDescriptions(text: string): { score: number; issues: Detect
     { re: /让人觉得.*很.*|给人.*感觉.*好/, label: '感觉替代' },
   ];
 
-  const issues: DetectionIssue[] = [];
+  const issues: AIDetectionIssue[] = [];
   let totalHits = 0;
 
   for (const { re, label } of hollowPatterns) {
@@ -504,7 +504,7 @@ export class AIGCDetector {
   /**
    * 对给定文本执行 9 类 AI 痕迹检测。
    */
-  detect(text: string): DetectionReport {
+  detect(text: string): AIDetectionReport {
     if (text.trim().length === 0) {
       return {
         text,

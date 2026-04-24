@@ -24,6 +24,8 @@ export interface DaemonConfig extends SmartIntervalConfig {
   notifyChannels?: NotifyChannel[];
   /** 书籍名称，用于通知消息格式化 */
   bookTitle?: string;
+  /** 书籍题材，传递给写作流水线 */
+  genre?: string;
 }
 
 export interface DaemonStatus {
@@ -90,6 +92,7 @@ export class DaemonScheduler {
   readonly #toChapter?: number;
   readonly #maxConsecutiveFallbacks: number;
   readonly #bookTitle?: string;
+  readonly #genre?: string;
 
   #state: DaemonState = DaemonState.Idle;
   #nextChapter?: number;
@@ -115,6 +118,7 @@ export class DaemonScheduler {
     this.#nextChapter = config.fromChapter;
     this.#maxConsecutiveFallbacks = config.maxConsecutiveFallbacks ?? 2;
     this.#bookTitle = config.bookTitle;
+    this.#genre = config.genre;
 
     // SmartInterval config
     const siConfig: SmartIntervalConfig = {
@@ -278,7 +282,7 @@ export class DaemonScheduler {
             bookId: this.#bookId,
             chapterNumber: chapterNum,
             title: `第 ${chapterNum} 章`,
-            genre: '',
+            genre: this.#genre ?? '',
             userIntent: '继续上一章',
           });
 
@@ -391,8 +395,8 @@ export class DaemonScheduler {
     for (const listener of set) {
       try {
         listener(data);
-      } catch {
-        // Swallow listener errors
+      } catch (err) {
+        console.warn('[daemon] Listener error:', err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -400,6 +404,11 @@ export class DaemonScheduler {
   #notify(event: NotifyEvent): void {
     if (!this.#notifier) return;
     // Fire-and-forget — notification errors don't block daemon flow
-    this.#notifier.send(event).catch(() => {});
+    this.#notifier.send(event).catch((err) => {
+      console.warn(
+        '[daemon] Notification error:',
+        err instanceof Error ? err.message : String(err)
+      );
+    });
   }
 }

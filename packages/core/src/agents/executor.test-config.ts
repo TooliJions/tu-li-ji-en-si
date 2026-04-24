@@ -82,7 +82,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'slow_build',
     },
     forbiddenWords: ['公司', '经理', '职场', '办公室', '打卡', '开会', '项目'],
-    styleKeywords: ['仙侠文风', '修炼描写', '斗法场景'],
+    styleKeywords: ['修炼描写须有具体的境界感知和灵气运行', '斗法场景须有招式名'],
   },
 
   urban: {
@@ -138,7 +138,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'rising',
     },
     forbiddenWords: ['修炼', '灵气', '飞剑', '道友', '筑基', '金丹', '法宝', '仙人'],
-    styleKeywords: ['都市文风', '职场'],
+    styleKeywords: ['对话贴近真实口语', '行业术语和流程细节'],
   },
 
   romance: {
@@ -190,7 +190,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'slow_build',
     },
     forbiddenWords: ['修炼', '灵气', '飞剑', '公司经理', '项目经理'],
-    styleKeywords: ['言情文风', '心理描写', '情感细节'],
+    styleKeywords: ['情感描写须有具体的心理活动和身体语言', '关系进展须有可见的行为变化'],
   },
 
   'sci-fi': {
@@ -242,7 +242,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'rising',
     },
     forbiddenWords: ['修炼', '灵气', '飞剑', '道友'],
-    styleKeywords: ['科幻文风', '科技描写'],
+    styleKeywords: ['科技描写须有原理解释和使用限制', '未来场景须有具体的设备、界面、环境描写'],
   },
 
   history: {
@@ -294,7 +294,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'slow_build',
     },
     forbiddenWords: ['修炼', '灵气', '公司', '经理', '职场'],
-    styleKeywords: ['历史文风', '时代语言'],
+    styleKeywords: ['语言风格须贴近所设定时代', '权谋斗争须有具体的利益考量和博弈过程'],
   },
 
   horror: {
@@ -346,7 +346,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'slow_build',
     },
     forbiddenWords: ['修炼', '灵气', '公司', '经理', '飞剑'],
-    styleKeywords: ['悬疑文风', '氛围营造'],
+    styleKeywords: ['氛围营造须有感官细节', '悬念须通过反常细节和角色心理渐进构建'],
   },
 
   game: {
@@ -398,7 +398,7 @@ export const GENRE_TEST_PLANS: Record<string, GenreTestPlan> = {
       pacingTag: 'rising',
     },
     forbiddenWords: ['修炼', '灵气', '飞剑', '道友', '筑基'],
-    styleKeywords: ['游戏文风', '升级爽感'],
+    styleKeywords: ['游戏机制须通过角色操作自然展示', '升级/获得装备须有属性数据和能力描述'],
   },
 };
 

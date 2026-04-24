@@ -126,7 +126,7 @@ export class HookPolicy {
       priority: 'critical' | 'major' | 'minor';
       plantedChapter: number;
     }>,
-    currentChapter: number
+    _currentChapter: number // 预留参数，未来可用于章节感知的优先级排序
   ): WakeCandidate[] {
     if (dormantHooks.length === 0) return [];
 

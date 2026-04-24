@@ -151,3 +151,6 @@ ${input.chapterContent}
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('memory-extractor', (p) => new MemoryExtractor(p));

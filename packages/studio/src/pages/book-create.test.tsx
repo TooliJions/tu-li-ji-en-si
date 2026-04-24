@@ -50,7 +50,7 @@ describe('BookCreate Page', () => {
     fireEvent.click(screen.getByText('下一步'));
 
     expect(screen.getByText('创作设置')).toBeTruthy();
-    expect(screen.getByLabelText('目标章节数')).toBeTruthy();
+    expect(screen.getByLabelText('目标总字数（万字）')).toBeTruthy();
     expect(screen.getByLabelText('目标字数/章')).toBeTruthy();
     expect(screen.getByLabelText('提示词版本')).toBeTruthy();
     expect(screen.getByLabelText('Writer Agent')).toBeTruthy();
@@ -98,8 +98,8 @@ describe('BookCreate Page', () => {
     });
     fireEvent.click(screen.getByText('下一步'));
 
-    fireEvent.change(screen.getByLabelText('目标章节数'), {
-      target: { value: '120' },
+    fireEvent.change(screen.getByLabelText('目标总字数（万字）'), {
+      target: { value: '38' },
     });
     fireEvent.change(screen.getByLabelText('目标字数/章'), {
       target: { value: '3200' },
@@ -131,7 +131,8 @@ describe('BookCreate Page', () => {
       expect(screen.getByText('已导入：brief.md')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText('创建书籍'));
+    const form = screen.getByText('创建书籍').closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/books', {
@@ -142,9 +143,9 @@ describe('BookCreate Page', () => {
           genre: '都市',
           language: 'en-US',
           platform: 'webnovel',
-          targetChapterCount: 120,
+          targetChapterCount: 119,
           targetWordsPerChapter: 3200,
-          targetWords: 384000,
+          targetWords: 380000,
           promptVersion: 'latest',
           modelConfig: {
             useGlobalDefaults: false,
@@ -179,7 +180,8 @@ describe('BookCreate Page', () => {
       target: { value: '历史' },
     });
     fireEvent.click(screen.getByText('下一步'));
-    fireEvent.click(screen.getByText('创建书籍'));
+    const form2 = screen.getByText('创建书籍').closest('form') as HTMLFormElement;
+    fireEvent.submit(form2);
 
     await waitFor(() => {
       expect(screen.getByText('书名已存在')).toBeTruthy();
@@ -197,8 +199,8 @@ describe('BookCreate Page', () => {
     });
     fireEvent.click(screen.getByText('下一步'));
 
-    expect(screen.getByDisplayValue('100')).toBeTruthy();
+    expect(screen.getByDisplayValue('30')).toBeTruthy();
     expect(screen.getByDisplayValue('3000')).toBeTruthy();
-    expect(screen.getByText('预计总字数 300,000 字')).toBeTruthy();
+    expect(screen.getAllByText(/30万字/).length).toBeGreaterThanOrEqual(1);
   });
 });

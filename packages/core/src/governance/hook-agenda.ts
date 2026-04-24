@@ -221,14 +221,8 @@ export class HookAgenda {
       }
     }
 
-    // Apply status changes to hooks (preserving existing behavior for backward compatibility)
-    for (const change of statusChanges) {
-      const hook = hooks.find((h) => h.id === change.hookId);
-      if (hook) {
-        hook.status = change.newStatus as Hook['status'];
-        hook.updatedAt = change.updatedAt;
-      }
-    }
+    // statusChanges 已包含所有变更指令，由调用方自行应用
+    // 不再原地修改输入 hooks 数组（保持不可变性）
 
     return {
       woken: smoothingResult.woken,

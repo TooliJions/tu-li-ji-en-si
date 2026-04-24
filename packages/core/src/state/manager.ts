@@ -1,16 +1,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BookLock, ChapterIndex } from '../models/state';
+import { countChineseWords } from '../utils';
 
 // ─── StateManager ─────────────────────────────────────────────────
 // 负责书籍锁、路径计算、章节索引的读写。
 // 锁使用 open("wx") 实现排他创建，保证同一时刻仅一个进程可操作。
 
 export class StateManager {
-  private rootDir: string;
+  private _rootDir: string;
 
   constructor(rootDir: string) {
-    this.rootDir = rootDir;
+    this._rootDir = rootDir;
+  }
+
+  /** 获取 StateManager 的根目录路径 */
+  get rootDir(): string {
+    return this._rootDir;
   }
 
   // ── Path Computation ──────────────────────────────────────────
@@ -73,6 +79,10 @@ export class StateManager {
       process.kill(pid, 0);
       return true;
     } catch (e) {
+      console.warn(
+        '[state-manager] Failed to check process:',
+        e instanceof Error ? e.message : String(e)
+      );
       return false;
     }
   }
@@ -160,5 +170,90 @@ export class StateManager {
 
     const indexPath = path.join(stateDir, 'index.json');
     fs.writeFileSync(indexPath, JSON.stringify(index, null, 2), 'utf-8');
+  }
+
+  // ── Index Helpers（集中化，消除 runner/atomic-ops/persistence 中的重复逻辑）──
+
+  /**
+   * 在章节索引中查找指定章节号的条目。
+   * 兼容旧格式（chapterNumber 字段）和新格式（number 字段）。
+   */
+  findChapterEntry(
+    chapters: ChapterIndex['chapters'],
+    chapterNumber: number
+  ): ChapterIndex['chapters'][number] | undefined {
+    return chapters.find((chapter) => {
+      const legacyChapter = chapter as ChapterIndex['chapters'][number] & {
+        chapterNumber?: number;
+      };
+      return chapter.number === chapterNumber || legacyChapter.chapterNumber === chapterNumber;
+    });
+  }
+
+  /**
+   * 归一化章节索引条目字段（清理旧版遗留字段）。
+   */
+  normalizeChapterEntry(
+    entry: ChapterIndex['chapters'][number],
+    chapterNumber: number,
+    title: string | null,
+    wordCount: number
+  ): void {
+    entry.number = chapterNumber;
+    entry.title = title;
+    // fileName 保持不变（已存在则保留）
+    if (!entry.fileName) {
+      const padded = String(chapterNumber).padStart(4, '0');
+      entry.fileName = `chapter-${padded}.md`;
+    }
+    entry.wordCount = Number.isFinite(wordCount) ? wordCount : 0;
+    entry.createdAt = entry.createdAt || new Date().toISOString();
+    // 清理旧版遗留字段
+    const legacyEntry = entry as Record<string, unknown>;
+    delete legacyEntry.chapterNumber;
+    delete legacyEntry.status;
+    delete legacyEntry.writtenAt;
+    delete legacyEntry.plannedAt;
+  }
+
+  /**
+   * 原子化的 upsert 操作：读取 → 查找/创建/更新 → 写入。
+   */
+  upsertChapterIndex(
+    bookId: string,
+    chapterNumber: number,
+    title: string,
+    content: string,
+    status: 'draft' | 'final'
+  ): void {
+    const index = this.readIndex(bookId);
+    const existingEntry = this.findChapterEntry(index.chapters, chapterNumber);
+
+    if (!existingEntry) {
+      const padded = String(chapterNumber).padStart(4, '0');
+      index.chapters.push({
+        number: chapterNumber,
+        title,
+        fileName: `chapter-${padded}.md`,
+        wordCount: countChineseWords(content),
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      this.normalizeChapterEntry(
+        existingEntry,
+        chapterNumber,
+        title,
+        content.length > 0 ? countChineseWords(content) : existingEntry.wordCount
+      );
+    }
+
+    index.totalChapters = index.chapters.length;
+    index.totalWords = index.chapters.reduce(
+      (sum, ch) => sum + (Number.isFinite(ch.wordCount) ? ch.wordCount : 0),
+      0
+    );
+    index.lastUpdated = new Date().toISOString();
+
+    this.writeIndex(bookId, index);
   }
 }
