@@ -1,6 +1,0 @@
-{"type":"click","text":"!\n    \n      关键缺失（P0）\n      1. ConfigView 页面完全缺失 — 侧边栏有路由但无对应组件\n         2. 守护进程日志为MOCK数据 — 应使用SSE实时推送\n         3. 合并/拆分操作无确认弹窗 — 存在误操作风险","choice":"critical","id":null,"timestamp":1776626288876}
-{"type":"click","text":"2\n    \n      重要差距（P1）\n      1. 写作页面缺少质量仪表盘8维度进度条\n         2. 数据分析AI痕迹图缺少琥珀渐变关注区和建议气泡\n         3. 伏笔面板缺少健康度进度条和惊群折叠面板\n         4. 真相文件缺少\"当前世界状态\"展示","choice":"high","id":null,"timestamp":1776626290255}
-{"type":"click","text":"3\n    \n      视觉/UX优化（P2）\n      1. 记忆透视缺少3秒淡出动画\n         2. 仪表盘活动表格→列表样式差异\n         3. 灵感洗牌缺少方案操作按钮\n         4. DoctorView缺少按书分组诊断","choice":"medium","id":null,"timestamp":1776626290883}
-{"type":"click","text":"!\n    \n      关键缺失（P0）\n      1. ConfigView 页面完全缺失 — 侧边栏有路由但无对应组件\n         2. 守护进程日志为MOCK数据 — 应使用SSE实时推送\n         3. 合并/拆分操作无确认弹窗 — 存在误操作风险","choice":"critical","id":null,"timestamp":1776626292060}
-{"type":"click","text":"2\n    \n      重要差距（P1）\n      1. 写作页面缺少质量仪表盘8维度进度条\n         2. 数据分析AI痕迹图缺少琥珀渐变关注区和建议气泡\n         3. 伏笔面板缺少健康度进度条和惊群折叠面板\n         4. 真相文件缺少\"当前世界状态\"展示","choice":"high","id":null,"timestamp":1776626292687}
-{"type":"click","text":"3\n    \n      视觉/UX优化（P2）\n      1. 记忆透视缺少3秒淡出动画\n         2. 仪表盘活动表格→列表样式差异\n         3. 灵感洗牌缺少方案操作按钮\n         4. DoctorView缺少按书分组诊断","choice":"medium","id":null,"timestamp":1776626293277}
