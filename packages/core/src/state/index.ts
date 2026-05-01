@@ -20,8 +20,5 @@ export {
   type InsertHookParams,
   type HookRecord,
 } from './memory-db';
-export {
-  ProjectionRenderer,
-  type ProjectionFile,
-  type ChapterSummaryRecord as ProjectionChapterSummaryRecord,
-} from './projections';
+export { ProjectionRenderer, type ProjectionFile } from './projections';
+export { type ChapterSummaryRecord as ProjectionChapterSummaryRecord } from '../models/state';

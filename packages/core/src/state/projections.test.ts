@@ -186,17 +186,29 @@ describe('ProjectionRenderer', () => {
       const summaries = [
         {
           chapter: 1,
-          summary: '林风拜入青云门，开始修炼。',
+          briefSummary: '林风拜入青云门。',
+          detailedSummary: '林风拜入青云门，开始修炼。',
           keyEvents: ['拜师仪式', '初次修炼'],
           stateChanges: null,
+          emotionalArc: null,
+          cliffhanger: null,
+          hookImpact: null,
+          consistencyScore: 0,
           created_at: '2026-04-18T10:00:00Z',
+          updated_at: '2026-04-18T10:00:00Z',
         },
         {
           chapter: 2,
-          summary: '林风在后山发现神秘玉佩。',
+          briefSummary: '林风发现玉佩。',
+          detailedSummary: '林风在后山发现神秘玉佩。',
           keyEvents: ['发现玉佩'],
           stateChanges: null,
+          emotionalArc: null,
+          cliffhanger: null,
+          hookImpact: null,
+          consistencyScore: 0,
           created_at: '2026-04-18T11:00:00Z',
+          updated_at: '2026-04-18T11:00:00Z',
         },
       ];
       const md = ProjectionRenderer.renderChapterSummaries(summaries);
@@ -359,7 +371,7 @@ function createHook(
   status: string,
   priority: string,
   plantedChapter: number,
-  extra: Record<string, unknown> = {}
+  extra: Record<string, unknown> = {},
 ) {
   return {
     id,

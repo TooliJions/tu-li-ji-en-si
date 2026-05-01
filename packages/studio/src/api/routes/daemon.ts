@@ -7,9 +7,12 @@ import {
   hasStudioBookRuntime,
   readStudioBookRuntime,
   setStudioDaemon,
+  getStudioRuntimeRootDir,
 } from '../core-bridge';
 import { getRequestContext } from '../context';
 import { eventHub } from '../sse';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 interface DaemonState {
   status: 'idle' | 'running' | 'paused' | 'stopped';
@@ -53,8 +56,26 @@ const startSchema = z.object({
   fromChapter: z.number().int().positive().default(1),
   toChapter: z.number().int().positive(),
   interval: z.number().int().positive().default(30),
-  dailyTokenLimit: z.number().int().positive().default(1000000),
+  dailyTokenLimit: z.number().int().positive().optional(),
 });
+
+function loadQuotaFromConfig(): { dailyTokenQuota: number; quotaAlertThreshold: number } | null {
+  const cfgPath = path.join(process.cwd(), 'config.local.json');
+  if (!fs.existsSync(cfgPath)) return null;
+  try {
+    const raw = fs.readFileSync(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw) as {
+      quotas?: { dailyTokenQuota?: number; quotaAlertThreshold?: number };
+    };
+    if (!parsed.quotas) return null;
+    return {
+      dailyTokenQuota: parsed.quotas.dailyTokenQuota ?? 0,
+      quotaAlertThreshold: parsed.quotas.quotaAlertThreshold ?? 0.8,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function createDaemonRouter(): Hono {
   const router = new Hono();
@@ -80,18 +101,25 @@ export function createDaemonRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
     const intervalMs = result.data.interval * 1000;
     const book = readStudioBookRuntime(bookId);
+
+    // 优先使用配置文件中的配额，请求体中的值可覆盖
+    const quotaConfig = loadQuotaFromConfig();
+    const configQuota =
+      quotaConfig && quotaConfig.dailyTokenQuota > 0 ? quotaConfig.dailyTokenQuota : 1000000;
+    const dailyTokenLimit = result.data.dailyTokenLimit ?? configQuota;
+
     const daemon = new DaemonScheduler({
       bookId,
-      rootDir: '',
+      rootDir: getStudioRuntimeRootDir(),
       fromChapter: result.data.fromChapter,
       toChapter: result.data.toChapter,
-      dailyTokenLimit: result.data.dailyTokenLimit,
+      dailyTokenLimit,
       mode: 'cloud',
       targetRpm: 60000 / intervalMs,
       minIntervalMs: intervalMs,

@@ -16,7 +16,7 @@ type StudioConfigProvider = {
   apiKey: string;
   baseUrl: string;
   model?: string;
-  type?: 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini';
+  type?: 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini' | 'deepseek';
   status?: string;
 };
 
@@ -38,7 +38,7 @@ type StudioConfigState = {
 function loadStudioConfig(): StudioConfigState | null {
   const cfgPath = process.env.CONFIG_PATH
     ? path.resolve(process.env.CONFIG_PATH)
-    : path.join(process.cwd(), '.cybernovelist-config.json');
+    : path.join(process.cwd(), 'config.local.json');
 
   try {
     if (!fs.existsSync(cfgPath)) {
@@ -55,8 +55,8 @@ function loadStudioConfig(): StudioConfigState | null {
 
 function inferProviderType(
   name: string,
-  baseUrl: string
-): 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini' {
+  baseUrl: string,
+): 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini' | 'deepseek' {
   const normalizedName = name.trim().toLowerCase();
   const normalizedBaseUrl = baseUrl.trim().toLowerCase();
 
@@ -72,16 +72,19 @@ function inferProviderType(
   if (normalizedName.includes('ollama') || normalizedBaseUrl.includes('11434')) {
     return 'ollama';
   }
+  if (normalizedName.includes('deepseek') || normalizedBaseUrl.includes('deepseek')) {
+    return 'deepseek';
+  }
   return 'openai';
 }
 
 function upsertRoute(
   routes: StudioConfigRoute[],
-  nextRoute: StudioConfigRoute
+  nextRoute: StudioConfigRoute,
 ): StudioConfigRoute[] {
   return [
     ...routes.filter(
-      (route) => route.agent.trim().toLowerCase() !== nextRoute.agent.trim().toLowerCase()
+      (route) => route.agent.trim().toLowerCase() !== nextRoute.agent.trim().toLowerCase(),
     ),
     nextRoute,
   ];
@@ -90,7 +93,7 @@ function upsertRoute(
 function applyBookModelOverrides(
   baseRoutes: StudioConfigRoute[],
   defaultProvider: string,
-  book?: StudioRuntimeBookRecord | null
+  book?: StudioRuntimeBookRecord | null,
 ): StudioConfigRoute[] {
   const routes = [...baseRoutes];
   if (!book || book.modelConfig.useGlobalDefaults) {
@@ -105,7 +108,7 @@ function applyBookModelOverrides(
 
   return overrides.reduce((currentRoutes, override) => {
     const existing = currentRoutes.find(
-      (route) => route.agent.trim().toLowerCase() === override.agent.toLowerCase()
+      (route) => route.agent.trim().toLowerCase() === override.agent.toLowerCase(),
     );
 
     return upsertRoute(currentRoutes, {
@@ -128,13 +131,25 @@ export function buildLLMProvider(book?: StudioRuntimeBookRecord | null): LLMProv
   }
 
   const parsed = loadStudioConfig();
-  const configuredProviders = (parsed?.providers ?? []).filter(
-    (provider) => provider.apiKey && provider.baseUrl
-  );
+  const configuredProviders = (parsed?.providers ?? []).filter((provider) => {
+    const key = provider.apiKey?.trim() ?? '';
+    const url = provider.baseUrl?.trim() ?? '';
+    // 排除明显的占位符和无效值
+    const isPlaceholderKey =
+      key.length < 8 ||
+      /^sk-xxx/i.test(key) ||
+      /^your-?api-?key/i.test(key) ||
+      /^placeholder/i.test(key) ||
+      /^test/i.test(key) ||
+      key.includes('×××') ||
+      key.includes('***');
+    const isValidUrl = url.startsWith('http');
+    return key && url && !isPlaceholderKey && isValidUrl;
+  });
 
   if (configuredProviders.length > 0) {
     const defaultProvider = configuredProviders.some(
-      (provider) => provider.name === parsed?.defaultProvider
+      (provider) => provider.name === parsed?.defaultProvider,
     )
       ? (parsed?.defaultProvider ?? configuredProviders[0].name)
       : configuredProviders[0].name;
@@ -173,6 +188,6 @@ export function buildLLMProvider(book?: StudioRuntimeBookRecord | null): LLMProv
   }
 
   throw new ConfigurationError(
-    'No LLM provider configured. Please set up API keys in .cybernovelist-config.json'
+    'No LLM provider configured. Please set up API keys in config.local.json',
   );
 }

@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface TokenRecord {
@@ -12,6 +15,8 @@ export interface QuotaGuardConfig {
   warningThreshold?: number;
   /** 严重阈值百分比，默认 0.95 */
   criticalThreshold?: number;
+  /** 持久化文件路径（可选），用于守护进程重启后恢复配额记录 */
+  persistPath?: string;
 }
 
 export interface QuotaUsage {
@@ -46,6 +51,7 @@ export class QuotaGuard {
   readonly #limit: number;
   readonly #warningThreshold: number;
   readonly #criticalThreshold: number;
+  readonly #persistPath?: string;
 
   #used = 0;
   #dayKey: string;
@@ -79,7 +85,9 @@ export class QuotaGuard {
     this.#limit = config.dailyLimit;
     this.#warningThreshold = warning;
     this.#criticalThreshold = critical;
+    this.#persistPath = config.persistPath;
     this.#dayKey = currentUtcDayKey();
+    this.#loadFromFile();
   }
 
   // ── Recording ────────────────────────────────────────────────
@@ -95,6 +103,7 @@ export class QuotaGuard {
     this.#used += inp + out;
 
     this.#fireThresholdEvents();
+    this.#saveToFile();
   }
 
   // ── Queries ──────────────────────────────────────────────────
@@ -161,6 +170,7 @@ export class QuotaGuard {
       this.#criticalFired = false;
       this.#exhaustedFired = false;
       this.#dayKey = today;
+      this.#saveToFile();
     }
   }
 
@@ -200,6 +210,36 @@ export class QuotaGuard {
       } catch {
         // Swallow listener errors so one bad subscriber can't block others
       }
+    }
+  }
+
+  // ── Persistence ────────────────────────────────────────────────
+
+  #loadFromFile(): void {
+    if (!this.#persistPath) return;
+    try {
+      if (!fs.existsSync(this.#persistPath)) return;
+      const raw = fs.readFileSync(this.#persistPath, 'utf-8');
+      const data = JSON.parse(raw) as { dayKey?: string; used?: number };
+      if (data.dayKey === this.#dayKey && typeof data.used === 'number') {
+        this.#used = data.used;
+      }
+    } catch {
+      // 忽略损坏的持久化文件，从零开始
+    }
+  }
+
+  #saveToFile(): void {
+    if (!this.#persistPath) return;
+    try {
+      fs.mkdirSync(path.dirname(this.#persistPath), { recursive: true });
+      fs.writeFileSync(
+        this.#persistPath,
+        JSON.stringify({ dayKey: this.#dayKey, used: this.#used }, null, 2),
+        'utf-8',
+      );
+    } catch {
+      // 持久化失败不应阻塞主流程
     }
   }
 }

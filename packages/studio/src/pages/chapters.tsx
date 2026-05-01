@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   BookOpen,
   FileText,
@@ -33,6 +33,9 @@ const FILTERS: Array<{ value: FilterValue; label: string }> = [
 ];
 
 export default function ChaptersPage() {
+  const location = useLocation();
+  const isReviewMode = location.pathname === '/review';
+
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,9 +79,11 @@ export default function ChaptersPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">书籍与章节</h1>
+          <h1 className="text-2xl font-bold">{isReviewMode ? '审阅' : '书籍与章节'}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            这里集中提供已落地的书籍入口、章节列表入口，以及书籍级工作台跳转。
+            {isReviewMode
+              ? '审阅书籍内容，检查章节质量与创作进度。'
+              : '这里集中提供已落地的书籍入口、章节列表入口，以及书籍级工作台跳转。'}
           </p>
         </div>
         <Link

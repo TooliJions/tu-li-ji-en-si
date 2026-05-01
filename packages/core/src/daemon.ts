@@ -1,5 +1,6 @@
 // ── Types ────────────────────────────────────────────────────────────
 
+import * as path from 'node:path';
 import { SmartInterval, type SmartIntervalConfig } from './scheduler/smart-interval';
 import { QuotaGuard, type QuotaGuardConfig } from './scheduler/quota-guard';
 import { createNotifier, type NotifyChannel, type NotifyEvent } from './notify';
@@ -129,11 +130,15 @@ export class DaemonScheduler {
     };
     this.#smartInterval = new SmartInterval(siConfig);
 
-    // QuotaGuard config
+    // QuotaGuard config — 持久化路径基于 rootDir/bookId
+    const persistPath = config.rootDir
+      ? path.join(config.rootDir, config.bookId, 'story', 'state', 'quota-usage.json')
+      : undefined;
     const qgConfig: QuotaGuardConfig = {
       dailyLimit: config.dailyTokenLimit,
       warningThreshold: 0.8,
       criticalThreshold: 0.95,
+      persistPath,
     };
     this.#quotaGuard = new QuotaGuard(qgConfig);
 
@@ -214,20 +219,20 @@ export class DaemonScheduler {
 
   on(
     event: 'chapter_complete',
-    listener: Listener<{ bookId: string; chapterNumber: number; result: ChapterResultLike }>
+    listener: Listener<{ bookId: string; chapterNumber: number; result: ChapterResultLike }>,
   ): Unsubscribe;
   on(
     event: 'chapter_error',
-    listener: Listener<{ bookId: string; chapterNumber: number; error: string }>
+    listener: Listener<{ bookId: string; chapterNumber: number; error: string }>,
   ): Unsubscribe;
   on(
     event: 'state_change',
-    listener: Listener<{ from: DaemonState; to: DaemonState }>
+    listener: Listener<{ from: DaemonState; to: DaemonState }>,
   ): Unsubscribe;
   on(event: 'quota_exhausted', listener: Listener<Record<string, unknown>>): Unsubscribe;
   on(
     event: 'max_fallbacks_reached',
-    listener: Listener<{ consecutiveFallbacks: number }>
+    listener: Listener<{ consecutiveFallbacks: number }>,
   ): Unsubscribe;
   on<K extends EventName>(event: K, listener: Listener<EventPayloadMap[K]>): Unsubscribe {
     let set = this.#events.get(event) as Set<Listener<EventPayloadMap[K]>> | undefined;
@@ -407,7 +412,7 @@ export class DaemonScheduler {
     this.#notifier.send(event).catch((err) => {
       console.warn(
         '[daemon] Notification error:',
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
     });
   }

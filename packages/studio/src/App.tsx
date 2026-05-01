@@ -26,6 +26,11 @@ import PromptVersion from '@/pages/prompt-version';
 import HookMinimapPage from '@/pages/hook-minimap-page';
 import HookMagnifierPage from '@/pages/hook-magnifier-page';
 import ThunderAnimPage from '@/pages/thunder-anim-page';
+import QualityGate from '@/pages/quality-gate';
+import ChapterPlans from '@/pages/chapter-plans';
+import PlanningBrief from '@/pages/planning-brief';
+import InspirationInput from '@/pages/inspiration-input';
+import StoryOutline from '@/pages/story-outline';
 
 export default function App() {
   return (
@@ -58,6 +63,12 @@ export default function App() {
         <Route path="/logs" element={<LogViewerPage />} />
         <Route path="/natural-agent" element={<NaturalAgent />} />
         <Route path="/prompts/:bookId" element={<PromptVersion />} />
+        <Route path="/quality" element={<QualityGate />} />
+        <Route path="/chapter-plans" element={<ChapterPlans />} />
+        <Route path="/planning-brief" element={<PlanningBrief />} />
+        <Route path="/inspiration" element={<InspirationInput />} />
+        <Route path="/story-outline" element={<StoryOutline />} />
+        <Route path="*" element={<div>404 Not Found</div>} />
       </Route>
     </Routes>
   );

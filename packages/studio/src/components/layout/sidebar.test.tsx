@@ -12,60 +12,33 @@ const currentBook = {
 };
 
 describe('Sidebar', () => {
-  it('shows main navigation links', () => {
+  it('shows simplified navigation links', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <Sidebar currentBook={currentBook} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: '仪表盘' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: '我的书籍' })).toHaveAttribute('href', '/chapters');
+    expect(screen.getByRole('link', { name: '我的书籍' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '新建书籍' })).toHaveAttribute('href', '/book-create');
     expect(screen.getByRole('link', { name: '创作' })).toHaveAttribute(
       'href',
-      '/writing?bookId=book-001'
+      '/writing?bookId=book-001',
     );
-    expect(screen.getByRole('link', { name: '伏笔面板' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '导出' })).toHaveAttribute(
       'href',
-      '/hooks?bookId=book-001'
+      '/export?bookId=book-001',
     );
-    expect(screen.getByRole('link', { name: '数据分析' })).toHaveAttribute(
-      'href',
-      '/analytics?bookId=book-001'
-    );
+    expect(screen.getByRole('link', { name: '设置' })).toHaveAttribute('href', '/config');
   });
+
   it('shows active book progress information', () => {
     render(
       <MemoryRouter>
         <Sidebar currentBook={currentBook} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText(/12%/)).toBeTruthy();
-  });
-
-  it('builds workspace links with the current book id', () => {
-    render(
-      <MemoryRouter>
-        <Sidebar currentBook={currentBook} />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByRole('link', { name: '真相文件' })).toHaveAttribute(
-      'href',
-      '/truth-files?bookId=book-001'
-    );
-    expect(screen.getByRole('link', { name: '守护进程' })).toHaveAttribute(
-      'href',
-      '/daemon?bookId=book-001'
-    );
-    expect(screen.getByRole('link', { name: '自然Agent' })).toHaveAttribute(
-      'href',
-      '/natural-agent?bookId=book-001'
-    );
-    expect(screen.getByRole('link', { name: '提示词版本' })).toHaveAttribute(
-      'href',
-      '/prompts/book-001'
-    );
   });
 });

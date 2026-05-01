@@ -12,6 +12,8 @@ import {
   XCircle,
   Globe,
   Bell,
+  LoaderCircle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   fetchConfig,
@@ -19,6 +21,7 @@ import {
   testProvider,
   testNotification,
   fetchAvailableModels,
+  fetchModelsFromProvider,
 } from '../lib/api';
 
 interface Provider {
@@ -34,6 +37,7 @@ interface AgentRoute {
   model: string;
   provider: string;
   temperature: number;
+  maxTokens?: number;
 }
 
 interface Config {
@@ -42,6 +46,10 @@ interface Config {
   agentRouting: AgentRoute[];
   providers: Provider[];
   notifications?: { telegramToken: string; chatId: string };
+  quotas?: { dailyTokenQuota: number; quotaAlertThreshold: number };
+  rateLimits?: { rpmLimit: number; tpmLimit: number };
+  retryPolicy?: { maxAttempts: number; delayMs: number };
+  cloudMode?: boolean;
 }
 
 interface AvailableModel {
@@ -49,6 +57,15 @@ interface AvailableModel {
   model: string;
   status: string;
 }
+
+const PRESET_PROVIDERS = [
+  { name: 'DashScope', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+  { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
+  { name: 'Claude', baseUrl: 'https://api.anthropic.com/v1' },
+  { name: 'Ollama', baseUrl: 'http://localhost:11434/v1' },
+];
 
 export default function ConfigView() {
   const [loading, setLoading] = useState(true);
@@ -63,6 +80,9 @@ export default function ConfigView() {
   // Edit routing modal
   const [editingRoute, setEditingRoute] = useState<AgentRoute | null>(null);
 
+  // Edit provider modal
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+
   // Test result
   const [testResult, setTestResult] = useState<{
     provider: string;
@@ -71,8 +91,14 @@ export default function ConfigView() {
     error?: string;
   } | null>(null);
 
-  // Available models from backend
+  // Available models from backend (fetched on mount, currently unused after UI simplification)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+
+  // Fetched models from provider API
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   // Notification test result
   const [notifTestResult, setNotifTestResult] = useState<{
@@ -86,6 +112,26 @@ export default function ConfigView() {
     chatId: '',
   });
 
+  // Quota config
+  const [quotas, setQuotas] = useState({
+    dailyTokenQuota: 0,
+    quotaAlertThreshold: 0.8,
+  });
+
+  // Rate limit config
+  const [rateLimits, setRateLimits] = useState({
+    rpmLimit: 0,
+    tpmLimit: 0,
+  });
+
+  // Retry policy
+  const [retryPolicy, setRetryPolicy] = useState({
+    maxAttempts: 2,
+    delayMs: 1000,
+  });
+
+  const [cloudMode, setCloudMode] = useState(true);
+
   useEffect(() => {
     fetchConfig()
       .then((c) => {
@@ -94,6 +140,19 @@ export default function ConfigView() {
           telegramToken: c.notifications?.telegramToken ?? '',
           chatId: c.notifications?.chatId ?? '',
         });
+        setQuotas({
+          dailyTokenQuota: c.quotas?.dailyTokenQuota ?? 0,
+          quotaAlertThreshold: c.quotas?.quotaAlertThreshold ?? 0.8,
+        });
+        setRateLimits({
+          rpmLimit: c.rateLimits?.rpmLimit ?? 0,
+          tpmLimit: c.rateLimits?.tpmLimit ?? 0,
+        });
+        setRetryPolicy({
+          maxAttempts: c.retryPolicy?.maxAttempts ?? 2,
+          delayMs: c.retryPolicy?.delayMs ?? 1000,
+        });
+        setCloudMode(c.cloudMode ?? true);
       })
       .catch(() => {
         // load failed
@@ -123,6 +182,7 @@ export default function ConfigView() {
         name: provider.name,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
+        model: provider.model || config?.defaultModel,
       });
       setTestResult({
         provider: provider.name,
@@ -167,11 +227,58 @@ export default function ConfigView() {
     setEditingRoute(null);
   }
 
+  async function handleUpdateProvider(original: Provider, updated: Provider) {
+    if (!config) return;
+    const newProviders = config.providers.map((p) => (p.name === original.name ? updated : p));
+    await handleSave({ ...config, providers: newProviders });
+    setEditingProvider(null);
+  }
+
   function handleDefaultModelChange(model: string) {
     if (!config) return;
     setConfig({ ...config, defaultModel: model });
   }
 
+  function getDefaultProviderBaseUrl(providerName: string): string {
+    const preset = PRESET_PROVIDERS.find((p) => p.name === providerName);
+    return preset?.baseUrl || '';
+  }
+
+  async function handleFetchModels() {
+    if (!config) return;
+    const provider = config.providers.find((p) => p.name === config.defaultProvider);
+    if (!provider || !provider.apiKey || !provider.baseUrl) {
+      setModelsError('请先填写 API Key 和 Base URL');
+      return;
+    }
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const result = await fetchModelsFromProvider({
+        name: provider.name,
+        apiKey: provider.apiKey,
+        baseUrl: provider.baseUrl,
+      });
+      if (result.success && Array.isArray(result.models)) {
+        setFetchedModels(result.models);
+        // Auto-select first model if current defaultModel is not in the list
+        if (result.models.length > 0 && !result.models.includes(config.defaultModel)) {
+          setConfig({ ...config, defaultModel: result.models[0] });
+        }
+      } else {
+        setModelsError(result.error || '获取模型列表失败');
+        setFetchedModels([]);
+      }
+    } catch (err) {
+      setModelsError(err instanceof Error ? err.message : '获取模型列表失败');
+      setFetchedModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  }
+
+  // Provider change handler inlined into select onChange after UI simplification
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleDefaultProviderChange(provider: string) {
     if (!config) return;
     setConfig({ ...config, defaultProvider: provider });
@@ -193,6 +300,21 @@ export default function ConfigView() {
       setNotifTestResult({ success: result.success, error: result.error });
     } catch {
       setNotifTestResult({ success: false, error: '推送失败' });
+    }
+  }
+
+  async function handleSaveQuotas() {
+    if (!config) return;
+    try {
+      await updateConfig({
+        ...config,
+        quotas,
+        rateLimits,
+        retryPolicy,
+        cloudMode,
+      });
+    } catch {
+      // save failed
     }
   }
 
@@ -223,42 +345,133 @@ export default function ConfigView() {
         </div>
         <div className="space-y-3 max-w-2xl">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">默认 Provider</label>
+            <label className="text-xs text-muted-foreground block mb-1">供应商</label>
             <select
               value={config.defaultProvider}
-              onChange={(e) => handleDefaultProviderChange(e.target.value)}
+              onChange={(e) => {
+                const providerName = e.target.value;
+                const newProviders = config.providers.map((pp) => {
+                  if (pp.name !== providerName) return pp;
+                  // Auto-fill baseUrl if empty
+                  if (!pp.baseUrl) {
+                    return { ...pp, baseUrl: getDefaultProviderBaseUrl(providerName) };
+                  }
+                  return pp;
+                });
+                // If provider doesn't exist in config yet, create it from preset
+                if (!config.providers.some((p) => p.name === providerName)) {
+                  const preset = PRESET_PROVIDERS.find((p) => p.name === providerName);
+                  newProviders.push({
+                    name: providerName,
+                    status: 'disconnected',
+                    apiKey: '',
+                    baseUrl: preset?.baseUrl || '',
+                  });
+                }
+                setConfig({ ...config, defaultProvider: providerName, providers: newProviders });
+                setFetchedModels([]);
+                setModelsError(null);
+              }}
               className="w-full px-3 py-2 rounded border bg-background text-sm"
             >
-              {config.providers.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.name}
-                </option>
-              ))}
+              {/* 已配置的供应商 */}
+              {config.providers.length > 0 && (
+                <optgroup label="已配置">
+                  {config.providers.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* 预设供应商（尚未配置） */}
+              {PRESET_PROVIDERS.filter(
+                (preset) => !config.providers.some((p) => p.name === preset.name),
+              ).length > 0 && (
+                <optgroup label="预设">
+                  {PRESET_PROVIDERS.filter(
+                    (preset) => !config.providers.some((p) => p.name === preset.name),
+                  ).map((preset) => (
+                    <option key={preset.name} value={preset.name}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           {/* Show selected provider details */}
           {config.providers
             .filter((p) => p.name === config.defaultProvider)
             .map((p) => (
-              <div key={p.name} className="space-y-2">
+              <div key={p.name} className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Base URL</label>
+                  <input
+                    value={p.baseUrl}
+                    onChange={(e) => {
+                      const newUrl = e.target.value;
+                      setConfig({
+                        ...config,
+                        providers: config.providers.map((pp) =>
+                          pp.name === p.name ? { ...pp, baseUrl: newUrl } : pp,
+                        ),
+                      });
+                    }}
+                    placeholder="https://api.example.com/v1"
+                    className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
+                  />
+                </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">API Key</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="password"
-                      value={p.apiKey}
-                      readOnly
-                      className="flex-1 px-3 py-2 rounded border bg-background text-sm font-mono"
-                    />
-                    <button
-                      title="测试连接"
-                      onClick={() => handleTestProvider(p)}
-                      className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap"
-                    >
-                      测试连接
-                    </button>
-                  </div>
+                  <input
+                    type="password"
+                    value={p.apiKey}
+                    onChange={(e) => {
+                      const newKey = e.target.value;
+                      setConfig({
+                        ...config,
+                        providers: config.providers.map((pp) =>
+                          pp.name === p.name ? { ...pp, apiKey: newKey } : pp,
+                        ),
+                      });
+                    }}
+                    placeholder="输入 API Key"
+                    className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
+                  />
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleFetchModels}
+                    disabled={modelsLoading || !p.apiKey || !p.baseUrl}
+                    className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {modelsLoading ? (
+                      <LoaderCircle size={14} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
+                    获取模型
+                  </button>
+                  <button
+                    title="测试连接"
+                    onClick={() =>
+                      handleTestProvider({
+                        ...p,
+                        model: p.model || config.defaultModel,
+                      })
+                    }
+                    className="px-3 py-2 border rounded text-sm hover:bg-accent whitespace-nowrap"
+                  >
+                    测试连接
+                  </button>
+                </div>
+                {modelsError && (
+                  <div className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700 flex items-center gap-1">
+                    <XCircle size={12} />
+                    {modelsError}
+                  </div>
+                )}
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">默认模型</label>
                   <select
@@ -267,28 +480,16 @@ export default function ConfigView() {
                     aria-label="默认模型"
                     className="w-full px-3 py-2 rounded border bg-background text-sm"
                   >
-                    {availableModels.length > 0
-                      ? availableModels.map((m) => (
-                          <option key={`${m.provider}/${m.model}`} value={m.model}>
-                            {m.provider} — {m.model}
-                          </option>
-                        ))
-                      : config.providers
-                          .filter((pp) => pp.apiKey)
-                          .map((pp) => (
-                            <option key={pp.name} value={pp.model || pp.name}>
-                              {pp.name} — {pp.model || '未指定'}
-                            </option>
-                          ))}
+                    {fetchedModels.length > 0 ? (
+                      fetchedModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={config.defaultModel}>{config.defaultModel}</option>
+                    )}
                   </select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Base URL</label>
-                  <input
-                    value={p.baseUrl}
-                    readOnly
-                    className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
-                  />
                 </div>
               </div>
             ))}
@@ -299,19 +500,6 @@ export default function ConfigView() {
             >
               <Save size={14} />
               保存配置
-            </button>
-            <button
-              onClick={() => {
-                if (!config) return;
-                setConfig({
-                  ...config,
-                  defaultProvider: 'DashScope',
-                  defaultModel: 'DashScope',
-                });
-              }}
-              className="px-4 py-2 border rounded text-sm hover:bg-accent"
-            >
-              重置为默认
             </button>
           </div>
           {/* Test result for default provider */}
@@ -376,8 +564,20 @@ export default function ConfigView() {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    title="编辑 Provider"
+                    onClick={() => setEditingProvider(p)}
+                    className="p-1.5 rounded hover:bg-accent"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button
                     title="测试连接"
-                    onClick={() => handleTestProvider(p)}
+                    onClick={() =>
+                      handleTestProvider({
+                        ...p,
+                        model: p.model || config?.defaultModel,
+                      })
+                    }
                     className="p-1.5 rounded hover:bg-accent"
                   >
                     <TestTube size={14} />
@@ -515,6 +715,120 @@ export default function ConfigView() {
         </div>
       </div>
 
+      {/* Quota & Rate Limit Configuration */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Settings size={18} />
+          <h2 className="text-lg font-semibold">配额与限速</h2>
+        </div>
+        <div className="space-y-3 max-w-lg">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                每日 Token 配额 (0=无限制)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1000}
+                value={quotas.dailyTokenQuota}
+                onChange={(e) => setQuotas({ ...quotas, dailyTokenQuota: Number(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">配额告警阈值</label>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.1}
+                value={quotas.quotaAlertThreshold}
+                onChange={(e) =>
+                  setQuotas({ ...quotas, quotaAlertThreshold: Number(e.target.value) })
+                }
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                RPM 限制 (0=无限制)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={rateLimits.rpmLimit}
+                onChange={(e) => setRateLimits({ ...rateLimits, rpmLimit: Number(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                TPM 限制 (0=无限制)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={rateLimits.tpmLimit}
+                onChange={(e) => setRateLimits({ ...rateLimits, tpmLimit: Number(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">最大重试次数</label>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={retryPolicy.maxAttempts}
+                onChange={(e) =>
+                  setRetryPolicy({ ...retryPolicy, maxAttempts: Number(e.target.value) })
+                }
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">重试间隔 (ms)</label>
+              <input
+                type="number"
+                min={0}
+                step={100}
+                value={retryPolicy.delayMs}
+                onChange={(e) =>
+                  setRetryPolicy({ ...retryPolicy, delayMs: Number(e.target.value) })
+                }
+                className="w-full px-3 py-2 rounded border bg-background text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="cloud-mode"
+              checked={cloudMode}
+              onChange={(e) => setCloudMode(e.target.checked)}
+              className="rounded border"
+            />
+            <label htmlFor="cloud-mode" className="text-sm">
+              云端模式（启用 RPM 智能间隔与限流保护）
+            </label>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSaveQuotas}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
+            >
+              <Save size={14} />
+              保存配额配置
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Backup Providers Table */}
       <div className="rounded-lg border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
@@ -609,6 +923,15 @@ export default function ConfigView() {
         </div>
       )}
 
+      {/* Edit Provider Modal */}
+      {editingProvider && (
+        <EditProviderModal
+          provider={editingProvider}
+          onSave={(updated) => handleUpdateProvider(editingProvider, updated)}
+          onCancel={() => setEditingProvider(null)}
+        />
+      )}
+
       {/* Edit Route Modal */}
       {editingRoute && (
         <EditRouteModal
@@ -618,6 +941,90 @@ export default function ConfigView() {
           onCancel={() => setEditingRoute(null)}
         />
       )}
+    </div>
+  );
+}
+
+function EditProviderModal({
+  provider,
+  onSave,
+  onCancel,
+}: {
+  provider: Provider;
+  onSave: (updated: Provider) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(provider.name);
+  const [apiKey, setApiKey] = useState(provider.apiKey);
+  const [baseUrl, setBaseUrl] = useState(provider.baseUrl);
+  const [model, setModel] = useState(provider.model ?? '');
+
+  function handleSave() {
+    onSave({
+      ...provider,
+      name: name.trim() || provider.name,
+      apiKey: apiKey.trim(),
+      baseUrl: baseUrl.trim() || provider.baseUrl,
+      model: model.trim() || undefined,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-card rounded-lg border p-6 w-96">
+        <h3 className="text-lg font-semibold mb-4">编辑 Provider</h3>
+        <p className="text-sm font-medium mb-4 text-muted-foreground">{provider.name}</p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">名称</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 rounded border bg-background text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="输入 API Key"
+              className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Base URL</label>
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://api.example.com/v1"
+              className="w-full px-3 py-2 rounded border bg-background text-sm font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">默认模型</label>
+            <input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="例如：gpt-4o"
+              className="w-full px-3 py-2 rounded border bg-background text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-4">
+          <button onClick={onCancel} className="px-4 py-1.5 rounded text-sm hover:bg-accent">
+            取消
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 flex items-center gap-1"
+          >
+            <Save size={14} />
+            保存
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -636,6 +1043,7 @@ function EditRouteModal({
   const [model, setModel] = useState(route.model);
   const [provider, setProvider] = useState(route.provider);
   const [temperature, setTemperature] = useState(route.temperature.toString());
+  const [maxTokens, setMaxTokens] = useState(route.maxTokens?.toString() ?? '');
 
   function handleSave() {
     onSave({
@@ -643,6 +1051,7 @@ function EditRouteModal({
       model,
       provider,
       temperature: Number(temperature),
+      maxTokens: maxTokens.trim() ? Number(maxTokens) : undefined,
     });
   }
 
@@ -686,6 +1095,18 @@ function EditRouteModal({
               value={temperature}
               onChange={(e) => setTemperature(e.target.value)}
               placeholder="Temperature"
+              className="w-full px-3 py-2 rounded border bg-background text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Max Tokens</label>
+            <input
+              type="number"
+              min="1"
+              max="128000"
+              value={maxTokens}
+              onChange={(e) => setMaxTokens(e.target.value)}
+              placeholder="留空表示使用默认值"
               className="w-full px-3 py-2 rounded border bg-background text-sm"
             />
           </div>

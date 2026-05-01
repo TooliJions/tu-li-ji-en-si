@@ -1,25 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { fetchBooks } from '../../lib/api';
-import {
-  LayoutDashboard,
-  BookOpen,
-  PenTool,
-  FileText,
-  FileDown,
-  Tags,
-  Palette,
-  FolderCheck,
-  GitBranch,
-  Settings,
-  Server,
-  Stethoscope,
-  BarChart3,
-  FileUp,
-  Terminal,
-  Bot,
-  FileCode,
-} from 'lucide-react';
+import { LayoutDashboard, Plus, PenTool, FileDown, Settings } from 'lucide-react';
 
 export interface SidebarBook {
   id: string;
@@ -38,36 +20,14 @@ async function fetchActiveBook(): Promise<SidebarBook | null> {
   return books.length > 0 ? books[0] : null;
 }
 
-const mainNavItems = [
-  { to: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { to: '/chapters', icon: BookOpen, label: '我的书籍' },
+const navItems = [
+  { to: '/', icon: LayoutDashboard, label: '我的书籍' },
+  { to: '/book-create', icon: Plus, label: '新建书籍' },
   { to: '/writing', icon: PenTool, label: '创作' },
-  { to: '/review', icon: FileText, label: '审阅' },
   { to: '/export', icon: FileDown, label: '导出' },
 ];
 
-const secondaryNavItems = [
-  { to: '/genres', icon: Tags, label: '题材管理' },
-  { to: '/style-manager', icon: Palette, label: '文风管理' },
-  { to: '/truth-files', icon: FolderCheck, label: '真相文件' },
-  { to: '/hooks', icon: GitBranch, label: '伏笔面板' },
-  { to: '/hooks/timeline', icon: GitBranch, label: '伏笔时间线' },
-  { to: '/hooks/minimap', icon: GitBranch, label: '热力小地图' },
-  { to: '/hooks/magnifier', icon: GitBranch, label: '局部放大镜' },
-  { to: '/hooks/thunder', icon: GitBranch, label: '惊群动画' },
-  { to: '/analytics', icon: BarChart3, label: '数据分析' },
-  { to: '/import', icon: FileUp, label: '导入' },
-  { to: '/writing-plan', icon: PenTool, label: '创作计划' },
-  { to: '/prompts/:bookId', icon: FileCode, label: '提示词版本' },
-];
-
-const systemNavItems = [
-  { to: '/config', icon: Settings, label: '配置' },
-  { to: '/daemon', icon: Server, label: '守护进程' },
-  { to: '/doctor', icon: Stethoscope, label: '诊断' },
-  { to: '/logs', icon: Terminal, label: '日志' },
-  { to: '/natural-agent', icon: Bot, label: '自然Agent' },
-];
+const systemNavItems = [{ to: '/config', icon: Settings, label: '设置' }];
 
 const bookScopedQueryRoutes = new Set([
   '/writing',
@@ -85,6 +45,11 @@ const bookScopedQueryRoutes = new Set([
   '/logs',
   '/natural-agent',
   '/style-manager',
+  '/quality',
+  '/chapter-plans',
+  '/planning-brief',
+  '/inspiration',
+  '/story-outline',
 ]);
 
 function resolveNavTarget(to: string, activeBook: SidebarBook | null) {
@@ -157,27 +122,17 @@ export default function Sidebar({ currentBook }: SidebarProps) {
       </div>
 
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {/* 主导航 */}
-        {mainNavItems.map(({ to, icon: Icon, label }) => (
-          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
-        ))}
-
-        {/* 分隔符 */}
-        <div className="my-2 border-t border-sidebar-foreground/20" />
-
-        {/* 二级导航 */}
-        {secondaryNavItems.map(({ to, icon: Icon, label }) => (
-          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
-        ))}
-
-        {/* 分隔符 */}
-        <div className="my-2 border-t border-sidebar-foreground/20" />
-
-        {/* 系统导航 */}
-        {systemNavItems.map(({ to, icon: Icon, label }) => (
+        {navItems.map(({ to, icon: Icon, label }) => (
           <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
         ))}
       </nav>
+
+      {/* 底部系统入口 */}
+      <div className="p-2 border-t border-sidebar-foreground/20">
+        {systemNavItems.map(({ to, icon: Icon, label }) => (
+          <NavItem key={to} to={resolveNavTarget(to, activeBook)} icon={Icon} label={label} />
+        ))}
+      </div>
 
       {/* 书籍进度条 */}
       {activeBook && (

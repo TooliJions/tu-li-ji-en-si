@@ -6,10 +6,7 @@ import * as api from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   fetchBooks: vi.fn(),
-  fetchAiTrace: vi.fn(),
   deleteBook: vi.fn(),
-  fetchBookActivity: vi.fn(),
-  fetchHooks: vi.fn(),
 }));
 
 const mockBooks = [
@@ -26,69 +23,38 @@ const mockBooks = [
   },
 ];
 
-const mockTrace = {
-  trend: [
-    { chapter: 1, score: 0.8 },
-    { chapter: 2, score: 0.85 },
-  ],
-  average: 0.82,
-};
-
 describe('Dashboard Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchBooks as any).mockResolvedValue(mockBooks);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api.fetchAiTrace as any).mockResolvedValue(mockTrace);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.deleteBook as any).mockResolvedValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api.fetchBookActivity as any).mockResolvedValue([]);
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true)
-    );
   });
 
-  it('renders stats and book list', async () => {
+  it('renders book list', async () => {
     render(
       <MemoryRouter>
         <Dashboard />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByText('仪表盘')).toBeDefined();
+      expect(screen.getByText('我的书籍')).toBeDefined();
       expect(screen.getByText('测试书籍 1')).toBeDefined();
-      expect(screen.getAllByText(/5,000/).length).toBeGreaterThan(0);
     });
   });
 
-  it('uses book titles as the handoff entry into BookDetail', async () => {
+  it('uses book titles as the handoff entry into writing page', async () => {
     render(
       <MemoryRouter>
         <Dashboard />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
       const link = screen.getByText('测试书籍 1').closest('a');
-      expect(link).toHaveAttribute('href', '/book/book-1');
-    });
-  });
-
-  it('renders quality trend chart', async () => {
-    render(
-      <MemoryRouter>
-        <Dashboard />
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('近 7 章质量评分趋势')).toBeDefined();
-      expect(screen.getByText('第1章')).toBeDefined();
-      expect(screen.getByText('80%')).toBeDefined();
+      expect(link).toHaveAttribute('href', '/writing?bookId=book-1');
     });
   });
 
@@ -99,15 +65,13 @@ describe('Dashboard Page', () => {
     render(
       <MemoryRouter>
         <Dashboard />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
       expect(screen.getByText('测试书籍 1')).toBeDefined();
     });
 
-    // Open delete dialog by clicking the confirmation button directly via state
-    // The dialog only shows when deleteConfirm state is set via requestDeleteBook
     const deleteBtn = screen.getByTitle('删除书籍');
     fireEvent.pointerDown(deleteBtn);
     fireEvent.click(deleteBtn);
@@ -121,23 +85,5 @@ describe('Dashboard Page', () => {
     await waitFor(() => {
       expect(screen.getByText('删除书籍失败：状态目录被占用')).toBeDefined();
     });
-  });
-
-  // TODO: Add error toast for activity fetch failures. Component currently silently ignores them.
-  it.skip('shows a visible warning when recent activity loading fails', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api.fetchBookActivity as any).mockRejectedValue(new Error('最近活动暂不可用'));
-
-    render(
-      <MemoryRouter>
-        <Dashboard />
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/最近活动暂.*不可用/)).toBeDefined();
-    });
-
-    expect(screen.getByText('质量趋势 (近7章)')).toBeDefined();
   });
 });

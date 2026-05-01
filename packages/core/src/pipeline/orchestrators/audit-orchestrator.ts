@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../../llm/provider';
 import type { RuntimeStateStore } from '../../state/runtime-store';
 import { RevisionLoop } from '../revision-loop';
+import { ReviewCycle } from '../review-cycle';
 import type {
   AuditDraftInput,
   AuditResult,
@@ -30,35 +31,27 @@ export class DefaultAuditOrchestrator implements AuditOrchestrator {
         input.content,
         input.bookId,
         input.chapterNumber,
-        input.genre
+        input.genre,
       );
 
       const aiTrace = await this.#runAIDetection(input.content, input.genre);
 
-      const overallScore = Math.round((auditReport.overallScore + (1 - aiTrace) * 100) / 2);
-      const overallStatus = overallScore >= 80 ? 'pass' : overallScore >= 60 ? 'warning' : 'fail';
+      const reviewCycle = new ReviewCycle();
+      const decision = reviewCycle.decide(auditReport.overallScore, aiTrace);
 
       return {
         success: true,
         bookId: input.bookId,
         chapterNumber: input.chapterNumber,
-        overallScore,
-        overallStatus,
+        overallScore: decision.overallScore,
+        overallStatus: decision.overallStatus,
         issues: auditReport.issues,
         summary: auditReport.summary,
         aiTraceScore: aiTrace,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        bookId: input.bookId,
-        chapterNumber: input.chapterNumber,
-        overallScore: 0,
-        overallStatus: 'fail',
-        issues: [],
-        summary: `审计失败: ${message}`,
-      };
+      return ReviewCycle.buildFallbackResult(input.bookId, input.chapterNumber, message);
     }
   }
 
@@ -110,7 +103,7 @@ export class DefaultAuditOrchestrator implements AuditOrchestrator {
     content: string,
     bookId: string,
     chapterNumber: number,
-    genre: string
+    genre: string,
   ): Promise<{
     overallScore: number;
     overallStatus: string;

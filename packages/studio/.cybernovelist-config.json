@@ -1,6 +1,6 @@
 {
   "defaultProvider": "DashScope",
-  "defaultModel": "qwen-turbo-2024-11-01",
+  "defaultModel": "DashScope",
   "agentRouting": [
     {
       "agent": "Writer",
@@ -45,6 +45,12 @@
       "status": "connected",
       "apiKey": "sk-078807a1fb8e4a81b10feb67864d4880",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    {
+      "name": "deepseek",
+      "status": "connected",
+      "apiKey": "sk-ed13a5144a484bc0895976ba8434b561",
+      "baseUrl": "https://api.deepseek.com"
     }
   ],
   "notifications": {

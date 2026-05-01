@@ -11,10 +11,11 @@ import { ClaudeProvider } from './claude-provider';
 import { OllamaProvider } from './ollama-provider';
 import { DashScopeProvider } from './dashscope-provider';
 import { GeminiProvider } from './gemini-provider';
+import { DeepSeekProvider } from './deepseek-provider';
 
 // ─── Routing Config ────────────────────────────────────────────
 
-export type ProviderType = 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini';
+export type ProviderType = 'openai' | 'claude' | 'ollama' | 'dashscope' | 'gemini' | 'deepseek';
 
 export interface AgentRoute {
   agent: string;
@@ -129,6 +130,8 @@ export class RoutedLLMProvider extends LLMProvider {
         return new DashScopeProvider(entry.config);
       case 'gemini':
         return new GeminiProvider(entry.config);
+      case 'deepseek':
+        return new DeepSeekProvider(entry.config);
       case 'openai':
       default:
         return new OpenAICompatibleProvider(entry.config);
@@ -156,7 +159,7 @@ export class RoutedLLMProvider extends LLMProvider {
    * Excludes providers in cooldown due to recent failures.
    */
   resolveProvider(
-    agentName?: string
+    agentName?: string,
   ): { provider: LLMProvider; model: string; providerName: string } | null {
     const route = this.findRoute(agentName);
 
@@ -335,7 +338,7 @@ export class RoutedLLMProvider extends LLMProvider {
         } catch (fallbackError) {
           this.recordFailure(fallback.providerName);
           const combinedError = new Error(
-            `Stream failed: primary (${resolved.providerName}): ${primaryError instanceof Error ? primaryError.message : String(primaryError)}; fallback (${fallback.providerName}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+            `Stream failed: primary (${resolved.providerName}): ${primaryError instanceof Error ? primaryError.message : String(primaryError)}; fallback (${fallback.providerName}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
           );
           throw combinedError;
         }
@@ -360,9 +363,9 @@ export class RoutedLLMProvider extends LLMProvider {
     return Array.from(
       new Set(
         [normalized, baseName, AGENT_ROLE_ALIASES[normalized], AGENT_ROLE_ALIASES[baseName]].filter(
-          (candidate): candidate is string => Boolean(candidate)
-        )
-      )
+          (candidate): candidate is string => Boolean(candidate),
+        ),
+      ),
     );
   }
 
@@ -373,7 +376,7 @@ export class RoutedLLMProvider extends LLMProvider {
     }
 
     return this.routing.agentRouting.find((route) =>
-      candidates.includes(route.agent.trim().toLowerCase())
+      candidates.includes(route.agent.trim().toLowerCase()),
     );
   }
 
@@ -399,6 +402,9 @@ export class RoutedLLMProvider extends LLMProvider {
         break;
       case 'gemini':
         provider = new GeminiProvider({ ...baseConfig, model });
+        break;
+      case 'deepseek':
+        provider = new DeepSeekProvider({ ...baseConfig, model });
         break;
       case 'openai':
       default:
@@ -438,11 +444,11 @@ export class RoutedLLMProvider extends LLMProvider {
   }
 
   private findFallbackProvider(
-    exclude?: string
+    exclude?: string,
   ): { provider: LLMProvider; model: string; providerName: string } | null {
     const available = this.routing.providers
       .filter(
-        (e) => e.name !== exclude && e.status !== 'disconnected' && !this.isInCooldown(e.name)
+        (e) => e.name !== exclude && e.status !== 'disconnected' && !this.isInCooldown(e.name),
       )
       .sort((a, b) => {
         const repA = this.reputations.get(a.name)?.score ?? 0;

@@ -119,9 +119,9 @@ export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void
         createdAt: book.createdAt,
       },
       null,
-      2
+      2,
     ),
-    'utf-8'
+    'utf-8',
   );
 
   manager.writeIndex(book.id, {
@@ -139,7 +139,7 @@ export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void
   ProjectionRenderer.writeProjectionFiles(
     manifest,
     manager.getBookPath(book.id, 'story', 'state'),
-    []
+    [],
   );
 }
 
@@ -174,9 +174,9 @@ export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
           typeof currentMeta.synopsis === 'string' ? currentMeta.synopsis : (book.brief ?? ''),
       },
       null,
-      2
+      2,
     ),
-    'utf-8'
+    'utf-8',
   );
 }
 
@@ -192,8 +192,13 @@ export function readStudioBookRuntime(bookId: string): StudioRuntimeBookRecord |
   if (!fs.existsSync(bookPath)) {
     return null;
   }
-  const book = JSON.parse(fs.readFileSync(bookPath, 'utf-8')) as StudioRuntimeBookRecord;
-  return syncBookRuntimeWithIndex(book);
+  try {
+    const book = JSON.parse(fs.readFileSync(bookPath, 'utf-8')) as StudioRuntimeBookRecord;
+    return syncBookRuntimeWithIndex(book);
+  } catch (err) {
+    console.warn(`[book-repository] Failed to read or parse book.json for ${bookId}:`, err);
+    return null;
+  }
 }
 
 export function listStudioBookRuntimes(): StudioRuntimeBookRecord[] {
@@ -202,9 +207,9 @@ export function listStudioBookRuntimes(): StudioRuntimeBookRecord[] {
     .filter((entry: RuntimeDirectoryEntry) => entry.isDirectory())
     .map((entry: RuntimeDirectoryEntry) => readStudioBookRuntime(entry.name))
     .filter(
-      (book: StudioRuntimeBookRecord | null): book is StudioRuntimeBookRecord => book !== null
+      (book: StudioRuntimeBookRecord | null): book is StudioRuntimeBookRecord => book !== null,
     )
     .sort((left: StudioRuntimeBookRecord, right: StudioRuntimeBookRecord) =>
-      right.updatedAt.localeCompare(left.updatedAt)
+      right.updatedAt.localeCompare(left.updatedAt),
     );
 }

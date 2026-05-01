@@ -7,5 +7,6 @@ export * from './detection-runner';
 export * from './atomic-ops';
 export * from './restructurer';
 export * from './revision-loop';
+export * from './review-cycle';
 export * from './truth-validation';
 export * from './telemetry';

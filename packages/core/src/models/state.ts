@@ -101,7 +101,7 @@ export const ChapterPlanStoreSchema = z.object({
       description: z.string(),
       type: z.string(),
       priority: z.string(),
-    })
+    }),
   ),
   worldRules: z.array(z.string()),
   emotionalBeat: z.string(),
@@ -186,7 +186,7 @@ export const DeltaSchema = z.object({
     z.object({
       type: DeltaActionSchema,
       payload: z.record(z.string(), z.unknown()),
-    })
+    }),
   ),
   sourceAgent: z.string().optional(),
   sourceChapter: z.number().int().positive().optional(),
@@ -205,6 +205,56 @@ export const BookLockSchema = z.object({
 });
 
 export type BookLock = z.infer<typeof BookLockSchema>;
+
+// ─── Chapter Summary Schemas ────────────────────────────────────
+
+export const StateChangeEntrySchema = z.object({
+  name: z.string(),
+  change: z.string(),
+});
+
+export const RelationshipChangeEntrySchema = z.object({
+  pair: z.string(),
+  change: z.string(),
+});
+
+export const WorldChangeEntrySchema = z.object({
+  item: z.string(),
+  change: z.string(),
+});
+
+export const StateChangesSchema = z.object({
+  characters: z.array(StateChangeEntrySchema).default([]),
+  relationships: z.array(RelationshipChangeEntrySchema).default([]),
+  world: z.array(WorldChangeEntrySchema).default([]),
+});
+
+export type StateChanges = z.infer<typeof StateChangesSchema>;
+
+export const ChapterSummaryRecordSchema = z.object({
+  chapter: z.number().int().positive(),
+  briefSummary: z.string(),
+  detailedSummary: z.string(),
+  keyEvents: z.array(z.string()).default([]),
+  stateChanges: StateChangesSchema.nullable().default(null),
+  emotionalArc: z.string().nullable().default(null),
+  cliffhanger: z.string().nullable().default(null),
+  hookImpact: z.array(z.string()).nullable().default(null),
+  consistencyScore: z.number().int().min(0).max(100).default(0),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+});
+
+export type ChapterSummaryRecord = z.infer<typeof ChapterSummaryRecordSchema>;
+
+export const ChapterSummaryArchiveSchema = z.object({
+  bookId: z.string(),
+  summaries: z.array(ChapterSummaryRecordSchema).default([]),
+  arcSummaries: z.record(z.string(), z.string()).default({}),
+  lastUpdated: z.string().datetime(),
+});
+
+export type ChapterSummaryArchive = z.infer<typeof ChapterSummaryArchiveSchema>;
 
 // ─── Re-exports from chapter ───────────────────────────────────
 

@@ -4,6 +4,9 @@ import { hasStudioBookRuntime, readStudioBookRuntime } from '../core-bridge';
 import { getRequestContext } from '../context';
 import { eventHub } from '../sse';
 import { normalizeGenreForAgents } from '../../utils';
+import { DeterministicProvider } from '../../llm/deterministic-provider';
+import { getStudioRuntimeRootDir } from '../../runtime/runtime-config';
+import { PipelineRunner } from '@cybernovelist/core/pipeline';
 import {
   pipelineStore,
   createPipelineEntry,
@@ -63,14 +66,14 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
     const pipelineId = createPipelineEntry();
     const userIntent = mergeIntentWithBookContext(
       bookId,
       result.data.userIntent ?? result.data.customIntent,
-      `推进第 ${result.data.chapterNumber} 章主线`
+      `推进第 ${result.data.chapterNumber} 章主线`,
     );
 
     eventHub.sendEvent(bookId, 'pipeline_progress', {
@@ -127,7 +130,7 @@ export function createPipelineRouter(): Hono {
           stages: ['planning', 'composing', 'writing', 'auditing', 'revising', 'persisting'],
         },
       },
-      202
+      202,
     );
   });
 
@@ -143,13 +146,13 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
     const book = readStudioBookRuntime(bookId);
     const chapterNumber = resolveFastDraftChapterNumber(bookId);
-    const draft = await getRequestContext(c).runner.writeFastDraft({
+    const draftInput = {
       bookId,
       chapterNumber,
       title: `第 ${chapterNumber} 章`,
@@ -157,10 +160,33 @@ export function createPipelineRouter(): Hono {
       sceneDescription: mergeIntentWithBookContext(
         bookId,
         result.data.customIntent,
-        '快速试写当前主线'
+        '快速试写当前主线',
       ),
       bookContext: buildBookContextFromManifest(bookId),
-    });
+    };
+
+    let draft = await getRequestContext(c).runner.writeFastDraft(draftInput);
+    let isFallback = false;
+
+    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
+    if (!draft.success) {
+      console.warn(
+        `[fast-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
+      );
+      const fallbackRunner = new PipelineRunner({
+        rootDir: getStudioRuntimeRootDir(),
+        provider: new DeterministicProvider(),
+      });
+      draft = await fallbackRunner.writeFastDraft(draftInput);
+      isFallback = true;
+    }
+
+    if (!draft.success) {
+      return c.json(
+        { error: { code: 'DRAFT_FAILED', message: draft.error ?? '快速试写失败' } },
+        400,
+      );
+    }
 
     return c.json({
       data: {
@@ -169,6 +195,7 @@ export function createPipelineRouter(): Hono {
         elapsedMs: draft.usage?.totalTokens ?? 0,
         llmCalls: 1,
         draftId: `draft-temp-${Date.now()}`,
+        ...(isFallback ? { _fallback: true } : {}),
       },
     });
   });
@@ -185,7 +212,7 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
     const pipelineId = createPipelineEntry();
@@ -236,19 +263,35 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
     const book = readStudioBookRuntime(bookId);
-    const draft = await getRequestContext(c).runner.writeDraft({
+    const draftInput = {
       bookId,
       chapterNumber: result.data.chapterNumber,
       title: `第 ${result.data.chapterNumber} 章`,
       genre: normalizeGenreForAgents(book?.genre),
       sceneDescription: mergeIntentWithBookContext(bookId, undefined, '草稿模式推进主线'),
       bookContext: buildBookContextFromManifest(bookId),
-    });
+    };
+
+    let draft = await getRequestContext(c).runner.writeDraft(draftInput);
+    let isFallback = false;
+
+    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
+    if (!draft.success) {
+      console.warn(
+        `[write-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
+      );
+      const fallbackRunner = new PipelineRunner({
+        rootDir: getStudioRuntimeRootDir(),
+        provider: new DeterministicProvider(),
+      });
+      draft = await fallbackRunner.writeDraft(draftInput);
+      isFallback = true;
+    }
 
     if (!draft.success) {
       return c.json(
@@ -258,7 +301,7 @@ export function createPipelineRouter(): Hono {
             message: draft.error ?? '草稿模式失败',
           },
         },
-        500
+        400,
       );
     }
 
@@ -272,6 +315,7 @@ export function createPipelineRouter(): Hono {
         qualityScore: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        ...(isFallback ? { _fallback: true } : {}),
       },
     });
   });
@@ -288,22 +332,38 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
-    const { runner } = getRequestContext(c);
-    const planResult = await runner.planChapter({
+    const planInput = {
       bookId,
       chapterNumber: result.data.chapterNumber,
       outlineContext: mergeOutlineContextWithBookContext(bookId, result.data.outlineContext),
-    });
+    };
 
+    const { runner } = getRequestContext(c);
+    let planResult = await runner.planChapter(planInput);
+    let isFallback = false;
+
+    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
     if (!planResult.success) {
-      return c.json({ error: { code: 'PLAN_FAILED', message: planResult.error } }, 500);
+      console.warn(
+        `[plan-chapter] Primary provider failed (${planResult.error}), falling back to deterministic.`,
+      );
+      const fallbackRunner = new PipelineRunner({
+        rootDir: getStudioRuntimeRootDir(),
+        provider: new DeterministicProvider(),
+      });
+      planResult = await fallbackRunner.planChapter(planInput);
+      isFallback = true;
     }
 
-    return c.json({ data: planResult });
+    if (!planResult.success) {
+      return c.json({ error: { code: 'PLAN_FAILED', message: planResult.error } }, 400);
+    }
+
+    return c.json({ data: isFallback ? { ...planResult, _fallback: true } : planResult });
   });
 
   // POST /api/books/:bookId/pipeline/bootstrap-story
@@ -318,7 +378,7 @@ export function createPipelineRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
@@ -328,15 +388,40 @@ export function createPipelineRouter(): Hono {
       const { provider } = getRequestContext(c);
       const bootstrapResult = await buildStoryBootstrap(bookId, chapterNumber, provider);
 
+      // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
       if ('error' in bootstrapResult) {
-        return c.json({ error: { code: 'BOOTSTRAP_FAILED', message: bootstrapResult.error } }, 400);
+        console.warn(
+          `[bootstrap-story] Primary provider failed (${bootstrapResult.error}), falling back to deterministic.`,
+        );
+        const fallback = new DeterministicProvider();
+        const fallbackResult = await buildStoryBootstrap(bookId, chapterNumber, fallback);
+        if ('error' in fallbackResult) {
+          return c.json(
+            { error: { code: 'BOOTSTRAP_FAILED', message: fallbackResult.error } },
+            400,
+          );
+        }
+        return c.json({ data: { ...fallbackResult, _fallback: true } });
       }
 
       return c.json({ data: bootstrapResult });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[bootstrap-story] unhandled error:', message);
-      return c.json({ error: { code: 'INTERNAL_ERROR', message } }, 500);
+      // 即使抛异常也尝试降级
+      try {
+        const fallback = new DeterministicProvider();
+        const fallbackResult = await buildStoryBootstrap(bookId, chapterNumber, fallback);
+        if ('error' in fallbackResult) {
+          return c.json(
+            { error: { code: 'BOOTSTRAP_FAILED', message: fallbackResult.error } },
+            400,
+          );
+        }
+        return c.json({ data: { ...fallbackResult, _fallback: true } });
+      } catch {
+        return c.json({ error: { code: 'INTERNAL_ERROR', message } }, 500);
+      }
     }
   });
 

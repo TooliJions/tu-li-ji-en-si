@@ -19,18 +19,27 @@ function getChapterContent(runtimeRoot: string, bookId: string, chapterNumber: n
   return fs.readFileSync(filePath, 'utf-8');
 }
 
-function getChapterTitle(runtimeRoot: string, bookId: string, chapterNumber: number): string {
-  const indexPath = path.join(runtimeRoot, bookId, 'story', 'state', 'index.json');
-  if (!fs.existsSync(indexPath)) return `第${chapterNumber}章`;
-  try {
-    const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
-      chapters?: Array<{ number: number; title: string | null }>;
-    };
-    const ch = index.chapters?.find((c) => c.number === chapterNumber);
-    return ch?.title ?? `第${chapterNumber}章`;
-  } catch {
-    return `第${chapterNumber}章`;
-  }
+function getChapterTitle(
+  runtimeRoot: string,
+  bookId: string,
+  chapterNumber: number,
+  preloadedIndex?: { chapters?: Array<{ number: number; title: string | null }> } | null,
+): string {
+  const index =
+    preloadedIndex ??
+    (() => {
+      const indexPath = path.join(runtimeRoot, bookId, 'story', 'state', 'index.json');
+      if (!fs.existsSync(indexPath)) return null;
+      try {
+        return JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+          chapters?: Array<{ number: number; title: string | null }>;
+        };
+      } catch {
+        return null;
+      }
+    })();
+  const ch = index?.chapters?.find((c) => c.number === chapterNumber);
+  return ch?.title ?? `第${chapterNumber}章`;
 }
 
 function getBookMeta(runtimeRoot: string, bookId: string): { title: string; author: string } {
@@ -50,39 +59,35 @@ function getBookMeta(runtimeRoot: string, bookId: string): { title: string; auth
   }
 }
 
-function getChapterNumbers(
-  runtimeRoot: string,
-  bookId: string,
-  range?: { from: number; to: number }
-): number[] {
-  const indexPath = path.join(runtimeRoot, bookId, 'story', 'state', 'index.json');
-  if (!fs.existsSync(indexPath)) return [];
-  try {
-    const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
-      chapters?: Array<{ number: number }>;
-    };
-    return (index.chapters ?? [])
-      .filter((ch) => {
-        if (!range) return true;
-        return ch.number >= range.from && ch.number <= range.to;
-      })
-      .map((ch) => ch.number)
-      .sort((a, b) => a - b);
-  } catch {
-    return [];
-  }
-}
-
 function collectChapters(
   runtimeRoot: string,
   bookId: string,
-  range?: { from: number; to: number }
+  range?: { from: number; to: number },
 ) {
-  const chapterNumbers = getChapterNumbers(runtimeRoot, bookId, range);
+  const indexPath = path.join(runtimeRoot, bookId, 'story', 'state', 'index.json');
+  let preloadedIndex: { chapters?: Array<{ number: number; title: string | null }> } | null = null;
+  if (fs.existsSync(indexPath)) {
+    try {
+      preloadedIndex = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+        chapters?: Array<{ number: number; title: string | null }>;
+      };
+    } catch {
+      // 忽略损坏的index文件，降级为空列表
+    }
+  }
+
+  const chapterNumbers = (preloadedIndex?.chapters ?? [])
+    .filter((ch) => {
+      if (!range) return true;
+      return ch.number >= range.from && ch.number <= range.to;
+    })
+    .map((ch) => ch.number)
+    .sort((a, b) => a - b);
+
   const meta = getBookMeta(runtimeRoot, bookId);
   const chapters = chapterNumbers.map((num) => ({
     number: num,
-    title: getChapterTitle(runtimeRoot, bookId, num),
+    title: getChapterTitle(runtimeRoot, bookId, num, preloadedIndex),
     content: getChapterContent(runtimeRoot, bookId, num),
   }));
   return { meta, chapters };
@@ -102,7 +107,7 @@ async function dispatchExport(
     json: (data: unknown, status?: number) => Response;
     body: (data: Uint8Array, status?: number, headers?: Record<string, string>) => Response;
   },
-  runtimeRoot: string
+  runtimeRoot: string,
 ) {
   const bookId = c.req.param('bookId');
   if (!bookId) return c.json({ error: '缺少 bookId' }, 400);

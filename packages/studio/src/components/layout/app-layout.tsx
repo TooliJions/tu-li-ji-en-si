@@ -4,10 +4,6 @@ import { fetchBook, fetchBooks } from '../../lib/api';
 import Sidebar, { type SidebarBook } from './sidebar';
 import Header from './header';
 
-interface AppLayoutProps {
-  rightPanel?: React.ReactNode;
-}
-
 function getRequestedBookId(pathname: string, search: string) {
   const params = new URLSearchParams(search);
   const searchBookId = params.get('bookId');
@@ -28,9 +24,8 @@ function getRequestedBookId(pathname: string, search: string) {
   return '';
 }
 
-export default function AppLayout({ rightPanel }: AppLayoutProps) {
+export default function AppLayout() {
   const location = useLocation();
-  const isWritingPage = location.pathname.startsWith('/writing');
   const [currentBook, setCurrentBook] = useState<SidebarBook | null>(null);
 
   useEffect(() => {
@@ -66,25 +61,6 @@ export default function AppLayout({ rightPanel }: AppLayoutProps) {
     };
   }, [location.pathname, location.search]);
 
-  // Writing pages render full-width with no right panel for focused writing.
-  // Non-writing pages get a default info panel unless overridden by `rightPanel`.
-  const defaultPanel = rightPanel ?? (
-    <div className="p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold mb-2">当前工作区</h3>
-        <p className="text-xs text-muted-foreground">{location.pathname}</p>
-      </div>
-      <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold mb-2">属性 / 状态 / 质量</h3>
-        <p className="text-xs text-muted-foreground">暂无数据</p>
-      </div>
-      <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold mb-2">日志输出</h3>
-        <p className="text-xs text-muted-foreground">无新日志</p>
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex h-screen">
       <Sidebar currentBook={currentBook} />
@@ -94,15 +70,6 @@ export default function AppLayout({ rightPanel }: AppLayoutProps) {
           <Outlet />
         </main>
       </div>
-      {/* 右侧面板 - 320px 固定宽度 (writing pages get no panel) */}
-      {!isWritingPage && (
-        <aside
-          className="border-l bg-card overflow-auto"
-          style={{ width: 320, minWidth: 320, maxWidth: 320 }}
-        >
-          {defaultPanel}
-        </aside>
-      )}
     </div>
   );
 }

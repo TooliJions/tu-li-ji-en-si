@@ -32,7 +32,7 @@ function getChapterAuditPath(bookId: string, chapterNumber: number): string {
     'story',
     'state',
     'audits',
-    `chapter-${padded}.json`
+    `chapter-${padded}.json`,
   );
 }
 
@@ -62,7 +62,7 @@ function readManifest(bookId: string): Manifest | null {
     bookId,
     'story',
     'state',
-    'manifest.json'
+    'manifest.json',
   );
   if (!fs.existsSync(manifestPath)) return null;
   try {
@@ -102,7 +102,7 @@ function readChapterQualityAnalytics(bookId: string) {
           timestamp: chapter.createdAt,
         };
       })
-      .filter((chapter): chapter is NonNullable<typeof chapter> => chapter !== null)
+      .filter((chapter): chapter is NonNullable<typeof chapter> => chapter !== null),
   );
 }
 
@@ -176,21 +176,32 @@ const EMOTION_KEYWORDS: Record<EmotionType, string[]> = {
   anticipation: ['期待', '盼望', '期望', '等候', '等待', '盼望', '憧憬', '盼望', '渴望', '期盼'],
 };
 
+const EMOTION_REGEX_CACHE = new Map<EmotionType, RegExp[]>();
+
+function getEmotionRegexps(emotion: EmotionType): RegExp[] {
+  if (!EMOTION_REGEX_CACHE.has(emotion)) {
+    const regexps = EMOTION_KEYWORDS[emotion].map(
+      (kw) => new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+    );
+    EMOTION_REGEX_CACHE.set(emotion, regexps);
+  }
+  return EMOTION_REGEX_CACHE.get(emotion)!;
+}
+
 function computeEmotionsFromText(text: string): Partial<Record<EmotionType, number>> {
   const emotionScores: Partial<Record<EmotionType, number>> = {};
   const totalWords = text.length;
   if (totalWords === 0) return emotionScores;
 
-  for (const [emotion, keywords] of Object.entries(EMOTION_KEYWORDS)) {
+  for (const emotion of Object.keys(EMOTION_KEYWORDS) as EmotionType[]) {
     let hits = 0;
-    for (const kw of keywords) {
-      const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    for (const re of getEmotionRegexps(emotion)) {
       const matches = text.match(re);
       if (matches) hits += matches.length;
     }
     // Normalize: raw hits / total_chars, capped at 0.5 per emotion to prevent dominance
     const raw = hits / (totalWords / 100); // hits per 100 chars
-    emotionScores[emotion as EmotionType] = Math.min(raw * 0.15, 0.5);
+    emotionScores[emotion] = Math.min(raw * 0.15, 0.5);
   }
 
   // Normalize to sum to ~1.0 if any emotions detected
@@ -515,7 +526,7 @@ ${contentForPrompt}
             characteristics: s.characteristics,
           };
         }
-      })
+      }),
     );
 
     const generationTime = (Date.now() - start) / 1000;
@@ -543,7 +554,7 @@ ${contentForPrompt}
     if (!alternativeId || !text) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: '缺少 alternativeId 或 text' } },
-        400
+        400,
       );
     }
 
@@ -637,22 +648,28 @@ ${contentForPrompt}
       return c.json({ data: { characters: [], alerts: [] } });
     }
 
+    // 预计算每章情感，避免 O(characters × chapters) 的重复文件读取与正则计算
+    const chapterEmotions = new Map<number, Partial<Record<EmotionType, number>>>();
+    for (const chNum of chaptersWithContent) {
+      const content = readChapterContent(bookId, chNum);
+      if (!content) continue;
+      const emotions = computeEmotionsFromText(content);
+      if (Object.keys(emotions).length > 0) {
+        chapterEmotions.set(chNum, emotions);
+      }
+    }
+
     // Build snapshots per character per chapter
     const snapshots: EmotionalSnapshot[] = [];
+    const now = new Date().toISOString();
 
     for (const character of manifest.characters) {
-      for (const chNum of chaptersWithContent) {
-        const content = readChapterContent(bookId, chNum);
-        if (!content) continue;
-
-        const emotions = computeEmotionsFromText(content);
-        if (Object.keys(emotions).length === 0) continue;
-
+      for (const [chNum, emotions] of chapterEmotions) {
         snapshots.push({
           chapterNumber: chNum,
           character: character.name,
           emotions,
-          timestamp: new Date().toISOString(),
+          timestamp: now,
         });
       }
     }

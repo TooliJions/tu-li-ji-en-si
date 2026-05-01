@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const GENRE_OPTIONS = ['都市', '玄幻', '科幻', '仙侠', '历史', '悬疑', '游戏', '同人', '其他'];
@@ -106,6 +106,8 @@ export default function BookCreate() {
   const [platform, setPlatform] = useState('qidian');
   const [targetWordsPerChapter, setTargetWordsPerChapter] = useState(3000);
   const [totalWordsOverride, setTotalWordsOverride] = useState<number | null>(null);
+  // 用字符串状态跟踪输入框，避免受控数字组件吞掉小数点/清空内容
+  const [targetWordsWan, setTargetWordsWan] = useState('30');
   const [promptVersion, setPromptVersion] = useState('v2');
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     useGlobalDefaults: true,
@@ -124,6 +126,16 @@ export default function BookCreate() {
   // 总字数 = 用户手动覆盖 > brief 提取 > 默认 30 万字
   const targetWords = totalWordsOverride ?? briefTargetWords ?? 300000;
   const targetChapterCount = Math.max(1, Math.ceil(targetWords / targetWordsPerChapter));
+
+  // 同步输入框显示值
+  useEffect(() => {
+    if (totalWordsOverride !== null) {
+      setTargetWordsWan(String(totalWordsOverride / 10000));
+    } else {
+      const wan = (briefTargetWords ?? 300000) / 10000;
+      setTargetWordsWan(String(wan));
+    }
+  }, [totalWordsOverride, briefTargetWords]);
 
   // 格式化总字数显示
   function formatWords(w: number): string {
@@ -190,7 +202,7 @@ export default function BookCreate() {
       navigate(
         brief.trim()
           ? `/writing-plan?bookId=${data.data.id}&autoBootstrap=1&autoWrite=1`
-          : `/book/${data.data.id}`
+          : `/book/${data.data.id}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
@@ -318,24 +330,26 @@ export default function BookCreate() {
                 <input
                   id="target-total-words"
                   aria-label="目标总字数（万字）"
-                  type="number"
-                  min={1}
-                  step={10}
-                  value={
-                    totalWordsOverride !== null
-                      ? totalWordsOverride / 10000
-                      : (briefTargetWords ?? 300000) / 10000
-                  }
+                  type="text"
+                  inputMode="decimal"
+                  value={targetWordsWan}
                   onChange={(e) => {
-                    const wan = Number(e.target.value);
+                    const raw = e.target.value;
+                    // 只允许数字和最多一个小数点
+                    if (!/^\d*\.?\d*$/.test(raw)) return;
+                    setTargetWordsWan(raw);
+                    const wan = raw === '' || raw === '.' ? 0 : Number(raw);
                     if (wan > 0) {
-                      setTotalWordsOverride(wan * 10000);
+                      setTotalWordsOverride(Math.round(wan * 10000));
                     } else {
                       setTotalWordsOverride(null);
                     }
                   }}
                   className="w-full px-3 py-2 border rounded-md bg-background"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  对应 {formatWords(targetWords)}字
+                </p>
                 {briefTargetWords && totalWordsOverride === null && (
                   <p className="text-xs text-muted-foreground mt-1">
                     从创作简报自动识别：{formatWords(briefTargetWords)}字

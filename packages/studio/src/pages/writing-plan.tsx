@@ -128,7 +128,7 @@ function loadStoredPlans(bookId: string): Record<number, ChapterPlan> {
     return Object.fromEntries(
       Object.entries(parsed)
         .map(([chapterNumber, plan]) => [Number(chapterNumber), plan])
-        .filter(([chapterNumber, plan]) => Number.isFinite(chapterNumber) && plan)
+        .filter(([chapterNumber, plan]) => Number.isFinite(chapterNumber) && plan),
     );
   } catch {
     return {};
@@ -172,7 +172,7 @@ function truncateSummary(value: string, maxLength = 32): string {
 
 function normalizePlanningSources(
   book: Book | null,
-  manifest: PlanningManifest | null
+  manifest: PlanningManifest | null,
 ): PlanningSources {
   return {
     brief: (book?.brief ?? '').trim(),
@@ -186,7 +186,7 @@ function normalizePlanningSources(
     hooks: (manifest?.hooks ?? [])
       .filter(
         (hook) =>
-          !hook?.status || ['open', 'progressing', 'deferred', 'dormant'].includes(hook.status)
+          !hook?.status || ['open', 'progressing', 'deferred', 'dormant'].includes(hook.status),
       )
       .map((hook) => (hook?.description ?? '').trim())
       .filter(Boolean),
@@ -246,8 +246,11 @@ export default function WritingPlan() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const bookId = searchParams.get('bookId') ?? '';
-  const autoBootstrap = searchParams.get('autoBootstrap') === '1';
+  const autoBootstrapRaw = searchParams.get('autoBootstrap') === '1';
   const autoWrite = searchParams.get('autoWrite') === '1';
+  // 用 sessionStorage 记住本 session 已经自动触发过 bootstrap 的书，避免刷新反复 400
+  const autoBootstrapKey = `autoBootstrap:${bookId}`;
+  const autoBootstrap = autoBootstrapRaw && !sessionStorage.getItem(autoBootstrapKey);
 
   const [book, setBook] = useState<Book | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -293,8 +296,8 @@ export default function WritingPlan() {
         setPlanningSources(
           normalizePlanningSources(
             bookData,
-            (manifestData as { content?: PlanningManifest } | null)?.content ?? null
-          )
+            (manifestData as { content?: PlanningManifest } | null)?.content ?? null,
+          ),
         );
         setSelectedChapter(lastPublishedChapter ? lastPublishedChapter.number + 1 : 1);
       })
@@ -310,15 +313,15 @@ export default function WritingPlan() {
   const totalSlots = Math.max(
     book?.targetChapterCount ?? 0,
     selectedChapter + 2,
-    chapters.length + 3
+    chapters.length + 3,
   );
   const chapterWindow = useMemo(
     () => buildChapterWindow(selectedChapter, totalSlots),
-    [selectedChapter, totalSlots]
+    [selectedChapter, totalSlots],
   );
   const chapterMap = useMemo(
     () => new Map(chapters.map((chapter) => [chapter.number, chapter])),
-    [chapters]
+    [chapters],
   );
   const volumeMeta = getVolumeMeta(selectedChapter);
   const stepSummaries = useMemo(
@@ -340,7 +343,7 @@ export default function WritingPlan() {
       5: '基于以上设定进入正文创作',
       6: '规划完成后可交给守护进程续写',
     }),
-    [currentPlan.goal, currentPlan.title, planningSources]
+    [currentPlan.goal, currentPlan.title, planningSources],
   );
   const completedSteps = useMemo(
     () => ({
@@ -349,7 +352,7 @@ export default function WritingPlan() {
       3: planningSources.characters.length > 0,
       4: !isPlanEmpty(currentPlan),
     }),
-    [currentPlan, planningSources]
+    [currentPlan, planningSources],
   );
 
   useEffect(() => {
@@ -364,12 +367,13 @@ export default function WritingPlan() {
     }
 
     autoBootstrapTriggeredRef.current = true;
+    sessionStorage.setItem(autoBootstrapKey, '1');
     setAiLoading(true);
     setAiError(null);
 
     void bootstrapStory(bookId, selectedChapter)
       .then((result) => {
-        const bootstrap = result as BootstrapStoryResponse;
+        const bootstrap = result as BootstrapStoryResponse & { _fallback?: boolean };
         const plannedChapter = bootstrap.chapterPlan.chapterNumber || selectedChapter;
         const nextPlan: ChapterPlan = {
           chapterNumber: plannedChapter,
@@ -403,6 +407,12 @@ export default function WritingPlan() {
           return nextPlans;
         });
 
+        if (bootstrap._fallback) {
+          setSaveNotice(
+            '⚠ 当前使用演示模式生成规划（LLM 未配置或配置有误）。如需真实创作，请先前往「设置」配置 API Key。',
+          );
+        }
+
         if (autoWrite) {
           const nextParams = buildWritingParams(bookId, nextPlan);
           nextParams.set('autoStart', '1');
@@ -411,6 +421,10 @@ export default function WritingPlan() {
       })
       .catch((error: unknown) => {
         setAiError(error instanceof Error ? error.message : '自动规划链启动失败');
+        // 失败时把 autoBootstrap 从 URL 移除，避免刷新再次触发
+        const nextSearch = new URLSearchParams(searchParams);
+        nextSearch.delete('autoBootstrap');
+        navigate({ search: nextSearch.toString() }, { replace: true });
       })
       .finally(() => {
         setAiLoading(false);
@@ -459,7 +473,7 @@ export default function WritingPlan() {
       const result = (await planChapter(
         bookId,
         selectedChapter,
-        outlineContext
+        outlineContext,
       )) as PlanChapterResponse;
       setPlans((previous) => ({
         ...previous,

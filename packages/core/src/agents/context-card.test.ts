@@ -451,4 +451,93 @@ describe('ContextCard', () => {
       expect(data.formattedText).toContain('仙侠');
     });
   });
+
+  // ── execute() — relevance scoring ─────────────────────────
+
+  describe('execute() — relevance scoring', () => {
+    it('sorts hooks by proximity to current chapter', async () => {
+      const sources: ContextDataSources = {
+        getManifest: vi.fn().mockResolvedValue({
+          characters: [],
+          hooks: [
+            {
+              id: 'h-old',
+              description: '很早埋设的伏笔',
+              type: 'narrative',
+              status: 'open',
+              priority: 'minor',
+              plantedChapter: 1,
+              relatedCharacters: [],
+              relatedChapters: [],
+              createdAt: '2026-01-01T00:00:00Z',
+              updatedAt: '2026-01-01T00:00:00Z',
+            },
+            {
+              id: 'h-new',
+              description: '最近埋设的伏笔',
+              type: 'plot',
+              status: 'progressing',
+              priority: 'critical',
+              plantedChapter: 9,
+              relatedCharacters: [],
+              relatedChapters: [],
+              createdAt: '2026-01-01T00:00:00Z',
+              updatedAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+          facts: [],
+          worldRules: [],
+        }),
+        getPreviousChapterSummary: vi.fn().mockResolvedValue(''),
+        getChapterContext: vi.fn().mockResolvedValue(''),
+      };
+
+      const result = await card.execute({
+        promptContext: {
+          input: { bookId: 'book-1', chapterNumber: 10, title: 'Test', genre: 'xianxia' },
+          sources,
+        },
+      });
+
+      const data = result.data as ContextCardOutput;
+      expect(data.hooks[0].id).toBe('h-new');
+      expect(data.hooks[1].id).toBe('h-old');
+    });
+
+    it('truncates hooks when token budget exceeded', async () => {
+      const manyHooks = Array.from({ length: 20 }, (_, i) => ({
+        id: `h-${i}`,
+        description: `这是一个非常长的伏笔描述，用于测试截断逻辑，确保当上下文超过 Token 预算时能够正确减少元素数量。伏笔编号 ${i}。`,
+        type: 'narrative',
+        status: 'open',
+        priority: 'major',
+        plantedChapter: i + 1,
+        relatedCharacters: [],
+        relatedChapters: [],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+
+      const sources: ContextDataSources = {
+        getManifest: vi.fn().mockResolvedValue({
+          characters: [],
+          hooks: manyHooks,
+          facts: [],
+          worldRules: [],
+        }),
+        getPreviousChapterSummary: vi.fn().mockResolvedValue(''),
+        getChapterContext: vi.fn().mockResolvedValue(''),
+      };
+
+      const result = await card.execute({
+        promptContext: {
+          input: { bookId: 'book-1', chapterNumber: 15, title: 'Test', genre: 'xianxia' },
+          sources,
+        },
+      });
+
+      const data = result.data as ContextCardOutput;
+      expect(data.hooks.length).toBeLessThan(20);
+    });
+  });
 });

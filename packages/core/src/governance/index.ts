@@ -13,9 +13,8 @@ export {
   type PayoffValidation,
   type HealthReport,
   type DormantResult,
-  type IntentResult,
-  type WakeResult as HookGovernanceWakeResult,
 } from './hook-governance';
+export { IntentDeclaration, type IntentResult, type WakeResult } from './intent-declaration';
 export * from './hook-admission';
 export * from './hook-arbiter';
 export * from './hook-lifecycle';

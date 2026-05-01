@@ -21,6 +21,7 @@ import {
   readChapterContent,
   checkWorldRules,
 } from '../runner-helpers';
+import { RuleStackCompiler } from '../../governance/rule-stack-compiler';
 
 // ─── Interfaces ──────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export class DefaultChapterComposer implements ChapterComposer {
       bookId: string,
       chapterNumber: number,
       channel: TelemetryChannel,
-      usage: UsageEntry | undefined
+      usage: UsageEntry | undefined,
     ): void {
       if (!usage) return;
       telemetryLogger.record(bookId, chapterNumber, channel, usage);
@@ -165,7 +166,33 @@ export class DefaultChapterComposer implements ChapterComposer {
       }
       const contextCard = contextCardData as ContextCardOutput;
 
-      // 1.5. 获取世界规则（PRD-014）
+      // 1.5. 编译规则栈并持久化（任务 4.8）
+      const ruleStackCompiler = new RuleStackCompiler();
+      const ruleStackResult = ruleStackCompiler.compile({
+        bookId: input.bookId,
+        genre: meta.genre,
+        chapterNumber: input.chapterNumber,
+        versionToken: manifest.versionToken || 1,
+      });
+
+      if (!ruleStackResult.error) {
+        const ruleStackYaml = ruleStackCompiler.generateRuleStackYaml(ruleStackResult);
+        const ruleStackPath = stateManager.getBookPath(
+          input.bookId,
+          'story',
+          'state',
+          'rule-stack.yaml',
+        );
+        fs.writeFileSync(ruleStackPath, ruleStackYaml, 'utf-8');
+
+        // 将编译后的规则约束融入上下文，供 Executor 参考
+        const ruleLines = ruleStackResult.rules.map((r) => `- ${r.reason}（${r.type}）`).join('\n');
+        if (ruleLines) {
+          contextCard.formattedText += `\n\n## 创作约束规则\n${ruleLines}\n`;
+        }
+      }
+
+      // 1.6. 获取世界规则（PRD-014）
       const worldRules = contextCard.worldRules ?? [];
 
       // 2. 获取章节计划：优先使用 manifest 中已存储的计划，否则通过 IntentDirector 生成
@@ -202,7 +229,7 @@ export class DefaultChapterComposer implements ChapterComposer {
               : typeof c.traits === 'string'
                 ? [c.traits]
                 : [],
-          })
+          }),
         );
 
         const intentInput: IntentInput = {
@@ -313,7 +340,7 @@ export class DefaultChapterComposer implements ChapterComposer {
         draftContent,
         input.chapterNumber,
         worldRules,
-        provider
+        provider,
       );
 
       // 5. ScenePolisher Agent — 场景润色

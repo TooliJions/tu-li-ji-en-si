@@ -8,7 +8,7 @@
  */
 export { countChineseWords, stripFrontmatter } from './utils/text';
 export { extractSection, extractChapterNumber } from './utils/prompt';
-export { isValidBookId, sanitizePathSegment } from './utils/validation';
+export { isValidBookId, assertSafeBookId, sanitizePathSegment } from './utils/validation';
 export { getNestedValue, safeParse, safeStringify } from './utils/json';
 export { dedupeByKey } from './utils/array';
 export {

@@ -73,12 +73,59 @@ function formatEventMessage(event: NotifyEvent): string {
   return `${header}${event.message}`;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────
+
+const NOTIFY_TIMEOUT_MS = 10000;
+const MAX_RETRIES = 3;
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  channel: string,
+): Promise<NotifyResult> {
+  let lastError: string | undefined;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NOTIFY_TIMEOUT_MS);
+
+    try {
+      const resp = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!resp.ok) {
+        lastError = `${channel} API ${resp.status}`;
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+          continue;
+        }
+        return { success: false, error: lastError, channel };
+      }
+      return { success: true, channel };
+    } catch (err: unknown) {
+      clearTimeout(timeout);
+      lastError = err instanceof Error ? err.message : String(err);
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+    }
+  }
+
+  console.error(`[notify] ${channel} 发送失败，已重试 ${MAX_RETRIES} 次: ${lastError}`);
+  return { success: false, error: lastError, channel };
+}
+
 // ─── Channel senders ────────────────────────────────────────────
 
 async function sendTelegram(config: TelegramConfig, text: string): Promise<NotifyResult> {
   const url = `https://api.telegram.org/bot${config.botToken}/sendMessage`;
-  try {
-    const resp = await fetch(url, {
+  return fetchWithRetry(
+    url,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -86,76 +133,51 @@ async function sendTelegram(config: TelegramConfig, text: string): Promise<Notif
         text,
         parse_mode: 'HTML',
       }),
-    });
-
-    if (!resp.ok) {
-      return { success: false, error: `Telegram API ${resp.status}`, channel: 'telegram' };
-    }
-    return { success: true, channel: 'telegram' };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg, channel: 'telegram' };
-  }
+    },
+    'telegram',
+  );
 }
 
 async function sendWebhook(config: WebhookConfig, event: NotifyEvent): Promise<NotifyResult> {
-  try {
-    const resp = await fetch(config.url, {
+  return fetchWithRetry(
+    config.url,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
-    });
-
-    if (!resp.ok) {
-      return { success: false, error: `Webhook ${resp.status}`, channel: 'webhook' };
-    }
-    return { success: true, channel: 'webhook' };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg, channel: 'webhook' };
-  }
+    },
+    'webhook',
+  );
 }
 
 async function sendFeishu(config: FeishuConfig, text: string): Promise<NotifyResult> {
-  try {
-    const resp = await fetch(config.webhookUrl, {
+  return fetchWithRetry(
+    config.webhookUrl,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         msg_type: 'text',
         content: { text },
       }),
-    });
-
-    if (!resp.ok) {
-      return { success: false, error: `Feishu API ${resp.status}`, channel: 'feishu' };
-    }
-    return { success: true, channel: 'feishu' };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg, channel: 'feishu' };
-  }
+    },
+    'feishu',
+  );
 }
 
 async function sendWeCom(config: WeComConfig, text: string): Promise<NotifyResult> {
-  try {
-    const resp = await fetch(config.webhookUrl, {
+  return fetchWithRetry(
+    config.webhookUrl,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         msgtype: 'text',
         text: { content: text },
       }),
-    });
-
-    if (!resp.ok) {
-      return { success: false, error: `WeCom API ${resp.status}`, channel: 'wecom' };
-    }
-    return { success: true, channel: 'wecom' };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg, channel: 'wecom' };
-  }
+    },
+    'wecom',
+  );
 }
 
 // ─── Dispatcher ─────────────────────────────────────────────────

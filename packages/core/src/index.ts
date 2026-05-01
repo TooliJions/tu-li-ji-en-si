@@ -9,6 +9,7 @@ export * from './llm/claude-provider';
 export * from './llm/ollama-provider';
 export * from './llm/dashscope-provider';
 export * from './llm/gemini-provider';
+export * from './llm/deepseek-provider';
 export * from './models/schemas';
 export * from './state/manager';
 export * from './state/runtime-store';
@@ -30,11 +31,8 @@ export {
   type InsertHookParams,
   type HookRecord,
 } from './state/memory-db';
-export {
-  ProjectionRenderer,
-  type ProjectionFile,
-  type ChapterSummaryRecord as ProjectionChapterSummaryRecord,
-} from './state/projections';
+export { ProjectionRenderer, type ProjectionFile } from './state/projections';
+export { type ChapterSummaryRecord as ProjectionChapterSummaryRecord } from './models/state';
 export {
   HookPolicy,
   type WakePolicy,
@@ -148,3 +146,12 @@ export * from './quality/ai-detector';
 export * from './quality/baseline';
 export * from './quality/analytics-aggregator';
 export * from './quality/emotional-arc-tracker';
+
+export * from './errors';
+
+// Workflow
+export * from './workflow/contracts';
+export * from './workflow/services';
+
+// Scheduler
+export * from './scheduler/task-queue';

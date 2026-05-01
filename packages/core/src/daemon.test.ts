@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DaemonScheduler, DaemonState } from './daemon';
 import * as notifyModule from './notify';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const FIXED_NOW = new Date('2026-04-19T08:00:00.000Z').getTime();
 
@@ -13,7 +15,7 @@ function makeFakePipelineRunner(
       warningCode?: string;
       usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     };
-  } = {}
+  } = {},
 ) {
   return {
     composeChapter: vi
@@ -33,7 +35,7 @@ function makeFakePipelineRunner(
               usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 },
             }
           );
-        }
+        },
       ),
   };
 }
@@ -42,6 +44,11 @@ describe('DaemonScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
+    // 清理配额持久化文件，避免测试间通过文件系统相互干扰
+    const quotaFile = path.join('/tmp/test', 'book-1', 'story', 'state', 'quota-usage.json');
+    if (fs.existsSync(quotaFile)) {
+      fs.unlinkSync(quotaFile);
+    }
   });
 
   afterEach(() => {
@@ -105,7 +112,7 @@ describe('DaemonScheduler', () => {
             bookId: 'book-1',
             rootDir: '/tmp/test',
             dailyTokenLimit: 0,
-          })
+          }),
       ).toThrow();
     });
   });
@@ -187,7 +194,7 @@ describe('DaemonScheduler', () => {
       await vi.advanceTimersByTimeAsync(200);
 
       expect(runner.composeChapter).toHaveBeenCalledWith(
-        expect.objectContaining({ bookId: 'book-1', chapterNumber: 3 })
+        expect.objectContaining({ bookId: 'book-1', chapterNumber: 3 }),
       );
     });
   });
@@ -630,7 +637,7 @@ describe('DaemonScheduler', () => {
 
       expect(
         scheduler.getStatus().state === DaemonState.Running ||
-          scheduler.getStatus().state === DaemonState.Stopped
+          scheduler.getStatus().state === DaemonState.Stopped,
       ).toBe(true);
 
       scheduler.stop();
@@ -677,7 +684,7 @@ describe('DaemonScheduler', () => {
 
       const events: Array<{ from: DaemonState; to: DaemonState }> = [];
       scheduler.on('state_change', (data) =>
-        events.push(data as { from: DaemonState; to: DaemonState })
+        events.push(data as { from: DaemonState; to: DaemonState }),
       );
 
       scheduler.start(runner);
@@ -780,7 +787,7 @@ describe('DaemonScheduler', () => {
         expect.objectContaining({
           type: 'daemon_start',
           message: '守护进程已启动',
-        })
+        }),
       );
 
       scheduler.stop();
@@ -805,7 +812,7 @@ describe('DaemonScheduler', () => {
         expect.objectContaining({
           type: 'chapter_complete',
           chapterNumber: 1,
-        })
+        }),
       );
 
       scheduler.stop();
@@ -830,7 +837,7 @@ describe('DaemonScheduler', () => {
       expect(mockNotifier.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'daemon_stop',
-        })
+        }),
       );
     });
 
@@ -858,7 +865,7 @@ describe('DaemonScheduler', () => {
       expect(mockNotifier.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'quota_exhausted',
-        })
+        }),
       );
     });
 
@@ -928,7 +935,7 @@ describe('DaemonScheduler', () => {
       expect(mockNotifier.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'max_fallbacks_reached',
-        })
+        }),
       );
 
       scheduler.stop();

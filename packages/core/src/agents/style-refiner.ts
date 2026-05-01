@@ -149,3 +149,6 @@ ${input.draftContent}
     return Math.min(Math.round(ratio * 80), 100);
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('style-refiner', (p) => new StyleRefiner(p));

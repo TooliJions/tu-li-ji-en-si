@@ -17,7 +17,7 @@ describe('SnapshotManager', () => {
 
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'test-snapshot-'));
-    dbPath = path.join(tmpDir, 'memory.db');
+    dbPath = path.join(tmpDir, bookId, 'story', 'state', 'memory.db');
 
     manager = new StateManager(tmpDir);
     manager.ensureBookStructure(bookId);
@@ -58,8 +58,8 @@ describe('SnapshotManager', () => {
       const snapManifest = JSON.parse(
         fs.readFileSync(
           path.join(tmpDir, bookId, 'story', 'state', 'snapshots', id, 'manifest.json'),
-          'utf-8'
-        )
+          'utf-8',
+        ),
       );
 
       expect(snapManifest.currentFocus).toBe('快照前状态');
@@ -71,8 +71,8 @@ describe('SnapshotManager', () => {
       const meta = JSON.parse(
         fs.readFileSync(
           path.join(tmpDir, bookId, 'story', 'state', 'snapshots', id, 'metadata.json'),
-          'utf-8'
-        )
+          'utf-8',
+        ),
       );
 
       expect(meta.bookId).toBe(bookId);
