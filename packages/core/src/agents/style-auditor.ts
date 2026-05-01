@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface StyleIssue {
   category:
@@ -39,6 +40,37 @@ export interface StyleAuditOutput {
   summary: string;
 }
 
+const StyleAuditOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          category: z.enum([
+            'dialogue-uniformity',
+            'tone-shift',
+            'sentence-monotony',
+            'style-drift',
+            'repetition',
+          ]),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          description: z.string(),
+          affected: z.array(z.string()),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    styleConsistency: z
+      .object({
+        dialogueConsistency: z.enum(['pass', 'warning', 'fail']),
+        narrativeTone: z.enum(['pass', 'warning', 'fail']),
+        sentenceVariety: z.enum(['pass', 'warning', 'fail']),
+      })
+      .passthrough(),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
+
 const GENRE_STYLE_CRITERIA: Record<string, string> = {
   xianxia: '仙侠：半文半白的对话风格、古朴雅致的叙述语调、诗意描写与战斗描写的风格切换',
   fantasy: '玄幻：史诗感叙述语调、种族语言差异化、魔法描写的视觉化风格',
@@ -69,7 +101,10 @@ export class StyleAuditor extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<StyleAuditOutput>(prompt);
+      const result = await this.generateJSONWithSchema<StyleAuditOutput>(
+        prompt,
+        StyleAuditOutputSchema,
+      );
 
       return {
         success: true,
@@ -162,3 +197,6 @@ severity 分级：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('style-auditor', (p) => new StyleAuditor(p));

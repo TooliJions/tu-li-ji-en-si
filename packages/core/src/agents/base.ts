@@ -1,4 +1,5 @@
 import type { LLMProvider, LLMRequest } from '../llm/provider';
+import { z } from 'zod';
 
 export interface AgentContext {
   bookId?: string;
@@ -35,7 +36,7 @@ export abstract class BaseAgent {
    */
   protected async generate(
     prompt: string,
-    options?: { temperature?: number; maxTokens?: number }
+    options?: { temperature?: number; maxTokens?: number },
   ): Promise<string> {
     const response = await this.provider.generate(this.#buildRequest(prompt, options));
     this.#lastUsage = response.usage;
@@ -47,9 +48,24 @@ export abstract class BaseAgent {
    */
   protected async generateJSON<T>(
     prompt: string,
-    options?: { temperature?: number; maxTokens?: number }
+    options?: { temperature?: number; maxTokens?: number },
   ): Promise<T> {
     return this.provider.generateJSON<T>(this.#buildRequest(prompt, options));
+  }
+
+  protected async generateJSONWithSchema<T>(
+    prompt: string,
+    schema: z.ZodType<T>,
+    options?: { temperature?: number; maxTokens?: number },
+  ): Promise<T> {
+    const raw = await this.provider.generateJSON<unknown>(this.#buildRequest(prompt, options));
+    const result = schema.safeParse(raw);
+    if (!result.success) {
+      throw new Error(
+        `LLM 响应校验失败 (${this.name}): ${result.error.issues.map((i) => i.message).join('; ')}`,
+      );
+    }
+    return result.data;
   }
 
   #lastUsage?: AgentResult['usage'];
@@ -63,7 +79,7 @@ export abstract class BaseAgent {
 
   #buildRequest(
     prompt: string,
-    options?: { temperature?: number; maxTokens?: number }
+    options?: { temperature?: number; maxTokens?: number },
   ): LLMRequest {
     return {
       prompt,

@@ -159,7 +159,7 @@ export class SessionRecovery {
     } catch (err) {
       console.warn(
         '[recovery] Failed to check process alive:',
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
       return false;
     }
@@ -187,7 +187,7 @@ export class SessionRecovery {
     } catch (err) {
       console.warn(
         `[recovery] Failed to read index for ${bookId}:`,
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
       return;
     }
@@ -198,9 +198,7 @@ export class SessionRecovery {
       const fileExists = fs.existsSync(chapterPath);
 
       if (!fileExists) {
-        // Index has entry but file missing
         if (autoRepair) {
-          index.chapters.splice(i, 1);
           report.issues.push({
             type: 'missing_chapter_file',
             severity: 'error',
@@ -216,6 +214,15 @@ export class SessionRecovery {
           });
         }
       }
+    }
+
+    if (autoRepair) {
+      const validChapterNumbers = new Set(
+        index.chapters
+          .filter((entry) => fs.existsSync(this.manager.getChapterFilePath(bookId, entry.number)))
+          .map((e) => e.number),
+      );
+      index.chapters = index.chapters.filter((entry) => validChapterNumbers.has(entry.number));
     }
 
     // Check for chapters that exist in filesystem but not in SQLite
@@ -235,15 +242,9 @@ export class SessionRecovery {
         const summary = this.memDb.getChapterSummary(chapterNum);
 
         if (!summary) {
-          // Chapter file exists but no SQLite record → orphan (crash before commit)
           if (autoRepair) {
-            // Remove the orphan chapter file
             fs.unlinkSync(filePath);
-            // Remove from index.json too
-            const idx = index.chapters.findIndex((c) => c.number === chapterNum);
-            if (idx >= 0) {
-              index.chapters.splice(idx, 1);
-            }
+            index.chapters = index.chapters.filter((c) => c.number !== chapterNum);
             report.issues.push({
               type: 'orphan_chapter',
               severity: 'error',
@@ -279,7 +280,7 @@ export class SessionRecovery {
     } catch (err) {
       console.warn(
         `[recovery] Failed to read index for ${bookId}:`,
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
       return;
     }

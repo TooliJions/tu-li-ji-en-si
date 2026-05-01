@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface ComplianceIssueLocation {
   paragraph?: number;
@@ -35,6 +36,39 @@ export interface ComplianceOutput {
   summary: string;
 }
 
+const ComplianceOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          category: z.enum([
+            'violence',
+            'explicit',
+            'political',
+            'copyright',
+            'sensitive-topic',
+            'discrimination',
+            'illegal-activity',
+          ]),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          description: z.string(),
+          location: z
+            .object({
+              paragraph: z.number().optional(),
+              sentence: z.number().optional(),
+              quote: z.string().optional(),
+            })
+            .passthrough(),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
+
 const GENRE_COMPLIANCE_FOCUS: Record<string, string> = {
   xianxia: '仙侠：战斗场景的暴力程度描写、门派斗争的尺度、修炼描写是否涉及不当内容',
   fantasy: '玄幻：种族描写的刻板印象问题、战争场面的暴力程度、黑暗元素的尺度',
@@ -65,7 +99,10 @@ export class ComplianceReviewer extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<ComplianceOutput>(prompt);
+      const result = await this.generateJSONWithSchema<ComplianceOutput>(
+        prompt,
+        ComplianceOutputSchema,
+      );
 
       return {
         success: true,
@@ -156,3 +193,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('compliance-reviewer', (p) => new ComplianceReviewer(p));

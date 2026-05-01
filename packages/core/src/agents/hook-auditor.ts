@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface OpenHook {
   description: string;
@@ -39,6 +40,39 @@ export interface HookAuditOutput {
   summary: string;
 }
 
+const HookAuditOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          hookDescription: z.string(),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          category: z.enum([
+            'forgotten',
+            'inconsistent',
+            'overdue',
+            'premature',
+            'abandoned-without-reason',
+          ]),
+          description: z.string(),
+          chaptersSinceMentioned: z.number(),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    hookSummary: z
+      .object({
+        planted: z.array(z.string()),
+        progressed: z.array(z.string()),
+        resolved: z.array(z.string()),
+        abandoned: z.array(z.string()),
+      })
+      .passthrough(),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
+
 const GENRE_HOOK_FOCUS: Record<string, string> = {
   xianxia: '仙侠：法宝/功法/身世的伏笔、宗门阴谋、师徒关系伏笔、秘境探险线索',
   fantasy: '玄幻：血脉传承伏笔、种族命运线索、地图探索伏笔、神器宿命',
@@ -69,7 +103,10 @@ export class HookAuditor extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<HookAuditOutput>(prompt);
+      const result = await this.generateJSONWithSchema<HookAuditOutput>(
+        prompt,
+        HookAuditOutputSchema,
+      );
 
       return {
         success: true,
@@ -173,3 +210,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('hook-auditor', (p) => new HookAuditor(p));

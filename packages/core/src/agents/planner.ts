@@ -95,7 +95,7 @@ export class OutlinePlanner extends BaseAgent {
   async #fillChapterBeats(
     brief: OutlineBrief,
     skeleton: OutlineResult,
-    volumeCount: number
+    volumeCount: number,
   ): Promise<OutlineResult> {
     const acts = Array.isArray(skeleton.acts) ? skeleton.acts : [];
     const filledActs: ActOutline[] = [];
@@ -126,7 +126,7 @@ export class OutlinePlanner extends BaseAgent {
           temperature: 0.7,
           agentName: `${this.name}-BeatFill`,
           retry: { maxRetries: 2, retryDelayMs: 500 },
-        }
+        },
       );
 
       filledActs.push({
@@ -160,7 +160,7 @@ export class OutlinePlanner extends BaseAgent {
       const chaptersPerAct = Math.max(5, Math.round(totalChapters * (actRatios[i] ?? 0.33)));
       const prevTotal = filledActs.reduce(
         (sum, a) => sum + (Array.isArray(a.chapters) ? a.chapters.length : 0),
-        0
+        0,
       );
       const startChapter = prevTotal + 1;
 
@@ -175,7 +175,7 @@ export class OutlinePlanner extends BaseAgent {
           temperature: 0.7,
           agentName: `${this.name}-ActBeatFill`,
           retry: { maxRetries: 2, retryDelayMs: 500 },
-        }
+        },
       );
 
       filledActs.push({
@@ -191,31 +191,31 @@ export class OutlinePlanner extends BaseAgent {
   #validateAndFixOutline(
     outline: OutlineResult,
     expectedCount: number,
-    brief: OutlineBrief
+    brief: OutlineBrief,
   ): OutlineResult {
-    const acts = Array.isArray(outline.acts) ? outline.acts : [];
+    let acts = Array.isArray(outline.acts) ? [...outline.acts] : [];
 
-    // 补齐缺失的卷
     while (acts.length < expectedCount) {
       const missingIndex = acts.length + 1;
-      acts.push({
-        actNumber: missingIndex,
-        title: `${brief.title}第${missingIndex}卷`,
-        summary: `第${missingIndex}卷的故事发展，主角继续面对新的挑战和机遇，情节持续升级。`,
-        chapters: [],
-      });
+      acts = [
+        ...acts,
+        {
+          actNumber: missingIndex,
+          title: `${brief.title}第${missingIndex}卷`,
+          summary: `第${missingIndex}卷的故事发展，主角继续面对新的挑战和机遇，情节持续升级。`,
+          chapters: [],
+        },
+      ];
     }
 
-    // 确保每卷的 summary 不为空
-    for (const act of acts) {
-      if (!act.summary || act.summary.trim().length === 0) {
-        act.summary = `${act.title}阶段的故事发展，情节持续推进。`;
-      }
-      // 确保 chapters 为数组
-      if (!Array.isArray(act.chapters)) {
-        act.chapters = [];
-      }
-    }
+    acts = acts.map((act) => {
+      const summary =
+        !act.summary || act.summary.trim().length === 0
+          ? `${act.title}阶段的故事发展，情节持续推进。`
+          : act.summary;
+      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+      return { ...act, summary, chapters };
+    });
 
     return { acts };
   }
@@ -297,7 +297,7 @@ export class OutlinePlanner extends BaseAgent {
     brief: OutlineBrief,
     act: ActOutline,
     startChapter: number,
-    chaptersPerVolume: number
+    chaptersPerVolume: number,
   ): string {
     const genreHint = GENRE_GUIDANCE[brief.genre] ?? '';
 
@@ -325,3 +325,6 @@ ${brief.genre}${genreHint ? `（${genreHint}）` : ''}
 每个beat须与本卷概要中的核心看点和转折点对应，体现情节递进。`;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('planner', (p) => new OutlinePlanner(p));

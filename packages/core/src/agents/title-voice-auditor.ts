@@ -1,12 +1,13 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface TitleVoiceIssue {
   category: 'title-mismatch' | 'title-pattern-break' | 'voice-drift' | 'tone-inconsistency';
   severity: 'warning' | 'suggestion';
   description: string;
-  affected: string[];
+  affected?: string[];
   suggestion: string;
-  suggestionDetail: string;
+  suggestionDetail?: string;
 }
 
 export interface TitleVoiceInput {
@@ -26,6 +27,32 @@ export interface TitleVoiceOutput {
   overallStatus: 'pass' | 'warning' | 'fail';
   summary: string;
 }
+
+const TitleVoiceOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          category: z.enum([
+            'title-mismatch',
+            'title-pattern-break',
+            'voice-drift',
+            'tone-inconsistency',
+          ]),
+          severity: z.enum(['warning', 'suggestion']),
+          description: z.string(),
+          affected: z.array(z.string()).optional(),
+          suggestion: z.string(),
+          suggestionDetail: z.string().optional(),
+        })
+        .passthrough(),
+    ),
+    titleScore: z.number(),
+    voiceConsistency: z.enum(['pass', 'warning', 'fail']),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_TITLE_STYLE: Record<string, string> = {
   xianxia: '仙侠：标题多用四字词或短句（如"拜入仙门"、"筑基突破"），风格古朴典雅',
@@ -57,7 +84,10 @@ export class TitleVoiceAuditor extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<TitleVoiceOutput>(prompt);
+      const result = await this.generateJSONWithSchema<TitleVoiceOutput>(
+        prompt,
+        TitleVoiceOutputSchema,
+      );
 
       return {
         success: true,
@@ -152,3 +182,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('title-voice-auditor', (p) => new TitleVoiceAuditor(p));

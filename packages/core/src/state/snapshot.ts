@@ -59,7 +59,7 @@ export class SnapshotManager {
     }
 
     // Copy SQLite database
-    const dbPath = path.join(this.rootDir, 'memory.db');
+    const dbPath = path.join(this.rootDir, bookId, 'story', 'state', 'memory.db');
     if (fs.existsSync(dbPath)) {
       fs.copyFileSync(dbPath, path.join(snapDir, 'memory.db'));
     }
@@ -74,7 +74,7 @@ export class SnapshotManager {
     fs.writeFileSync(
       path.join(snapDir, 'metadata.json'),
       JSON.stringify(metadata, null, 2),
-      'utf-8'
+      'utf-8',
     );
 
     return id;
@@ -119,7 +119,7 @@ export class SnapshotManager {
     } catch (err) {
       console.warn(
         `[snapshot] Corrupted metadata for ${bookId}/${snapshotId}:`,
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
       return null;
     }
@@ -149,7 +149,7 @@ export class SnapshotManager {
 
     // Restore SQLite database if available
     const snapDbPath = path.join(snapDir, 'memory.db');
-    const destDbPath = path.join(this.rootDir, 'memory.db');
+    const destDbPath = path.join(this.rootDir, bookId, 'story', 'state', 'memory.db');
     if (fs.existsSync(snapDbPath)) {
       fs.copyFileSync(snapDbPath, destDbPath);
     }

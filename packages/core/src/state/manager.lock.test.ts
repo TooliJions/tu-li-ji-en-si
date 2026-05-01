@@ -41,6 +41,29 @@ describe('StateManager Lock Cleanup', () => {
     expect(content.pid).toBe(process.pid);
   });
 
+  it('should force acquire expired lock even if process is running', () => {
+    const lockPath = stateManager.getBookPath(bookId, '.lock');
+    const expiredLockInfo = {
+      bookId,
+      pid: process.pid,
+      createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      operation: 'expired-op',
+    };
+    fs.writeFileSync(lockPath, JSON.stringify(expiredLockInfo, null, 2));
+
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    const lock = stateManager.acquireBookLock(bookId, 'new-op');
+    expect(lock).not.toBeNull();
+    expect(lock?.pid).toBe(process.pid);
+    expect(lock?.operation).toBe('new-op');
+    expect(lock?.expiresAt).toBeDefined();
+
+    const content = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
+    expect(content.pid).toBe(process.pid);
+  });
+
   it('should fail if lock is held by a running process', () => {
     const lock = stateManager.acquireBookLock(bookId, 'original-op');
     expect(lock).not.toBeNull();

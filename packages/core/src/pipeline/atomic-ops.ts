@@ -229,7 +229,7 @@ createdAt: ${new Date().toISOString()}
 
   #findChapterEntry(
     chapters: ChapterIndexEntry[],
-    chapterNumber: number
+    chapterNumber: number,
   ): ChapterIndexEntry | undefined {
     return chapters.find((chapter) => {
       const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
@@ -241,31 +241,44 @@ createdAt: ${new Date().toISOString()}
     chapter: ChapterIndexEntry,
     chapterNumber: number,
     title: string,
-    content: string
-  ): void {
-    const legacyChapter = chapter as ChapterIndexEntry & {
+    content: string,
+  ): ChapterIndexEntry {
+     
+    const {
+      chapterNumber: _cn,
+      status: _s,
+      writtenAt: _w,
+      plannedAt: _p,
+      ...rest
+    } = chapter as ChapterIndexEntry & {
       chapterNumber?: number;
       status?: string;
       writtenAt?: string;
       plannedAt?: string;
     };
-    chapter.number = chapterNumber;
-    chapter.title = title;
-    chapter.fileName = chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`;
-    chapter.wordCount = Number.isFinite(chapter.wordCount) ? chapter.wordCount : content.length;
-    chapter.createdAt = chapter.createdAt || new Date().toISOString();
-    delete legacyChapter.chapterNumber;
-    delete legacyChapter.status;
-    delete legacyChapter.writtenAt;
-    delete legacyChapter.plannedAt;
+    return {
+      ...rest,
+      number: chapterNumber,
+      title,
+      fileName: chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`,
+      wordCount: Number.isFinite(chapter.wordCount) ? chapter.wordCount : content.length,
+      createdAt: chapter.createdAt || new Date().toISOString(),
+    };
   }
 
   #updateIndex(input: PersistChapterInput): void {
     const index = this.stateManager.readIndex(input.bookId);
     const existingChapter = this.#findChapterEntry(index.chapters, input.chapterNumber);
     if (existingChapter) {
-      this.#normalizeChapterEntry(existingChapter, input.chapterNumber, input.title, input.content);
-      existingChapter.wordCount = countChineseWords(input.content);
+      const normalized = this.#normalizeChapterEntry(
+        existingChapter,
+        input.chapterNumber,
+        input.title,
+        input.content,
+      );
+      const idx = index.chapters.findIndex((c) => c.number === input.chapterNumber);
+      if (idx >= 0)
+        index.chapters[idx] = { ...normalized, wordCount: countChineseWords(input.content) };
     } else {
       const padded = String(input.chapterNumber).padStart(4, '0');
       index.chapters.push({
@@ -279,16 +292,19 @@ createdAt: ${new Date().toISOString()}
     index.totalChapters = index.chapters.length;
     index.totalWords = index.chapters.reduce(
       (sum, chapter) => sum + (Number.isFinite(chapter.wordCount) ? chapter.wordCount : 0),
-      0
+      0,
     );
     index.lastUpdated = new Date().toISOString();
     this.stateManager.writeIndex(input.bookId, index);
 
-    // 更新 manifest
     const manifest = this.stateStore.loadManifest(input.bookId);
-    if (input.chapterNumber > manifest.lastChapterWritten) {
-      manifest.lastChapterWritten = input.chapterNumber;
-    }
-    this.stateStore.saveRuntimeStateSnapshot(input.bookId, manifest);
+    const updatedManifest = {
+      ...manifest,
+      lastChapterWritten:
+        input.chapterNumber > manifest.lastChapterWritten
+          ? input.chapterNumber
+          : manifest.lastChapterWritten,
+    };
+    this.stateStore.saveRuntimeStateSnapshot(input.bookId, updatedManifest);
   }
 }

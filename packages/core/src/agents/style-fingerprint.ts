@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface StyleFingerprint {
   avgSentenceLength: number;
@@ -10,6 +11,19 @@ export interface StyleFingerprint {
   wordUsageHabit: string;
   rhetoricTendency: string;
 }
+
+const StyleFingerprintSchema = z
+  .object({
+    avgSentenceLength: z.number(),
+    dialogueRatio: z.number(),
+    descriptionRatio: z.number(),
+    actionRatio: z.number(),
+    commonPhrases: z.array(z.string()),
+    sentencePatternPreference: z.string(),
+    wordUsageHabit: z.string(),
+    rhetoricTendency: z.string(),
+  })
+  .passthrough();
 
 export interface StyleFingerprintInput {
   referenceText: string;
@@ -50,7 +64,10 @@ export class StyleFingerprinter extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const fingerprint = await this.generateJSON<StyleFingerprint>(prompt);
+      const fingerprint = await this.generateJSONWithSchema<StyleFingerprint>(
+        prompt,
+        StyleFingerprintSchema,
+      );
 
       return {
         success: true,
@@ -174,3 +191,6 @@ ${text}
     });
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('style-fingerprint', (p) => new StyleFingerprinter(p));

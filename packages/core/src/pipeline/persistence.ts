@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { StateManager } from '../state/manager';
 import { RuntimeStateStore } from '../state/runtime-store';
-import type { ChapterIndex } from '../models/chapter';
+import type { ChapterIndex, ChapterIndexEntry } from '../models/chapter';
+import type { Manifest } from '../models/state';
 import type { SnapshotMetadata } from '../state/snapshot';
 import { countChineseWords } from '../utils';
 
@@ -76,13 +77,20 @@ export class PipelinePersistence {
    * 采用临时文件 + rename 模式保证原子性。
    */
   async persistChapter(input: PersistChapterInput): Promise<PersistResult> {
-    // Validate book exists
     if (!this.stateStore.hasState(input.bookId)) {
       return { success: false, persisted: false, error: `书籍「${input.bookId}」不存在` };
     }
 
     const targetPath = this.stateManager.getChapterFilePath(input.bookId, input.chapterNumber);
-    const tmpPath = targetPath + '.tmp';
+    const chapterTmp = targetPath + '.tmp';
+
+    const stateDir = this.stateManager.getBookPath(input.bookId, 'story', 'state');
+    const indexPath = path.join(stateDir, 'index.json');
+    const manifestPath = path.join(stateDir, 'manifest.json');
+    const indexTmp = indexPath + '.tmp';
+    const manifestTmp = manifestPath + '.tmp';
+
+    const tempFiles = [chapterTmp, indexTmp, manifestTmp];
 
     try {
       const sanitizedWarning = input.warning?.replace(/\r?\n/g, ' ').trim();
@@ -93,7 +101,7 @@ export class PipelinePersistence {
         .filter((line): line is string => line !== null)
         .join('\n');
 
-      // Step 1: 写入临时文件
+      // Step 1: 写入章节临时文件
       const frontmatter = `---
 title: ${input.title}
 chapter: ${input.chapterNumber}
@@ -102,28 +110,38 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 ---
 
 `;
-      fs.writeFileSync(tmpPath, frontmatter + input.content, 'utf-8');
+      fs.writeFileSync(chapterTmp, frontmatter + input.content, 'utf-8');
 
-      // Step 2: 创建快照（持久化前的状态保存）
+      // Step 2: 计算并写入索引临时文件
+      const updatedIndex = this.#computeUpdatedIndex(input);
+      fs.writeFileSync(indexTmp, JSON.stringify(updatedIndex, null, 2), 'utf-8');
+
+      // Step 3: 计算并写入 manifest 临时文件
+      const updatedManifest = this.#computeUpdatedManifest(input);
+      fs.writeFileSync(manifestTmp, JSON.stringify(updatedManifest, null, 2), 'utf-8');
+
+      // Step 4: 创建快照（持久化前的状态保存）
       let snapshotId: string | undefined;
       try {
         snapshotId = this.createSnapshot(input.bookId, input.chapterNumber);
       } catch (err) {
-        // Snapshot failure is non-fatal — log but continue
         console.warn(
           `[PipelinePersistence] Snapshot creation failed for chapter ${input.chapterNumber}:`,
-          err
+          err,
         );
       }
 
-      // Step 3: 原子替换（fs.rename）
-      fs.renameSync(tmpPath, targetPath);
+      // Step 5: 预提交验证 — 确保所有临时文件已写入
+      for (const tmp of tempFiles) {
+        if (!fs.existsSync(tmp)) {
+          throw new Error(`预提交验证失败: 临时文件不存在 ${path.basename(tmp)}`);
+        }
+      }
 
-      // Step 4: 更新 index.json
-      this.#updateIndex(input);
-
-      // Step 5: 更新 manifest
-      this.#updateManifest(input);
+      // Step 6: 原子替换所有文件
+      fs.renameSync(chapterTmp, targetPath);
+      fs.renameSync(indexTmp, indexPath);
+      fs.renameSync(manifestTmp, manifestPath);
 
       return {
         success: true,
@@ -131,12 +149,14 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
         snapshotId,
       };
     } catch (error) {
-      // Clean up temp file on failure
-      if (fs.existsSync(tmpPath)) {
-        try {
-          fs.unlinkSync(tmpPath);
-        } catch {
-          // Best effort cleanup
+      // 任意步骤失败时清理所有临时文件
+      for (const tmp of tempFiles) {
+        if (fs.existsSync(tmp)) {
+          try {
+            fs.unlinkSync(tmp);
+          } catch {
+            // Best effort cleanup
+          }
         }
       }
 
@@ -181,7 +201,7 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
     fs.writeFileSync(
       path.join(snapDir, 'metadata.json'),
       JSON.stringify(metadata, null, 2),
-      'utf-8'
+      'utf-8',
     );
 
     return id;
@@ -307,14 +327,14 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 
     if (manifest.lastChapterWritten > maxChapterInIndex && index.chapters.length > 0) {
       issues.push(
-        `manifest.lastChapterWritten (${manifest.lastChapterWritten}) 超出索引最大章节号 (${maxChapterInIndex})`
+        `manifest.lastChapterWritten (${manifest.lastChapterWritten}) 超出索引最大章节号 (${maxChapterInIndex})`,
       );
     }
 
     // 4. 检查 index.totalChapters 与实际条目数
     if (index.totalChapters !== index.chapters.length) {
       issues.push(
-        `index.totalChapters (${index.totalChapters}) 与实际条目数 (${index.chapters.length}) 不一致`
+        `index.totalChapters (${index.totalChapters}) 与实际条目数 (${index.chapters.length}) 不一致`,
       );
     }
 
@@ -326,38 +346,66 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
 
   // ── Internal: Index / Manifest Updates ──────────────────────
 
-  #updateIndex(input: PersistChapterInput): void {
+  #computeUpdatedIndex(input: PersistChapterInput): ChapterIndex {
     const index = this.stateManager.readIndex(input.bookId);
-    const existingEntry = index.chapters.find((c) => c.number === input.chapterNumber);
+    const existingIdx = index.chapters.findIndex(
+      (c) =>
+        c.number === input.chapterNumber ||
+        (c as ChapterIndexEntry & { chapterNumber?: number }).chapterNumber === input.chapterNumber,
+    );
 
-    if (existingEntry) {
-      existingEntry.title = input.title;
-      existingEntry.wordCount = countChineseWords(input.content);
+    let updatedChapters: ChapterIndexEntry[];
+    if (existingIdx >= 0) {
+      updatedChapters = index.chapters.map((c, i) => {
+        if (i !== existingIdx) return c;
+        const legacy = c as ChapterIndexEntry & {
+          chapterNumber?: number;
+          status?: string;
+          writtenAt?: string;
+          plannedAt?: string;
+        };
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { chapterNumber: _cn, status: _s, writtenAt: _w, plannedAt: _p, ...rest } = legacy;
+        return {
+          ...rest,
+          number: rest.number ?? input.chapterNumber,
+          title: input.title,
+          wordCount: countChineseWords(input.content),
+        };
+      });
     } else {
       const padded = String(input.chapterNumber).padStart(4, '0');
-      index.chapters.push({
-        number: input.chapterNumber,
-        title: input.title,
-        fileName: `chapter-${padded}.md`,
-        wordCount: countChineseWords(input.content),
-        createdAt: new Date().toISOString(),
-      });
+      updatedChapters = [
+        ...index.chapters,
+        {
+          number: input.chapterNumber,
+          title: input.title,
+          fileName: `chapter-${padded}.md`,
+          wordCount: countChineseWords(input.content),
+          createdAt: new Date().toISOString(),
+        },
+      ];
     }
 
-    index.totalChapters = index.chapters.length;
-    index.totalWords = index.chapters.reduce((sum, c) => sum + c.wordCount, 0);
-    index.lastUpdated = new Date().toISOString();
-
-    this.stateManager.writeIndex(input.bookId, index);
+    return {
+      ...index,
+      chapters: updatedChapters,
+      totalChapters: updatedChapters.length,
+      totalWords: updatedChapters.reduce((sum, c) => sum + c.wordCount, 0),
+      lastUpdated: new Date().toISOString(),
+    };
   }
 
-  #updateManifest(input: PersistChapterInput): void {
+  #computeUpdatedManifest(input: PersistChapterInput): Manifest {
     const manifest = this.stateStore.loadManifest(input.bookId);
-
-    if (input.chapterNumber > manifest.lastChapterWritten) {
-      manifest.lastChapterWritten = input.chapterNumber;
-    }
-
-    this.stateStore.saveRuntimeStateSnapshot(input.bookId, manifest);
+    return {
+      ...manifest,
+      versionToken: manifest.versionToken + 1,
+      lastChapterWritten:
+        input.chapterNumber > manifest.lastChapterWritten
+          ? input.chapterNumber
+          : manifest.lastChapterWritten,
+      updatedAt: new Date().toISOString(),
+    };
   }
 }

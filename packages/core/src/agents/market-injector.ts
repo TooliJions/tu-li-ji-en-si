@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface MarketSuggestion {
   element: string;
@@ -22,6 +23,39 @@ export interface MarketOutput {
   overallStatus: 'pass' | 'suggestion';
   summary: string;
 }
+
+const MarketOutputSchema = z
+  .object({
+    suggestions: z.array(
+      z
+        .object({
+          element: z.string(),
+          type: z.enum([
+            'hook',
+            'satisfaction',
+            'emotional',
+            'conflict',
+            'mystery',
+            'pacing',
+            'character',
+          ]),
+          description: z.string(),
+          insertPosition: z.enum([
+            'early-chapter',
+            'mid-chapter',
+            'chapter-end',
+            'dialogue',
+            'narration',
+          ]),
+          expectedImpact: z.number(),
+        })
+        .passthrough(),
+    ),
+    marketAlignment: z.number(),
+    overallStatus: z.enum(['pass', 'suggestion']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_MARKET_FOCUS: Record<string, string> = {
   xianxia: '仙侠：金手指/升级流/打脸爽点、扮猪吃虎、师徒互动、秘境探险、宗门斗争',
@@ -53,7 +87,7 @@ export class MarketInjector extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<MarketOutput>(prompt);
+      const result = await this.generateJSONWithSchema<MarketOutput>(prompt, MarketOutputSchema);
 
       return {
         success: true,
@@ -158,3 +192,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('market-injector', (p) => new MarketInjector(p));

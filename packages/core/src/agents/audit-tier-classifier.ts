@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface ClassifiedIssue {
   description: string;
@@ -27,6 +28,31 @@ export interface AuditOutput {
   overallVerdict: 'pass' | 'warning' | 'fail';
   summary: string;
 }
+
+const AuditOutputSchema = z
+  .object({
+    classified: z.array(
+      z
+        .object({
+          description: z.string(),
+          tier: z.enum(['blocker', 'warning', 'suggestion']),
+          category: z.string(),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    tierSummary: z
+      .object({
+        blocker: z.number(),
+        warning: z.number(),
+        suggestion: z.number(),
+      })
+      .passthrough(),
+    overallVerdict: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_AUDIT_FOCUS: Record<string, string> = {
   xianxia: '仙侠：事实一致性（功法/境界/法宝设定）、人物关系、门派设定、世界观规则',
@@ -58,7 +84,7 @@ export class AuditTierClassifier extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<AuditOutput>(prompt);
+      const result = await this.generateJSONWithSchema<AuditOutput>(prompt, AuditOutputSchema);
 
       return {
         success: true,
@@ -157,3 +183,6 @@ overallVerdict 判定规则：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('audit-tier-classifier', (p) => new AuditTierClassifier(p));

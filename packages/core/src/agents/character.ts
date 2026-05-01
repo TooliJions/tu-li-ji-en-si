@@ -57,7 +57,7 @@ export class CharacterDesigner extends BaseAgent {
           temperature: this.temperature,
           agentName: this.name,
           retry: { maxRetries: 2, retryDelayMs: 500 },
-        }
+        },
       );
 
       // 兜底：确保角色列表不为空
@@ -75,15 +75,16 @@ export class CharacterDesigner extends BaseAgent {
         ];
       }
 
-      // 确保每个角色有必要的字段
-      for (const char of result.characters) {
-        if (!char.name || char.name.trim().length === 0) char.name = '无名角色';
-        if (!char.role) char.role = 'supporting';
-        if (!Array.isArray(char.traits) || char.traits.length === 0) char.traits = ['性格待定'];
-        if (!char.arc || char.arc.trim().length === 0) char.arc = '角色成长轨迹待展开';
-      }
+      const normalized = result.characters.map((char) => ({
+        ...char,
+        name: !char.name || char.name.trim().length === 0 ? '无名角色' : char.name,
+        role: char.role || 'supporting',
+        traits:
+          !Array.isArray(char.traits) || char.traits.length === 0 ? ['性格待定'] : char.traits,
+        arc: !char.arc || char.arc.trim().length === 0 ? '角色成长轨迹待展开' : char.arc,
+      }));
 
-      return { success: true, data: result };
+      return { success: true, data: { ...result, characters: normalized } };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: `LLM 调用失败: ${message}` };
@@ -143,3 +144,6 @@ ${constraints.map((c) => `- ${c}`).join('\n')}`;
     return prompt;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('character', (p) => new CharacterDesigner(p));

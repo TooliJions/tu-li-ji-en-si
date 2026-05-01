@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -41,6 +42,36 @@ export interface DialogueOutput {
   summary: string;
 }
 
+const DialogueOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          type: z.enum([
+            'no-friction',
+            'declarative-exchange',
+            'monologue-disguised',
+            'weak-response',
+          ]),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          description: z.string(),
+          location: z
+            .object({
+              lineStart: z.number(),
+              lineEnd: z.number(),
+            })
+            .passthrough(),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    frictionScore: z.number(),
+    conflictDepth: z.enum(['none', 'weak', 'moderate', 'strong']),
+    overallQuality: z.enum(['poor', 'acceptable', 'good', 'excellent']),
+    summary: z.string(),
+  })
+  .passthrough();
+
 // ── DialogueChecker ──────────────────────────────────────────────────
 
 export class DialogueChecker extends BaseAgent {
@@ -61,7 +92,10 @@ export class DialogueChecker extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<DialogueOutput>(prompt);
+      const result = await this.generateJSONWithSchema<DialogueOutput>(
+        prompt,
+        DialogueOutputSchema,
+      );
 
       if (!result || typeof result !== 'object' || !Array.isArray(result.issues)) {
         return { success: false, error: 'LLM 返回数据格式异常' };
@@ -135,3 +169,6 @@ ${input.chapterContent}
 若未发现问题，issues 返回空数组。`;
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('dialogue-checker', (p) => new DialogueChecker(p));

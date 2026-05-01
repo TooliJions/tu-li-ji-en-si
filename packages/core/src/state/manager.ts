@@ -1,7 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BookLock, ChapterIndex } from '../models/state';
+import type {
+  BookLock,
+  ChapterIndex,
+  ChapterSummaryRecord,
+  ChapterSummaryArchive,
+} from '../models/state';
 import { countChineseWords } from '../utils';
+import { SummaryManager } from './summary-manager';
 
 // ─── StateManager ─────────────────────────────────────────────────
 // 负责书籍锁、路径计算、章节索引的读写。
@@ -9,9 +15,11 @@ import { countChineseWords } from '../utils';
 
 export class StateManager {
   private _rootDir: string;
+  private summaryManager: SummaryManager;
 
   constructor(rootDir: string) {
     this._rootDir = rootDir;
+    this.summaryManager = new SummaryManager(this);
   }
 
   /** 获取 StateManager 的根目录路径 */
@@ -81,7 +89,7 @@ export class StateManager {
     } catch (e) {
       console.warn(
         '[state-manager] Failed to check process:',
-        e instanceof Error ? e.message : String(e)
+        e instanceof Error ? e.message : String(e),
       );
       return false;
     }
@@ -94,11 +102,13 @@ export class StateManager {
    */
   acquireBookLock(bookId: string, operation: string): BookLock | null {
     const lockPath = this.getBookPath(bookId, '.lock');
+    const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 
     const lockInfo: BookLock = {
       bookId,
       pid: process.pid,
       createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + LOCK_TIMEOUT_MS).toISOString(),
       operation,
     };
 
@@ -109,6 +119,11 @@ export class StateManager {
       return lockInfo;
     };
 
+    const isLockExpired = (lock: BookLock): boolean => {
+      if (!lock.expiresAt) return false;
+      return new Date(lock.expiresAt).getTime() < Date.now();
+    };
+
     try {
       return tryAcquire();
     } catch (err) {
@@ -116,12 +131,15 @@ export class StateManager {
         throw err;
       }
 
-      // 锁已存在，检查是否为陈旧锁
+      // 锁已存在，检查是否为陈旧锁或已过期
       try {
         const content = fs.readFileSync(lockPath, 'utf-8');
         const existingLock = JSON.parse(content) as BookLock;
         if (existingLock.pid && !this.isProcessRunning(existingLock.pid)) {
-          // 进程已不存在，清理陈旧锁并重试
+          fs.unlinkSync(lockPath);
+          return tryAcquire();
+        }
+        if (isLockExpired(existingLock)) {
           fs.unlinkSync(lockPath);
           return tryAcquire();
         }
@@ -180,7 +198,7 @@ export class StateManager {
    */
   findChapterEntry(
     chapters: ChapterIndex['chapters'],
-    chapterNumber: number
+    chapterNumber: number,
   ): ChapterIndex['chapters'][number] | undefined {
     return chapters.find((chapter) => {
       const legacyChapter = chapter as ChapterIndex['chapters'][number] & {
@@ -197,23 +215,30 @@ export class StateManager {
     entry: ChapterIndex['chapters'][number],
     chapterNumber: number,
     title: string | null,
-    wordCount: number
-  ): void {
-    entry.number = chapterNumber;
-    entry.title = title;
-    // fileName 保持不变（已存在则保留）
-    if (!entry.fileName) {
-      const padded = String(chapterNumber).padStart(4, '0');
-      entry.fileName = `chapter-${padded}.md`;
-    }
-    entry.wordCount = Number.isFinite(wordCount) ? wordCount : 0;
-    entry.createdAt = entry.createdAt || new Date().toISOString();
-    // 清理旧版遗留字段
+    wordCount: number,
+  ): ChapterIndex['chapters'][number] {
     const legacyEntry = entry as Record<string, unknown>;
-    delete legacyEntry.chapterNumber;
-    delete legacyEntry.status;
-    delete legacyEntry.writtenAt;
-    delete legacyEntry.plannedAt;
+     
+    const {
+      chapterNumber: _cn,
+      status: _s,
+      writtenAt: _w,
+      plannedAt: _p,
+      ...rest
+    } = legacyEntry as ChapterIndex['chapters'][number] & {
+      chapterNumber?: unknown;
+      status?: unknown;
+      writtenAt?: unknown;
+      plannedAt?: unknown;
+    };
+    return {
+      ...rest,
+      number: chapterNumber,
+      title: title ?? entry.title,
+      fileName: entry.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`,
+      wordCount: Number.isFinite(wordCount) ? wordCount : 0,
+      createdAt: entry.createdAt || new Date().toISOString(),
+    };
   }
 
   /**
@@ -224,7 +249,7 @@ export class StateManager {
     chapterNumber: number,
     title: string,
     content: string,
-    _status: 'draft' | 'final'
+    _status: 'draft' | 'final',
   ): void {
     const index = this.readIndex(bookId);
     const existingEntry = this.findChapterEntry(index.chapters, chapterNumber);
@@ -239,21 +264,45 @@ export class StateManager {
         createdAt: new Date().toISOString(),
       });
     } else {
-      this.normalizeChapterEntry(
+      const normalized = this.normalizeChapterEntry(
         existingEntry,
         chapterNumber,
         title,
-        content.length > 0 ? countChineseWords(content) : existingEntry.wordCount
+        content.length > 0 ? countChineseWords(content) : existingEntry.wordCount,
       );
+      const idx = index.chapters.findIndex((c) => c.number === chapterNumber);
+      if (idx >= 0) index.chapters[idx] = normalized;
     }
 
     index.totalChapters = index.chapters.length;
     index.totalWords = index.chapters.reduce(
       (sum, ch) => sum + (Number.isFinite(ch.wordCount) ? ch.wordCount : 0),
-      0
+      0,
     );
     index.lastUpdated = new Date().toISOString();
 
     this.writeIndex(bookId, index);
+  }
+
+  // ── Summary Delegates（委托给 SummaryManager）───────────────────
+
+  /** 读取章节摘要存档 */
+  readChapterSummaries(bookId: string): ChapterSummaryArchive {
+    return this.summaryManager.readChapterSummaries(bookId);
+  }
+
+  /** 写入章节摘要存档 */
+  writeChapterSummaries(bookId: string, archive: ChapterSummaryArchive): void {
+    this.summaryManager.writeChapterSummaries(bookId, archive);
+  }
+
+  /** 获取单章摘要记录 */
+  getChapterSummaryRecord(bookId: string, chapterNumber: number): ChapterSummaryRecord | null {
+    return this.summaryManager.getChapterSummaryRecord(bookId, chapterNumber);
+  }
+
+  /** 获取块级压缩概要（arc summary） */
+  getArcSummary(bookId: string, blockKey: string): string | null {
+    return this.summaryManager.getArcSummary(bookId, blockKey);
   }
 }

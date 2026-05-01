@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface FatigueIssue {
   category:
@@ -27,6 +28,32 @@ export interface FatigueOutput {
   overallStatus: 'pass' | 'warning' | 'fail';
   summary: string;
 }
+
+const FatigueOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          category: z.enum([
+            'repetition',
+            'description-overload',
+            'dialogue-fatigue',
+            'pacing',
+            'info-dump',
+            'cross-chapter-repetition',
+          ]),
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          description: z.string(),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    fatigueScore: z.number(),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_FATIGUE_FOCUS: Record<string, string> = {
   xianxia: '仙侠：修炼流程重复感、战斗模式套路化、法宝描述单调、升级节奏疲劳',
@@ -58,7 +85,7 @@ export class FatigueAnalyzer extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<FatigueOutput>(prompt);
+      const result = await this.generateJSONWithSchema<FatigueOutput>(prompt, FatigueOutputSchema);
 
       return {
         success: true,
@@ -152,3 +179,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('fatigue-analyzer', (p) => new FatigueAnalyzer(p));

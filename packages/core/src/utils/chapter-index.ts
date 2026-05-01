@@ -2,7 +2,7 @@ import type { ChapterIndexEntry } from '../models/chapter';
 
 export function findChapterEntry(
   chapters: ChapterIndexEntry[],
-  chapterNumber: number
+  chapterNumber: number,
 ): ChapterIndexEntry | undefined {
   return chapters.find((chapter) => {
     const legacyChapter = chapter as ChapterIndexEntry & { chapterNumber?: number };
@@ -14,21 +14,33 @@ export function normalizeChapterEntry(
   chapter: ChapterIndexEntry,
   chapterNumber: number,
   title: string | null,
-  wordCount: number
-): void {
+  wordCount: number,
+): ChapterIndexEntry {
   const legacyChapter = chapter as ChapterIndexEntry & {
     chapterNumber?: number;
     status?: string;
     writtenAt?: string;
     plannedAt?: string;
   };
-  chapter.number = chapterNumber;
-  chapter.title = title;
-  chapter.fileName = chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`;
-  chapter.wordCount = Number.isFinite(chapter.wordCount) ? chapter.wordCount : wordCount;
-  chapter.createdAt = chapter.createdAt || new Date().toISOString();
-  delete legacyChapter.chapterNumber;
-  delete legacyChapter.status;
-  delete legacyChapter.writtenAt;
-  delete legacyChapter.plannedAt;
+   
+  const {
+    chapterNumber: _cn,
+    status: _s,
+    writtenAt: _w,
+    plannedAt: _p,
+    ...rest
+  } = legacyChapter as ChapterIndexEntry & {
+    chapterNumber?: number;
+    status?: string;
+    writtenAt?: string;
+    plannedAt?: string;
+  };
+  return {
+    ...rest,
+    number: chapterNumber,
+    title: title ?? chapter.title,
+    fileName: chapter.fileName || `chapter-${String(chapterNumber).padStart(4, '0')}.md`,
+    wordCount: Number.isFinite(chapter.wordCount) ? chapter.wordCount : wordCount,
+    createdAt: chapter.createdAt || new Date().toISOString(),
+  };
 }

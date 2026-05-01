@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface QualityIssueLocation {
   paragraph?: number;
@@ -34,6 +35,30 @@ export interface ReviewOutput {
   summary: string;
 }
 
+const ReviewOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          severity: z.enum(['critical', 'warning', 'suggestion']),
+          category: z.string(),
+          description: z.string(),
+          suggestion: z.string(),
+          location: z
+            .object({
+              paragraph: z.number().optional(),
+              sentence: z.number().optional(),
+              quote: z.string().optional(),
+            })
+            .passthrough(),
+        })
+        .passthrough(),
+    ),
+    overallScore: z.number(),
+    summary: z.string(),
+  })
+  .passthrough();
+
 const GENRE_CRITERIA: Record<string, string> = {
   xianxia: '仙侠：修炼描写是否准确、斗法场景气势、师徒/同门情谊、用词古朴度',
   fantasy: '玄幻：世界观展现是否完整、能力觉醒的震撼感、种族文化差异',
@@ -64,7 +89,7 @@ export class QualityReviewer extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<ReviewOutput>(prompt);
+      const result = await this.generateJSONWithSchema<ReviewOutput>(prompt, ReviewOutputSchema);
 
       return {
         success: true,

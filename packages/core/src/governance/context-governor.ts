@@ -102,7 +102,7 @@ export class ContextGovernor {
           filteredHooks,
           filteredFacts,
           filteredWorldRules,
-          excludedIds
+          excludedIds,
         );
       }
     }
@@ -123,7 +123,7 @@ export class ContextGovernor {
    */
   generateContextJson(
     output: ContextGovernorOutput,
-    meta?: { bookId?: string; chapterNumber?: number }
+    meta?: { bookId?: string; chapterNumber?: number },
   ): string {
     return JSON.stringify(
       {
@@ -153,7 +153,7 @@ export class ContextGovernor {
         })),
       },
       null,
-      2
+      2,
     );
   }
 
@@ -165,7 +165,7 @@ export class ContextGovernor {
     hooks: Hook[],
     facts: Fact[],
     worldRules: WorldRule[],
-    excludedIds: ContextGovernorOutput['excludedIds']
+    excludedIds: ContextGovernorOutput['excludedIds'],
   ): void {
     const action = rule.action ?? 'exclude';
 
@@ -178,7 +178,8 @@ export class ContextGovernor {
         for (const f of facts) {
           if (!keepFacts.includes(f)) excludedIds.facts.push(f.id);
         }
-        facts.splice(0, facts.length, ...keepFacts);
+        facts.length = 0;
+        facts.push(...keepFacts);
         break;
       }
       case 'hook': {
@@ -189,7 +190,8 @@ export class ContextGovernor {
         for (const h of hooks) {
           if (!keepHooks.includes(h)) excludedIds.hooks.push(h.id);
         }
-        hooks.splice(0, hooks.length, ...keepHooks);
+        hooks.length = 0;
+        hooks.push(...keepHooks);
         break;
       }
       case 'character': {
@@ -200,7 +202,8 @@ export class ContextGovernor {
         for (const c of characters) {
           if (!keepChars.includes(c)) excludedIds.characters.push(c.id);
         }
-        characters.splice(0, characters.length, ...keepChars);
+        characters.length = 0;
+        characters.push(...keepChars);
         break;
       }
       case 'world-rule': {
@@ -211,7 +214,8 @@ export class ContextGovernor {
         for (const w of worldRules) {
           if (!keepRules.includes(w)) excludedIds.worldRules.push(w.id);
         }
-        worldRules.splice(0, worldRules.length, ...keepRules);
+        worldRules.length = 0;
+        worldRules.push(...keepRules);
         break;
       }
     }

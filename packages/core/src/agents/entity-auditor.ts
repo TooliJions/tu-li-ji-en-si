@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface EntityRecord {
   name: string;
@@ -30,6 +31,33 @@ export interface EntityAuditOutput {
   overallStatus: 'pass' | 'warning' | 'fail';
   summary: string;
 }
+
+const EntityAuditOutputSchema = z
+  .object({
+    issues: z.array(
+      z
+        .object({
+          entity: z.string(),
+          type: z.string(),
+          severity: z.enum(['critical', 'warning']),
+          description: z.string(),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    detectedEntities: z.array(
+      z
+        .object({
+          name: z.string(),
+          type: z.enum(['character', 'location', 'item', 'organization']),
+          status: z.enum(['registered', 'unregistered', 'ghost']),
+        })
+        .passthrough(),
+    ),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_ENTITY_TYPES: Record<string, string> = {
   xianxia:
@@ -64,7 +92,10 @@ export class EntityAuditor extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<EntityAuditOutput>(prompt);
+      const result = await this.generateJSONWithSchema<EntityAuditOutput>(
+        prompt,
+        EntityAuditOutputSchema,
+      );
 
       return {
         success: true,
@@ -176,3 +207,6 @@ overallStatus：
     return lines.join('\n');
   }
 }
+
+import { agentRegistry } from './registry';
+agentRegistry.register('entity-auditor', (p) => new EntityAuditor(p));

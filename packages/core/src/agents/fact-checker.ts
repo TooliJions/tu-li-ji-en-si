@@ -1,4 +1,5 @@
 import { BaseAgent, type AgentContext, type AgentResult } from './base';
+import { z } from 'zod';
 
 export interface FactConflict {
   fact: string;
@@ -23,6 +24,24 @@ export interface FactCheckOutput {
   overallStatus: 'pass' | 'warning' | 'fail';
   summary: string;
 }
+
+const FactCheckOutputSchema = z
+  .object({
+    conflicts: z.array(
+      z
+        .object({
+          fact: z.string(),
+          contradiction: z.string(),
+          severity: z.enum(['critical', 'warning']),
+          suggestion: z.string(),
+        })
+        .passthrough(),
+    ),
+    verifiedFacts: z.array(z.string()),
+    overallStatus: z.enum(['pass', 'warning', 'fail']),
+    summary: z.string(),
+  })
+  .passthrough();
 
 const GENRE_FOCUS: Record<string, string> = {
   xianxia: '仙侠：修炼境界一致性、宗门势力设定、法宝/灵药设定、师徒关系',
@@ -54,7 +73,10 @@ export class FactChecker extends BaseAgent {
     const prompt = this.#buildPrompt(input);
 
     try {
-      const result = await this.generateJSON<FactCheckOutput>(prompt);
+      const result = await this.generateJSONWithSchema<FactCheckOutput>(
+        prompt,
+        FactCheckOutputSchema,
+      );
 
       return {
         success: true,
