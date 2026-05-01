@@ -5,6 +5,7 @@ import { PipelineRunner, type LLMProvider } from '@cybernovelist/core';
 import { getStudioRuntimeRootDir } from '../runtime/runtime-config';
 import { readStudioBookRuntime } from '../runtime/book-repository';
 import { buildLLMProvider } from '../llm/provider-factory';
+import { DeterministicProvider } from '../llm/deterministic-provider';
 
 export interface RequestContext {
   bookId: string;
@@ -18,6 +19,13 @@ declare module 'hono' {
   }
 }
 
+const SAFE_BOOK_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
+const PATH_TRAVERSAL_RE = /\.\./;
+
+export function validateBookId(bookId: string): boolean {
+  return SAFE_BOOK_ID_RE.test(bookId) && !PATH_TRAVERSAL_RE.test(bookId);
+}
+
 export function createBookContextMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     const bookId = c.req.param('bookId');
@@ -26,9 +34,21 @@ export function createBookContextMiddleware(): MiddlewareHandler {
       return;
     }
 
+    if (!validateBookId(bookId)) {
+      return c.json({ error: { code: 'INVALID_BOOK_ID', message: 'bookId 包含非法字符' } }, 400);
+    }
+
     const book = readStudioBookRuntime(bookId);
     const rootDir = getStudioRuntimeRootDir();
-    const provider = book ? buildLLMProvider(book) : buildLLMProvider();
+
+    let provider: LLMProvider;
+    try {
+      provider = book ? buildLLMProvider(book) : buildLLMProvider();
+    } catch (err) {
+      console.warn('[context] Failed to build LLM provider, falling back to deterministic:', err);
+      provider = new DeterministicProvider();
+    }
+
     const runner = new PipelineRunner({ rootDir, provider });
 
     c.set('requestContext', { bookId, runner, provider });
@@ -40,7 +60,7 @@ export function getRequestContext(c: Context): RequestContext {
   const ctx = c.get('requestContext');
   if (!ctx) {
     throw new Error(
-      'RequestContext not available. Ensure createBookContextMiddleware is registered.'
+      'RequestContext not available. Ensure createBookContextMiddleware is registered.',
     );
   }
   return ctx;

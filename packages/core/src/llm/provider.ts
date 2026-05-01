@@ -56,6 +56,16 @@ export abstract class LLMProvider {
   abstract generateJSON<T>(request: LLMRequest): Promise<T>;
   abstract generateJSONWithMeta<T>(request: LLMRequest): Promise<LLMResponseWithJSON<T>>;
   abstract generateStream(request: LLMRequest): AsyncIterable<LLMStreamChunk>;
+
+  toJSON(): Record<string, unknown> {
+    return {
+      model: this.config.model,
+      baseURL: this.config.baseURL,
+      apiKey: this.config.apiKey
+        ? this.config.apiKey.slice(0, 4) + '***' + this.config.apiKey.slice(-4)
+        : '',
+    };
+  }
 }
 
 export class OpenAICompatibleProvider extends LLMProvider {
@@ -103,7 +113,7 @@ export class OpenAICompatibleProvider extends LLMProvider {
       return JSON.parse(text) as T;
     } catch {
       throw new Error(
-        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
+        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`,
       );
     }
   }
@@ -130,7 +140,7 @@ export class OpenAICompatibleProvider extends LLMProvider {
       };
     } catch {
       throw new Error(
-        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`
+        `LLM 返回了无法解析的 JSON。模型: ${this.config.model}，内容片段: ${text.slice(0, 200)}`,
       );
     }
   }

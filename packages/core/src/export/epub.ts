@@ -27,6 +27,65 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
+const SAFE_XHTML_TAGS = new Set([
+  'p',
+  'br',
+  'hr',
+  'em',
+  'strong',
+  'b',
+  'i',
+  'u',
+  's',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'li',
+  'dl',
+  'dt',
+  'dd',
+  'blockquote',
+  'pre',
+  'code',
+  'span',
+  'div',
+  'a',
+  'img',
+  'figure',
+  'figcaption',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'sub',
+  'sup',
+  'small',
+  'mark',
+  'del',
+  'ins',
+  'abbr',
+  'cite',
+  'q',
+  'dfn',
+  'var',
+  'kbd',
+  'samp',
+]);
+
+function sanitizeXhtmlContent(content: string): string {
+  return content.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*\/?>/g, (match, tagName) => {
+    if (SAFE_XHTML_TAGS.has(tagName.toLowerCase())) return match;
+    return escapeXml(match);
+  });
+}
+
 function padNumber(n: number, width: number): string {
   return String(n).padStart(width, '0');
 }
@@ -98,7 +157,7 @@ function buildChapterXhtml(chapter: EpubChapter): string {
 </head>
 <body>
   <h1>${escapeXml(chapter.title)}</h1>
-  ${chapter.content}
+  ${sanitizeXhtmlContent(chapter.content)}
 </body>
 </html>`;
 }
@@ -178,7 +237,7 @@ export class EpubExporter {
     // META-INF/container.xml
     zip.addFile(
       'META-INF/container.xml',
-      Buffer.from(buildContainerXml(`${oebpsPath}/content.opf`))
+      Buffer.from(buildContainerXml(`${oebpsPath}/content.opf`)),
     );
 
     // OEBPS/content.opf

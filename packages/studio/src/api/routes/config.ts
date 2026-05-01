@@ -16,6 +16,22 @@ interface AgentRouteEntry {
   model: string;
   provider: string;
   temperature: number;
+  maxTokens?: number;
+}
+
+interface QuotaConfig {
+  dailyTokenQuota: number;
+  quotaAlertThreshold: number;
+}
+
+interface RateLimitConfig {
+  rpmLimit: number;
+  tpmLimit: number;
+}
+
+interface RetryPolicyConfig {
+  maxAttempts: number;
+  delayMs: number;
 }
 
 interface ConfigState {
@@ -24,9 +40,13 @@ interface ConfigState {
   agentRouting: AgentRouteEntry[];
   providers: ProviderEntry[];
   notifications: { telegramToken: string; chatId: string };
+  quotas: QuotaConfig;
+  rateLimits: RateLimitConfig;
+  retryPolicy: RetryPolicyConfig;
+  cloudMode: boolean;
 }
 
-const DEFAULT_CONFIG_PATH = '.cybernovelist-config.json';
+const DEFAULT_CONFIG_PATH = 'config.local.json';
 
 const defaultConfig: ConfigState = {
   defaultProvider: 'DashScope',
@@ -59,8 +79,28 @@ const defaultConfig: ConfigState = {
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
       model: 'gemini-2.0-flash',
     },
+    {
+      name: 'DeepSeek',
+      status: 'disconnected',
+      apiKey: '',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat',
+    },
   ],
   notifications: { telegramToken: '', chatId: '' },
+  quotas: {
+    dailyTokenQuota: 0,
+    quotaAlertThreshold: 0.8,
+  },
+  rateLimits: {
+    rpmLimit: 0,
+    tpmLimit: 0,
+  },
+  retryPolicy: {
+    maxAttempts: 2,
+    delayMs: 1000,
+  },
+  cloudMode: true,
 };
 
 function loadConfig(): ConfigState {
@@ -91,19 +131,33 @@ function findProviderConfig(name: string): ProviderEntry | undefined {
   return config.providers.find((p) => p.name === name);
 }
 
+function maskSecret(value: string): string {
+  if (!value || value.length <= 8) return value ? '***' : '';
+  return value.slice(0, 4) + '***' + value.slice(-4);
+}
+
+function maskConfigForResponse(cfg: ConfigState): Record<string, unknown> {
+  return {
+    ...cfg,
+    providers: cfg.providers.map((p) => ({ ...p, apiKey: maskSecret(p.apiKey) })),
+    notifications: {
+      telegramToken: maskSecret(cfg.notifications.telegramToken),
+      chatId: cfg.notifications.chatId,
+    },
+  };
+}
+
 export function createConfigRouter(): Hono {
   let config = loadConfig();
   const router = new Hono();
 
-  // GET /api/config
-  router.get('/', (c) => c.json({ data: config }));
+  router.get('/', (c) => c.json({ data: maskConfigForResponse(config) }));
 
-  // PUT /api/config
   router.put('/', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     config = { ...config, ...body };
     saveConfig(config);
-    return c.json({ data: config });
+    return c.json({ data: maskConfigForResponse(config) });
   });
 
   // POST /api/config/test-provider
@@ -121,7 +175,9 @@ export function createConfigRouter(): Hono {
       });
     }
 
-    const testModel = model || 'qwen3.6-plus';
+    // Use passed model, or look up provider config, or fallback
+    const providerConfig = name ? findProviderConfig(name) : undefined;
+    const testModel = model || providerConfig?.model || 'qwen3.6-plus';
     const startTime = Date.now();
 
     try {
@@ -173,6 +229,53 @@ export function createConfigRouter(): Hono {
       ];
     });
     return c.json({ data: { models, defaultProvider } });
+  });
+
+  // POST /api/config/fetch-models
+  router.post('/fetch-models', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { apiKey, baseUrl, name } = body;
+
+    if (!apiKey || !baseUrl) {
+      return c.json({
+        data: { success: false, error: '缺少 apiKey 或 baseUrl', models: [] },
+      });
+    }
+
+    try {
+      let url: string;
+      let headers: Record<string, string> = {};
+
+      if (name === 'Gemini' || baseUrl.includes('generativelanguage.googleapis.com')) {
+        url = `${baseUrl.replace(/\/$/, '')}/models?key=${apiKey}`;
+      } else {
+        url = `${baseUrl.replace(/\/$/, '')}/models`;
+        headers = { Authorization: `Bearer ${apiKey}` };
+      }
+
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        return c.json({
+          data: { success: false, error: `HTTP ${res.status}: ${text}`, models: [] },
+        });
+      }
+
+      const data = (await res.json()) as {
+        data?: Array<{ id: string }>;
+        models?: Array<{ id: string }>;
+      };
+      const models = (data.data || data.models || []).map((m) => m.id).filter(Boolean);
+
+      return c.json({
+        data: { success: true, models },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '获取模型列表失败';
+      return c.json({
+        data: { success: false, error: message, models: [] },
+      });
+    }
   });
 
   // POST /api/config/test-notification

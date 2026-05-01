@@ -77,6 +77,7 @@ export class MemoryDB {
     this.db = db;
     this.sqlJs = sqlJs;
     this.#initTables();
+    this.#verifySchemaIntegrity();
   }
 
   static async create(dbPath: string): Promise<MemoryDB> {
@@ -91,7 +92,7 @@ export class MemoryDB {
       db = new SQL.Database();
     }
 
-    db.run('PRAGMA journal_mode = WAL');
+    // sql.js 运行在纯内存环境中，不支持 WAL 模式；所有持久化通过 #saveToDisk 显式完成
     db.run('PRAGMA foreign_keys = ON');
 
     const instance = new MemoryDB(db, SQL);
@@ -171,6 +172,18 @@ export class MemoryDB {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_hooks_status ON hooks(status)`);
   }
 
+  #verifySchemaIntegrity(): void {
+    const expectedTables = ['facts', 'chapter_summaries', 'hooks', 'memory_snapshots'];
+    const result = this.db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    const actualTables = result[0]?.values.map((v) => v[0] as string) ?? [];
+
+    for (const table of expectedTables) {
+      if (!actualTables.includes(table)) {
+        throw new Error(`数据库一致性检查失败: 表 ${table} 不存在`);
+      }
+    }
+  }
+
   // ── Facts ───────────────────────────────────────────────
 
   insertFact(params: InsertFactParams): number {
@@ -185,7 +198,7 @@ export class MemoryDB {
         params.valid_from ?? params.chapter,
         params.valid_until ?? null,
         params.confidence ?? 'high',
-      ]
+      ],
     );
     this.#persist();
 
@@ -206,14 +219,14 @@ export class MemoryDB {
   queryFactsByEntity(entityType: string, entityName: string): FactRecord[] {
     return this.#all<FactRecord>(
       'SELECT * FROM facts WHERE entity_type = ? AND entity_name = ? ORDER BY id',
-      [entityType, entityName]
+      [entityType, entityName],
     );
   }
 
   queryFactsInRange(fromChapter: number, toChapter: number): FactRecord[] {
     return this.#all<FactRecord>(
       'SELECT * FROM facts WHERE valid_from <= ? AND (valid_until IS NULL OR valid_until >= ?) AND valid_from >= ? ORDER BY chapter',
-      [toChapter, fromChapter, fromChapter]
+      [toChapter, fromChapter, fromChapter],
     );
   }
 
@@ -232,7 +245,7 @@ export class MemoryDB {
         params.summary,
         params.key_events ? JSON.stringify(params.key_events) : null,
         params.state_changes ? JSON.stringify(params.state_changes) : null,
-      ]
+      ],
     );
     this.#persist();
   }
@@ -240,7 +253,7 @@ export class MemoryDB {
   getChapterSummary(chapter: number): ChapterSummaryRecord | null {
     const rows = this.#all<ChapterSummaryRecord>(
       'SELECT * FROM chapter_summaries WHERE chapter = ?',
-      [chapter]
+      [chapter],
     );
     return rows[0] ?? null;
   }
@@ -248,7 +261,7 @@ export class MemoryDB {
   listChapterSummaryChapters(): number[] {
     return this.#all<{ chapter: number }>(
       'SELECT chapter FROM chapter_summaries ORDER BY chapter',
-      []
+      [],
     ).map((r) => r.chapter);
   }
 
@@ -271,7 +284,7 @@ export class MemoryDB {
         params.expected_resolution_min ?? null,
         params.expected_resolution_max ?? null,
         params.is_dormant ? 1 : 0,
-      ]
+      ],
     );
     this.#persist();
 
@@ -312,15 +325,21 @@ export class MemoryDB {
       `INSERT INTO memory_snapshots (chapter, snapshot)
        VALUES (?, ?)
        ON CONFLICT(chapter) DO UPDATE SET snapshot = excluded.snapshot`,
-      [chapter, JSON.stringify(data)]
+      [chapter, JSON.stringify(data)],
     );
     this.#persist();
   }
 
   loadSnapshot(chapter: number): Record<string, unknown> | null {
-    const rows = this.db.exec(`SELECT snapshot FROM memory_snapshots WHERE chapter = ${chapter}`);
-    if (rows.length === 0 || rows[0].values.length === 0) return null;
-    return JSON.parse(rows[0].values[0][0] as string) as Record<string, unknown>;
+    const stmt = this.db.prepare('SELECT snapshot FROM memory_snapshots WHERE chapter = ?');
+    stmt.bind([chapter]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject() as { snapshot: string };
+    stmt.free();
+    return JSON.parse(row.snapshot) as Record<string, unknown>;
   }
 
   listSnapshotChapters(): number[] {
