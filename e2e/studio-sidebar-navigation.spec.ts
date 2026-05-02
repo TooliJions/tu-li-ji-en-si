@@ -128,8 +128,8 @@ test.describe('侧边栏导航全覆盖测试', () => {
   });
 
   test('二级导航: 创作计划', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-    await expectPageLoaded(page, /创作规划|Writing Plan|灵感与设定/);
+    await page.goto(`/chapter-plans?bookId=${bookId}`);
+    await expectPageLoaded(page, /细纲规划|Chapter Plans/);
   });
 
   test('二级导航: 提示词版本', async ({ page }) => {

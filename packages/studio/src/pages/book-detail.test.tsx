@@ -62,7 +62,7 @@ function renderWithRouter(bookId = 'book-001') {
       <Routes>
         <Route path="/book/:bookId" element={<BookDetail />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -145,7 +145,7 @@ describe('BookDetail Page', () => {
     renderWithRouter();
 
     const startWritingLink = await screen.findByRole('link', { name: '开始写作' });
-    expect(startWritingLink).toHaveAttribute('href', '/writing-plan?bookId=book-001');
+    expect(startWritingLink).toHaveAttribute('href', '/chapter-plans?bookId=book-001');
   });
 
   it('shows chapter status badges', async () => {
@@ -284,7 +284,7 @@ describe('BookDetail Page', () => {
       () => {
         expect(api.rollbackChapter).toHaveBeenCalledWith('book-001', 2, 'snap-1');
       },
-      { timeout: 2000 }
+      { timeout: 2000 },
     );
   });
 
@@ -321,7 +321,7 @@ describe('BookDetail Page', () => {
         const allText = container.textContent;
         expect(allText).toContain('确认合并');
       },
-      { timeout: 3000 }
+      { timeout: 3000 },
     );
   });
 

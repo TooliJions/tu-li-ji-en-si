@@ -1,37 +1,3 @@
-export async function planChapter(
-  bookId: string,
-  chapterNumber: number,
-  outlineContext: string = '',
-) {
-  const res = await fetch(`/api/books/${bookId}/pipeline/plan-chapter`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chapterNumber, outlineContext }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const msg = body?.error?.message || '章节规划失败';
-    throw new Error(msg);
-  }
-  const data = await res.json();
-  return data.data;
-}
-
-export async function bootstrapStory(bookId: string, chapterNumber?: number) {
-  const res = await fetch(`/api/books/${bookId}/pipeline/bootstrap-story`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(chapterNumber && chapterNumber > 0 ? { chapterNumber } : {}),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const message = body?.error?.message || `自动规划链启动失败 (HTTP ${res.status})`;
-    throw new Error(message);
-  }
-  const data = await res.json();
-  return data.data;
-}
-
 export async function startFastDraft(
   bookId: string,
   customIntent?: string,

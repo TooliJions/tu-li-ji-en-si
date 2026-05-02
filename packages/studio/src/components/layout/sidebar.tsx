@@ -40,7 +40,6 @@ const bookScopedQueryRoutes = new Set([
   '/hooks/thunder',
   '/analytics',
   '/import',
-  '/writing-plan',
   '/logs',
   '/style-manager',
   '/quality',

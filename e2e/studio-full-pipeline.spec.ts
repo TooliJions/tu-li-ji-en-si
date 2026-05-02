@@ -34,7 +34,7 @@ test.describe('完整创作流程 E2E', () => {
       );
     await page.getByRole('button', { name: '创建书籍' }).click();
 
-    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+    await page.waitForURL(/\/book\/book-|\/inspiration\?bookId=book-|\/writing\?bookId=book-/, {
       timeout: 30000,
     });
 
@@ -345,7 +345,7 @@ test.describe('完整创作端到端流水线', () => {
     await page.getByRole('button', { name: '下一步' }).click();
     await page.getByLabel('创作简报').fill('主角踏上修仙之路。');
     await page.getByRole('button', { name: '创建书籍' }).click();
-    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+    await page.waitForURL(/\/book\/book-|\/inspiration\?bookId=book-|\/writing\?bookId=book-/, {
       timeout: 30000,
     });
     const createdUrl = new URL(page.url());
@@ -355,9 +355,8 @@ test.describe('完整创作端到端流水线', () => {
   });
 
   test('2. 创作规划完成', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /创作规划/ })).toBeVisible();
-    await expect(page.getByText('灵感与设定')).toBeVisible();
+    await page.goto(`/chapter-plans?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /细纲规划/ })).toBeVisible();
   });
 
   test('3. 快速试写第一章', async ({ page }) => {

@@ -26,11 +26,12 @@ describe('Agent Auto-Registration', () => {
       'fatigue-analyzer',
       'hook-auditor',
       'market-injector',
-      'planner',
       'style-auditor',
       'style-fingerprint',
       'style-refiner',
       'title-voice-auditor',
+      'outline-generator',
+      'detailed-outline-generator',
     ];
 
     for (const name of expected) {

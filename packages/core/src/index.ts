@@ -58,7 +58,6 @@ export {
 } from './governance/hook-governance';
 export { AgentRegistry, agentRegistry, type AgentFactory } from './agents/registry';
 export * from './agents/base';
-export * from './agents/planner';
 export * from './agents/character';
 export * from './agents/chapter-planner';
 export * from './agents/executor';

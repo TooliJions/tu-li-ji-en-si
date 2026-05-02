@@ -1,7 +1,6 @@
 export * from './inspiration-service';
 export * from './planning-service';
 export * from './outline-service';
-export * from './chapter-plan-service';
 export * from './detailed-outline-service';
 export * from './writing-service';
 export * from './quality-service';

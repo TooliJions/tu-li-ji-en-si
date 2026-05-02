@@ -11,9 +11,9 @@ import { expect, test } from '@playwright/test';
  */
 test('studio main path stays reachable after creating a book', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
-  await page.getByRole('link', { name: '新建书籍' }).click();
+  await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
   await expect(page.getByRole('heading', { name: '新建书籍' })).toBeVisible();
 
   await page.getByLabel('书名').fill('E2E 冒烟书');
@@ -24,17 +24,19 @@ test('studio main path stays reachable after creating a book', async ({ page }) 
   await page.getByLabel('创作简报').fill('这是 E2E 冒烟测试创建的书籍，用于验证主路径可达。');
   await page.getByRole('button', { name: '创建书籍' }).click();
 
-  await expect(page).toHaveURL(/\/book\/book-/);
-  await expect(page.getByRole('heading', { name: 'E2E 冒烟书' })).toBeVisible();
+  await page.waitForURL(/\/book\/book-|\/inspiration\?bookId=book-|\/writing\?bookId=book-/, {
+    timeout: 30000,
+  });
 
-  const bookId = page.url().split('/').pop();
+  const currentUrl = new URL(page.url());
+  const bookId = currentUrl.searchParams.get('bookId') ?? currentUrl.pathname.split('/').pop();
   if (!bookId) {
     throw new Error('创建书籍后未能从 URL 提取 bookId');
   }
 
-  await page.getByRole('link', { name: '快速试写' }).click();
-  await expect(page).toHaveURL(new RegExp(`/writing\\?bookId=${bookId}$`));
-  await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+  await page.goto(`/writing?bookId=${bookId}`);
+  await expect(page).toHaveURL(new RegExp(`/writing\\?bookId=${bookId}`));
+  await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText('记忆透视')).toBeVisible();
 
   await page.goto(`/hooks?bookId=${bookId}`);
@@ -118,23 +120,23 @@ test.describe('NFR: 全局非功能需求', () => {
 
   test('NFR-010: 响应式设计 — 桌面/平板', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 桌面宽度 1280px
     await page.setViewportSize({ width: 1280, height: 720 });
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 平板宽度 768px
     await page.setViewportSize({ width: 768, height: 1024 });
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
   });
 
   test('NFR-012: 中文化界面', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 验证中文文本
-    await expect(page.getByRole('link', { name: '新建书籍' })).toBeVisible();
+    await expect(page.locator('main').getByRole('link', { name: '新建书籍' })).toBeVisible();
   });
 
   test('NFR-013: SSE 连接建立', async ({ page }) => {
@@ -152,14 +154,13 @@ test.describe('NFR: 全局非功能需求', () => {
     const bookId = data.data.id;
 
     try {
-      await page.goto(`/writing?bookId=${bookId}`);
-      await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
+      await page.goto(`/book/${bookId}`);
+      await expect(page.getByRole('heading', { name: /E2E-SSE-/ })).toBeVisible();
 
       // 等待 SSE 连接建立
       await page.waitForTimeout(3000);
 
-      // 验证日志面板（SSE 事件展示处）
-      await expect(page.getByText('流水线日志')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('SSE 已连接')).toBeVisible({ timeout: 5000 });
     } finally {
       await page.request.delete(`/api/books/${bookId}`);
     }

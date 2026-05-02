@@ -199,11 +199,7 @@ export default function BookCreate() {
       }
 
       const data = await res.json();
-      navigate(
-        brief.trim()
-          ? `/writing-plan?bookId=${data.data.id}&autoBootstrap=1&autoWrite=1`
-          : `/book/${data.data.id}`,
-      );
+      navigate(brief.trim() ? `/inspiration?bookId=${data.data.id}` : `/book/${data.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {

@@ -33,7 +33,7 @@ test.describe('书籍完整生命周期', () => {
     await page.getByLabel('创作简报').fill('这是 E2E 测试创建的玄幻小说，讲述修仙之路。');
     await page.getByRole('button', { name: '创建书籍' }).click();
 
-    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+    await page.waitForURL(/\/book\/book-|\/inspiration\?bookId=book-|\/writing\?bookId=book-/, {
       timeout: 30000,
     });
 
@@ -42,11 +42,7 @@ test.describe('书籍完整生命周期', () => {
       createdUrl.pathname.split('/').pop()) as string;
     expect(bookId).toMatch(/^book-/);
 
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-    await expect(page).toHaveURL(new RegExp(`/writing-plan\\?bookId=${bookId}`));
-    await expect(page.getByRole('heading', { name: /创作规划/ })).toBeVisible();
-
-    await page.getByRole('button', { name: '开始创作' }).click();
+    await page.goto(`/writing?bookId=${bookId}`);
     await expect(page).toHaveURL(new RegExp(`/writing\\?bookId=${bookId}`));
     await expect(page.getByRole('heading', { name: /正文创作/ })).toBeVisible();
   });

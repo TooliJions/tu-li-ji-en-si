@@ -17,7 +17,7 @@ function renderWithRouter() {
   return render(
     <MemoryRouter initialEntries={['/book-create']}>
       <BookCreate />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -159,9 +159,7 @@ describe('BookCreate Page', () => {
     });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(
-        '/writing-plan?bookId=book-test-123&autoBootstrap=1&autoWrite=1'
-      );
+      expect(mockNavigate).toHaveBeenCalledWith('/inspiration?bookId=book-test-123');
     });
   });
 

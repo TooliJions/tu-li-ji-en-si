@@ -32,7 +32,6 @@ import './entity-auditor';
 import './fatigue-analyzer';
 import './hook-auditor';
 import './market-injector';
-import './planner';
 import './style-auditor';
 import './style-fingerprint';
 import './style-refiner';
@@ -61,7 +60,6 @@ const EXPECTED_AGENTS = [
   'fatigue-analyzer',
   'hook-auditor',
   'market-injector',
-  'planner',
   'style-auditor',
   'style-fingerprint',
   'style-refiner',

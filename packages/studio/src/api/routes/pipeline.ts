@@ -4,17 +4,12 @@ import { hasStudioBookRuntime, readStudioBookRuntime } from '../core-bridge';
 import { getRequestContext } from '../context';
 import { eventHub } from '../sse';
 import { normalizeGenreForAgents } from '../../utils';
-import { DeterministicProvider } from '../../llm/deterministic-provider';
-import { getStudioRuntimeRootDir } from '../../runtime/runtime-config';
-import { PipelineRunner } from '@cybernovelist/core/pipeline';
 import {
   pipelineStore,
   createPipelineEntry,
   markCurrentStage,
   finalizePipeline,
-  buildStoryBootstrap,
   mergeIntentWithBookContext,
-  mergeOutlineContextWithBookContext,
   buildBookContextFromManifest,
   resolveFastDraftChapterNumber,
 } from '../../services/pipeline';
@@ -40,15 +35,6 @@ const upgradeDraftSchema = z.object({
 
 const writeDraftSchema = z.object({
   chapterNumber: z.number().int().positive(),
-});
-
-const planChapterSchema = z.object({
-  chapterNumber: z.number().int().positive(),
-  outlineContext: z.string().optional().default(''),
-});
-
-const bootstrapStorySchema = z.object({
-  chapterNumber: z.number().int().positive().optional(),
 });
 
 export function createPipelineRouter(): Hono {
@@ -85,24 +71,33 @@ export function createPipelineRouter(): Hono {
     void (async () => {
       const book = readStudioBookRuntime(bookId);
       const { runner } = getRequestContext(c);
+      const composeInput = {
+        bookId,
+        chapterNumber: result.data.chapterNumber,
+        title: `第 ${result.data.chapterNumber} 章`,
+        genre: normalizeGenreForAgents(book?.genre),
+        userIntent,
+      };
 
       markCurrentStage(pipelineId, 'composing');
       const chapterResult = result.data.skipAudit
         ? await runner.writeDraft({
-            bookId,
-            chapterNumber: result.data.chapterNumber,
-            title: `第 ${result.data.chapterNumber} 章`,
-            genre: normalizeGenreForAgents(book?.genre),
+            ...composeInput,
             sceneDescription: userIntent,
             bookContext: buildBookContextFromManifest(bookId),
           })
-        : await runner.composeChapter({
-            bookId,
-            chapterNumber: result.data.chapterNumber,
-            title: `第 ${result.data.chapterNumber} 章`,
-            genre: normalizeGenreForAgents(book?.genre),
-            userIntent,
-          });
+        : await runner.composeChapter(composeInput);
+
+      // if (!result.data.skipAudit && !chapterResult.success) {
+      //   console.warn(
+      //     `[write-next] Primary provider failed (${chapterResult.error}), falling back to deterministic.`,
+      //   );
+      //   const fallbackRunner = new PipelineRunner({
+      //     rootDir: getStudioRuntimeRootDir(),
+      //     provider: new DeterministicProvider(),
+      //   });
+      //   chapterResult = await fallbackRunner.composeChapter(composeInput);
+      // }
 
       finalizePipeline(pipelineId, {
         success: chapterResult.success,
@@ -165,21 +160,21 @@ export function createPipelineRouter(): Hono {
       bookContext: buildBookContextFromManifest(bookId),
     };
 
-    let draft = await getRequestContext(c).runner.writeFastDraft(draftInput);
-    let isFallback = false;
+    const draft = await getRequestContext(c).runner.writeFastDraft(draftInput);
+    const isFallback = false;
 
-    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
-    if (!draft.success) {
-      console.warn(
-        `[fast-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
-      );
-      const fallbackRunner = new PipelineRunner({
-        rootDir: getStudioRuntimeRootDir(),
-        provider: new DeterministicProvider(),
-      });
-      draft = await fallbackRunner.writeFastDraft(draftInput);
-      isFallback = true;
-    }
+    // // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
+    // if (!draft.success) {
+    //   console.warn(
+    //     `[fast-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
+    //   );
+    //   const fallbackRunner = new PipelineRunner({
+    //     rootDir: getStudioRuntimeRootDir(),
+    //     provider: new DeterministicProvider(),
+    //   });
+    //   draft = await fallbackRunner.writeFastDraft(draftInput);
+    //   isFallback = true;
+    // }
 
     if (!draft.success) {
       return c.json(
@@ -277,21 +272,21 @@ export function createPipelineRouter(): Hono {
       bookContext: buildBookContextFromManifest(bookId),
     };
 
-    let draft = await getRequestContext(c).runner.writeDraft(draftInput);
-    let isFallback = false;
+    const draft = await getRequestContext(c).runner.writeDraft(draftInput);
+    const isFallback = false;
 
-    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
-    if (!draft.success) {
-      console.warn(
-        `[write-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
-      );
-      const fallbackRunner = new PipelineRunner({
-        rootDir: getStudioRuntimeRootDir(),
-        provider: new DeterministicProvider(),
-      });
-      draft = await fallbackRunner.writeDraft(draftInput);
-      isFallback = true;
-    }
+    // // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
+    // if (!draft.success) {
+    //   console.warn(
+    //     `[write-draft] Primary provider failed (${draft.error}), falling back to deterministic.`,
+    //   );
+    //   const fallbackRunner = new PipelineRunner({
+    //     rootDir: getStudioRuntimeRootDir(),
+    //     provider: new DeterministicProvider(),
+    //   });
+    //   draft = await fallbackRunner.writeDraft(draftInput);
+    //   isFallback = true;
+    // }
 
     if (!draft.success) {
       return c.json(
@@ -318,111 +313,6 @@ export function createPipelineRouter(): Hono {
         ...(isFallback ? { _fallback: true } : {}),
       },
     });
-  });
-
-  // POST /api/books/:bookId/pipeline/plan-chapter
-  router.post('/plan-chapter', async (c) => {
-    const bookId = c.req.param('bookId')!;
-    if (!hasStudioBookRuntime(bookId)) {
-      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const result = planChapterSchema.safeParse(body);
-    if (!result.success) {
-      return c.json(
-        { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400,
-      );
-    }
-
-    const planInput = {
-      bookId,
-      chapterNumber: result.data.chapterNumber,
-      outlineContext: mergeOutlineContextWithBookContext(bookId, result.data.outlineContext),
-    };
-
-    const { runner } = getRequestContext(c);
-    let planResult = await runner.planChapter(planInput);
-    let isFallback = false;
-
-    // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
-    if (!planResult.success) {
-      console.warn(
-        `[plan-chapter] Primary provider failed (${planResult.error}), falling back to deterministic.`,
-      );
-      const fallbackRunner = new PipelineRunner({
-        rootDir: getStudioRuntimeRootDir(),
-        provider: new DeterministicProvider(),
-      });
-      planResult = await fallbackRunner.planChapter(planInput);
-      isFallback = true;
-    }
-
-    if (!planResult.success) {
-      return c.json({ error: { code: 'PLAN_FAILED', message: planResult.error } }, 400);
-    }
-
-    return c.json({ data: isFallback ? { ...planResult, _fallback: true } : planResult });
-  });
-
-  // POST /api/books/:bookId/pipeline/bootstrap-story
-  router.post('/bootstrap-story', async (c) => {
-    const bookId = c.req.param('bookId')!;
-    if (!hasStudioBookRuntime(bookId)) {
-      return c.json({ error: { code: 'BOOK_NOT_FOUND', message: '书籍不存在' } }, 404);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const result = bootstrapStorySchema.safeParse(body);
-    if (!result.success) {
-      return c.json(
-        { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400,
-      );
-    }
-
-    const chapterNumber = result.data.chapterNumber ?? resolveFastDraftChapterNumber(bookId);
-
-    try {
-      const { provider } = getRequestContext(c);
-      const bootstrapResult = await buildStoryBootstrap(bookId, chapterNumber, provider);
-
-      // 如果真实 LLM 调用失败，自动降级到 DeterministicProvider 重试一次
-      if ('error' in bootstrapResult) {
-        console.warn(
-          `[bootstrap-story] Primary provider failed (${bootstrapResult.error}), falling back to deterministic.`,
-        );
-        const fallback = new DeterministicProvider();
-        const fallbackResult = await buildStoryBootstrap(bookId, chapterNumber, fallback);
-        if ('error' in fallbackResult) {
-          return c.json(
-            { error: { code: 'BOOTSTRAP_FAILED', message: fallbackResult.error } },
-            400,
-          );
-        }
-        return c.json({ data: { ...fallbackResult, _fallback: true } });
-      }
-
-      return c.json({ data: bootstrapResult });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[bootstrap-story] unhandled error:', message);
-      // 即使抛异常也尝试降级
-      try {
-        const fallback = new DeterministicProvider();
-        const fallbackResult = await buildStoryBootstrap(bookId, chapterNumber, fallback);
-        if ('error' in fallbackResult) {
-          return c.json(
-            { error: { code: 'BOOTSTRAP_FAILED', message: fallbackResult.error } },
-            400,
-          );
-        }
-        return c.json({ data: { ...fallbackResult, _fallback: true } });
-      } catch {
-        return c.json({ error: { code: 'INTERNAL_ERROR', message } }, 500);
-      }
-    }
   });
 
   // GET /api/books/:bookId/pipeline/:pipelineId

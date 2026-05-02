@@ -1,7 +1,6 @@
 // CyberNovelist Core — Agents Domain Exports
 export { AgentRegistry, agentRegistry, type AgentFactory } from './registry';
 export * from './base';
-export * from './planner';
 export * from './character';
 export * from './chapter-planner';
 export * from './executor';

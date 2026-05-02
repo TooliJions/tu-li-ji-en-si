@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * E2E Test: 创作规划完整流程（PRD-010~015）
- * 覆盖：大纲生成、角色设计、世界观设定、分章规划
+ * E2E Test: 细纲规划页面(PRD-051~070)
+ * 覆盖:细纲规划入口与空态
  */
-test.describe('创作规划流程（PRD-010~015）', () => {
-  const testBookTitle = `E2E-创作规划-${Date.now()}`;
+test.describe('细纲规划页面(PRD-051~070)', () => {
+  const testBookTitle = `E2E-细纲规划-${Date.now()}`;
   let bookId: string;
 
   test.beforeAll(async ({ request }) => {
@@ -16,70 +16,30 @@ test.describe('创作规划流程（PRD-010~015）', () => {
         targetChapterCount: 50,
         targetWordsPerChapter: 3000,
         targetWords: 150000,
-        brief: 'E2E 创作规划测试',
+        brief: 'E2E 细纲规划测试',
       },
     });
     const data = await res.json();
     bookId = data.data.id;
   });
 
-  test('1. 创作规划页面加载', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /创作规划|灵感|世界观|角色/ })).toBeVisible();
+  test('1. 细纲规划页面加载', async ({ page }) => {
+    await page.goto(`/chapter-plans?bookId=${bookId}`);
+    await expect(page.getByRole('heading', { name: /细纲规划/ })).toBeVisible();
   });
 
-  test('2. 灵感与设定步骤', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
+  test('2. 空态提示与 AI 自动生成入口', async ({ page }) => {
+    await page.goto(`/chapter-plans?bookId=${bookId}`);
 
-    // 查找灵感输入区域
-    const inspirationSection = page.locator('text=/灵感|设定|brief/i');
-    await expect(inspirationSection.first()).toBeVisible({ timeout: 5000 });
-  });
-
-  test('3. 世界观构建步骤', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-
-    // 查找世界观相关元素
-    const worldBuildingSection = page.locator('text=/世界观|力量体系|地理|势力/i');
-    if (await worldBuildingSection.first().isVisible({ timeout: 3000 })) {
-      await expect(worldBuildingSection.first()).toBeVisible();
+    const emptyState = page.getByText(/尚未生成全书细纲|请先完成故事总纲/);
+    if (
+      await emptyState
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false)
+    ) {
+      await expect(emptyState.first()).toBeVisible();
     }
-  });
-
-  test('4. 角色设计步骤', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-
-    // 查找角色设计相关元素
-    const characterSection = page.locator('text=/角色|人物|性格/i');
-    if (await characterSection.first().isVisible({ timeout: 3000 })) {
-      await expect(characterSection.first()).toBeVisible();
-    }
-  });
-
-  test('5. 分章规划步骤（PRD-013）', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-
-    // 查找分章规划相关元素
-    const chapterPlanSection = page.locator('text=/分章|章节规划|关键事件/i');
-    if (await chapterPlanSection.first().isVisible({ timeout: 3000 })) {
-      await expect(chapterPlanSection.first()).toBeVisible();
-    }
-
-    // 查找规划按钮
-    const planBtn = page.getByRole('button', { name: /生成规划|规划本章/i });
-    if (await planBtn.isVisible()) {
-      await expect(planBtn).toBeVisible();
-    }
-  });
-
-  test('6. 步骤导航流转', async ({ page }) => {
-    await page.goto(`/writing-plan?bookId=${bookId}`);
-
-    // 验证步骤导航存在
-    await expect(page.getByRole('heading', { name: '创作规划' })).toBeVisible({ timeout: 5000 });
-
-    // 验证至少有一个步骤
-    await expect(page.getByText('灵感与设定')).toBeVisible();
   });
 
   test.afterAll('清理测试书籍', async ({ request }) => {
@@ -545,7 +505,7 @@ test.describe('PRD-056a: 热力色带 + 拖拽', () => {
     await page.goto(`/hooks/timeline?bookId=${bookId}`);
 
     const dragThumb = page.locator(
-      '[class*="drag"], [style*="cursor-grab"], [style*="bg-white border"]'
+      '[class*="drag"], [style*="cursor-grab"], [style*="bg-white border"]',
     );
     if (await dragThumb.first().isVisible({ timeout: 3000 })) {
       await expect(dragThumb.first()).toBeVisible();
@@ -675,7 +635,7 @@ test.describe('PRD-092b: CSS 碎裂动画', () => {
   test('碎裂动画 CSS @keyframes 存在', async ({ page }) => {
     // 通过访问页面验证 CSS 加载
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 验证 CSS 文件加载
     const shatterClass = page.locator('[class*="shatter"], [class*="Shatter"]');

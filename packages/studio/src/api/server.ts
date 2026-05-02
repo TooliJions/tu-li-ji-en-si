@@ -21,7 +21,6 @@ import { createInspirationRouter } from './routes/inspiration';
 import { createPlanningBriefRouter } from './routes/planning-brief';
 import { createStoryOutlineRouter } from './routes/story-outline';
 import { createDetailedOutlineRouter } from './routes/detailed-outline';
-import { createChapterPlanRouter } from './routes/chapter-plan';
 import { createQualityRouter } from './routes/quality';
 import { createWritingRouter } from './routes/writing';
 
@@ -193,7 +192,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   bookScope.route('/planning-brief', createPlanningBriefRouter());
   bookScope.route('/story-outline', createStoryOutlineRouter());
   bookScope.route('/detailed-outline', createDetailedOutlineRouter());
-  bookScope.route('/chapter-plans', createChapterPlanRouter());
   bookScope.route('/quality', createQualityRouter());
   bookScope.route('/writing', createWritingRouter());
   app.route('/api/books/:bookId', bookScope);

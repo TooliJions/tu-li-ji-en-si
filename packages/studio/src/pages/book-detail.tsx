@@ -7,7 +7,6 @@ import {
   Scissors,
   RotateCcw,
   MoreHorizontal,
-  Play,
   Stethoscope,
   Trash2,
   Zap,
@@ -182,7 +181,7 @@ export default function BookDetail() {
       setChapters((prev) =>
         prev
           .map((ch) => (ch.number === splitDialog.chapterNumber ? data[0] : ch))
-          .concat(data.slice(1))
+          .concat(data.slice(1)),
       );
     }
     setSplitDialog(null);
@@ -245,7 +244,7 @@ export default function BookDetail() {
         <h2 className="text-lg font-semibold mb-4">快速操作</h2>
         <div className="flex flex-wrap gap-3">
           <Link
-            to={`/writing-plan?bookId=${bookId}`}
+            to={`/chapter-plans?bookId=${bookId}`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
           >
             <Pencil size={14} />
@@ -271,13 +270,6 @@ export default function BookDetail() {
           >
             <Download size={14} />
             导出
-          </Link>
-          <Link
-            to={`/daemon?bookId=${bookId}`}
-            className="inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm hover:bg-accent"
-          >
-            <Play size={14} />
-            守护进程
           </Link>
           <Link
             to={`/doctor?bookId=${bookId}`}

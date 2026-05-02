@@ -17,7 +17,6 @@ const ConfigView = lazy(() => import('@/pages/config-view'));
 const DoctorView = lazy(() => import('@/pages/doctor-view'));
 const StyleManager = lazy(() => import('@/pages/style-manager'));
 const EmotionalArcs = lazy(() => import('@/pages/emotional-arcs'));
-const WritingPlan = lazy(() => import('@/pages/writing-plan'));
 const GenreManager = lazy(() => import('@/pages/genre-manager'));
 const ExportView = lazy(() => import('@/pages/export-view'));
 const ImportManager = lazy(() => import('@/pages/import-manager'));
@@ -141,97 +140,6 @@ function BookCreateRouteFallback() {
   );
 }
 
-function WritingPlanRouteFallback() {
-  return (
-    <section
-      className="flex h-full min-h-0 animate-pulse bg-background"
-      aria-busy="true"
-      aria-live="polite"
-    >
-      <aside className="w-60 shrink-0 border-r bg-muted/20 px-5 py-6">
-        <SkeletonBlock className="h-4 w-20 rounded-md" />
-        <div className="mt-5 space-y-2">
-          {Array.from({ length: 6 }, (_, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-3 rounded-lg border border-transparent px-3 py-2.5"
-            >
-              <SkeletonBlock className="h-6 w-6 rounded-full" />
-              <div className="min-w-0 flex-1">
-                <SkeletonBlock className="h-4 w-24 rounded-md" />
-                <SkeletonBlock className="mt-2 h-3 w-32 rounded-md" />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-8 space-y-2 border-t pt-4">
-          <SkeletonBlock className="h-4 w-24 rounded-md" />
-          <SkeletonBlock className="h-4 w-24 rounded-md" />
-          <SkeletonBlock className="h-4 w-24 rounded-md" />
-          <SkeletonBlock className="h-4 w-24 rounded-md" />
-        </div>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">
-        <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground/90">创作规划</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              正在准备章节规划、世界规则和角色上下文。
-            </p>
-          </div>
-          <SkeletonBlock className="h-9 w-32 rounded-full" />
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <SkeletonBlock className="h-6 w-24" />
-                <SkeletonBlock className="mt-2 h-4 w-32 rounded-md" />
-              </div>
-              <SkeletonBlock className="h-7 w-16 rounded-full" />
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-2">
-              {Array.from({ length: 5 }, (_, index) => (
-                <div key={index} className="flex items-center gap-3 rounded-lg px-3 py-2">
-                  <SkeletonBlock className="h-4 w-14 rounded-md" />
-                  <SkeletonBlock className="h-4 flex-1 rounded-md" />
-                  <SkeletonBlock className="h-4 w-6 rounded-md" />
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <SkeletonBlock className="h-6 w-40" />
-                <SkeletonBlock className="mt-2 h-4 w-48 rounded-md" />
-              </div>
-              <div className="flex gap-2">
-                <SkeletonBlock className="h-9 w-20" />
-                <SkeletonBlock className="h-9 w-24" />
-                <SkeletonBlock className="h-9 w-28" />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-4">
-                <SkeletonBlock className="h-24 w-full" />
-                <SkeletonBlock className="h-24 w-full" />
-              </div>
-              <div className="space-y-4">
-                <SkeletonBlock className="h-24 w-full" />
-                <SkeletonBlock className="h-24 w-full" />
-              </div>
-            </div>
-          </section>
-        </div>
-      </main>
-    </section>
-  );
-}
-
 export default function App() {
   return (
     <Routes>
@@ -346,10 +254,6 @@ export default function App() {
             GenreManager,
             renderGenericFallback('题材管理', '正在整理题材模板与规则。'),
           )}
-        />
-        <Route
-          path="/writing-plan"
-          element={renderLazyRoute(WritingPlan, <WritingPlanRouteFallback />)}
         />
         <Route
           path="/book/:bookId/emotional-arcs"
