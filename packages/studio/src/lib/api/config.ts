@@ -246,7 +246,22 @@ export async function createStoryOutline(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('创建故事总纲失败');
+  if (!res.ok) {
+    await throwOutlineError(res, '创建故事总纲失败');
+  }
+  const data = await res.json();
+  return data.data as StoryBlueprint;
+}
+
+export async function generateStoryOutline(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/story-outline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'generate' }),
+  });
+  if (!res.ok) {
+    await throwOutlineError(res, 'AI 生成故事总纲失败');
+  }
   const data = await res.json();
   return data.data as StoryBlueprint;
 }
@@ -257,7 +272,44 @@ export async function updateStoryOutline(bookId: string, payload: UpdateStoryBlu
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('更新故事总纲失败');
+  if (!res.ok) {
+    await throwOutlineError(res, '更新故事总纲失败');
+  }
   const data = await res.json();
   return data.data as StoryBlueprint;
+}
+
+export interface OutlineValidationIssue {
+  rule: string;
+  severity: 'critical' | 'warning';
+  description: string;
+}
+
+export type StoryBlueprintDocument = StoryBlueprint;
+
+export class OutlineApiError extends Error {
+  readonly issues: OutlineValidationIssue[];
+  readonly code: string;
+
+  constructor(message: string, code: string, issues: OutlineValidationIssue[] = []) {
+    super(message);
+    this.name = 'OutlineApiError';
+    this.code = code;
+    this.issues = issues;
+  }
+}
+
+async function throwOutlineError(res: Response, fallback: string): Promise<never> {
+  let message = fallback;
+  let code = 'UNKNOWN';
+  let issues: OutlineValidationIssue[] = [];
+  try {
+    const body = await res.json();
+    if (body?.error?.message) message = body.error.message;
+    if (body?.error?.code) code = body.error.code;
+    if (Array.isArray(body?.error?.issues)) issues = body.error.issues;
+  } catch {
+    // ignore
+  }
+  throw new OutlineApiError(message, code, issues);
 }

@@ -172,3 +172,46 @@ export const GENRE_WRITER_STYLE_MAP: Record<string, string> = {
     '情感描写须有具体的心理活动和身体语言；对话须有言外之意和情感暗示；关系进展须有可见的行为变化',
   fanfic: '角色对话风格须与原作一致；行为模式须与原作角色性格对齐；情节须在原作框架内展开',
 };
+
+/**
+ * NovelType → ArchitectureMode 映射(对应 outline.ts 的 NovelTypeSchema)
+ *
+ * - 玄幻 / 仙侠 / 奇幻 → lotus_map(莲花地图:核心秘境 + 花瓣单元)
+ * - 科幻 → multiverse(平行宇宙:枢纽世界 + 平行世界)
+ * - 都市 / 悬疑 / 言情 / 历史 → org_ensemble(组织群像:核心组织 + 阵营博弈)
+ * - 游戏 / 末世 → map_upgrade(地图升级:起始区域 + 分级地图)
+ */
+export const GENRE_TO_ARCHITECTURE: Record<
+  string,
+  'lotus_map' | 'multiverse' | 'org_ensemble' | 'map_upgrade'
+> = {
+  xuanhuan: 'lotus_map',
+  xianxia: 'lotus_map',
+  qihuan: 'lotus_map',
+  kehuan: 'multiverse',
+  youxi: 'map_upgrade',
+  moshi: 'map_upgrade',
+  dushi: 'org_ensemble',
+  xuanyi: 'org_ensemble',
+  yanqing: 'org_ensemble',
+  lishi: 'org_ensemble',
+};
+
+/**
+ * NovelType → typeSpecific.kind 映射(对应 outline.ts 的 TypeSpecificSchema)
+ */
+export const GENRE_TO_TYPE_SPECIFIC: Record<
+  string,
+  'fantasy' | 'mystery' | 'urban' | 'romance' | 'scifi'
+> = {
+  xuanhuan: 'fantasy',
+  xianxia: 'fantasy',
+  qihuan: 'fantasy',
+  kehuan: 'scifi',
+  youxi: 'urban',
+  moshi: 'urban',
+  dushi: 'urban',
+  xuanyi: 'mystery',
+  yanqing: 'romance',
+  lishi: 'romance',
+};

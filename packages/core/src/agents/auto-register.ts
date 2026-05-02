@@ -37,6 +37,7 @@ import './style-auditor';
 import './style-fingerprint';
 import './style-refiner';
 import './title-voice-auditor';
+import './outline-generator';
 
 // Verify all expected agents are registered (development-time sanity check)
 const EXPECTED_AGENTS = [
@@ -64,6 +65,7 @@ const EXPECTED_AGENTS = [
   'style-fingerprint',
   'style-refiner',
   'title-voice-auditor',
+  'outline-generator',
 ];
 
 // 仅在非生产环境执行开发时校验，避免生产构建中无意义的检查开销

@@ -1,20 +1,25 @@
 import { Hono } from 'hono';
 import {
   CreateStoryBlueprintInputSchema,
+  UpdateStoryBlueprintPatchSchema,
   DefaultOutlineService,
+  OutlineValidationError,
+  type InspirationSeed,
   type PlanningBrief,
   type StoryBlueprint,
 } from '@cybernovelist/core';
 import { hasStudioBookRuntime } from '../core-bridge';
 import { readWorkflowDocument, writeWorkflowDocument } from './workflow-store';
+import { getRequestContext } from '../context';
 
+const INSPIRATION_FILE = 'inspiration-seed.json';
 const PLANNING_BRIEF_FILE = 'planning-brief.json';
 const STORY_OUTLINE_FILE = 'story-outline.json';
 
 const createStoryOutlineRouteSchema = CreateStoryBlueprintInputSchema.omit({
   planningBriefId: true,
 });
-const updateStoryOutlineRouteSchema = createStoryOutlineRouteSchema.partial();
+const updateStoryOutlineRouteSchema = UpdateStoryBlueprintPatchSchema;
 
 export function createStoryOutlineRouter(): Hono {
   const router = new Hono();
@@ -58,20 +63,53 @@ export function createStoryOutlineRouter(): Hono {
     }
 
     const body = await c.req.json().catch(() => ({}));
-    const result = createStoryOutlineRouteSchema.safeParse(body);
-    if (!result.success) {
-      return c.json(
-        { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400,
-      );
-    }
+    const mode = body?.mode === 'generate' ? 'generate' : 'manual';
 
-    const blueprint = service.createBlueprint({
-      planningBriefId: brief.id,
-      ...result.data,
-    });
-    writeWorkflowDocument(bookId, STORY_OUTLINE_FILE, blueprint);
-    return c.json({ data: blueprint }, 201);
+    try {
+      let blueprint: StoryBlueprint;
+
+      if (mode === 'generate') {
+        const seed = readWorkflowDocument<InspirationSeed>(bookId, INSPIRATION_FILE);
+        if (!seed) {
+          return c.json(
+            { error: { code: 'UPSTREAM_REQUIRED', message: '请先完成灵感输入,再生成总纲' } },
+            409,
+          );
+        }
+        const { provider } = getRequestContext(c);
+        blueprint = await service.generateBlueprint({ seed, brief, provider });
+      } else {
+        const result = createStoryOutlineRouteSchema.safeParse(body);
+        if (!result.success) {
+          return c.json(
+            { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
+            400,
+          );
+        }
+        blueprint = service.createBlueprint({
+          planningBriefId: brief.id,
+          ...result.data,
+        });
+      }
+
+      writeWorkflowDocument(bookId, STORY_OUTLINE_FILE, blueprint);
+      return c.json({ data: blueprint }, 201);
+    } catch (err) {
+      if (err instanceof OutlineValidationError) {
+        return c.json(
+          {
+            error: {
+              code: 'OUTLINE_VALIDATION_FAILED',
+              message: err.message,
+              issues: err.issues,
+            },
+          },
+          422,
+        );
+      }
+      const message = err instanceof Error ? err.message : '总纲创建失败';
+      return c.json({ error: { code: 'GENERATION_FAILED', message } }, 500);
+    }
   });
 
   router.patch('/', async (c) => {
@@ -100,9 +138,26 @@ export function createStoryOutlineRouter(): Hono {
       );
     }
 
-    const updated = service.updateBlueprint(current, result.data);
-    writeWorkflowDocument(bookId, STORY_OUTLINE_FILE, updated);
-    return c.json({ data: updated });
+    try {
+      const updated = service.updateBlueprint(current, result.data);
+      writeWorkflowDocument(bookId, STORY_OUTLINE_FILE, updated);
+      return c.json({ data: updated });
+    } catch (err) {
+      if (err instanceof OutlineValidationError) {
+        return c.json(
+          {
+            error: {
+              code: 'OUTLINE_VALIDATION_FAILED',
+              message: err.message,
+              issues: err.issues,
+            },
+          },
+          422,
+        );
+      }
+      const message = err instanceof Error ? err.message : '总纲更新失败';
+      return c.json({ error: { code: 'INVALID_STATE', message } }, 400);
+    }
   });
 
   return router;
