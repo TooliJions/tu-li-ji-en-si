@@ -5,6 +5,8 @@ import type {
   CreateStoryBlueprintInput,
   UpdateStoryBlueprintPatch,
   StoryBlueprint,
+  DetailedOutline,
+  ContextForWriter,
 } from '@cybernovelist/core';
 
 export async function fetchConfig() {
@@ -312,4 +314,36 @@ async function throwOutlineError(res: Response, fallback: string): Promise<never
     // ignore
   }
   throw new OutlineApiError(message, code, issues);
+}
+
+export type DetailedOutlineDocument = DetailedOutline;
+
+export async function fetchDetailedOutline(bookId: string) {
+  const res = await fetch(`/api/books/${bookId}/detailed-outline`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data as DetailedOutlineDocument | null;
+}
+
+export async function generateDetailedOutline(
+  bookId: string,
+  options?: { totalChapters?: number; chaptersPerVolume?: number },
+) {
+  const res = await fetch(`/api/books/${bookId}/detailed-outline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'generate', ...options }),
+  });
+  if (!res.ok) {
+    await throwOutlineError(res, 'AI 生成细纲失败');
+  }
+  const data = await res.json();
+  return data.data as DetailedOutlineDocument;
+}
+
+export async function fetchChapterContext(bookId: string, chapterNumber: number) {
+  const res = await fetch(`/api/books/${bookId}/detailed-outline/${chapterNumber}/context`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data as ContextForWriter | null;
 }

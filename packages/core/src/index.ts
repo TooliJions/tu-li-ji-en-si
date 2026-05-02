@@ -68,6 +68,7 @@ export * from './agents/style-refiner';
 export * from './agents/intent-director';
 export * from './agents/memory-extractor';
 export * from './agents/outline-generator';
+export * from './agents/detailed-outline-generator';
 export {
   QualityReviewer,
   type QualityIssueLocation,

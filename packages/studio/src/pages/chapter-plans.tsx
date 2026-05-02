@@ -1,373 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Sparkles, ChevronRight } from 'lucide-react';
 import {
-  AlertCircle,
-  Check,
-  ChevronRight,
-  Lightbulb,
-  ListOrdered,
-  PenTool,
-  Save,
-  Server,
-  Sparkles,
-  Users,
-  Wand2,
-} from 'lucide-react';
-import { bootstrapStory, fetchBook, fetchChapters, fetchTruthFile, planChapter } from '../lib/api';
+  fetchBook,
+  fetchStoryOutline,
+  fetchDetailedOutline,
+  generateDetailedOutline,
+  type DetailedOutlineDocument,
+  type StoryBlueprintDocument,
+} from '../lib/api';
 
 interface Book {
   id: string;
   title: string;
-  genre: string;
-  chapterCount: number;
-  targetChapterCount: number;
-  brief?: string;
 }
 
-interface Chapter {
-  number: number;
-  title: string | null;
-  status: 'draft' | 'published';
-  wordCount: number;
-}
-
-interface ChapterPlan {
-  chapterNumber: number;
-  title: string;
-  goal: string;
-  characters: string;
-  keyEvents: string;
-  hooks: string;
-}
-
-interface PlanChapterResponse {
-  chapterNumber: number;
-  title?: string;
-  summary?: string;
-  keyEvents?: string[];
-  hooks?: string[];
-  characters?: string[];
-}
-
-interface PlanningManifestChapterPlan {
-  chapterNumber?: number;
-  title?: string;
-  intention?: string;
-  characters?: string[];
-  keyEvents?: string[];
-  hooks?: Array<string | { description?: string }>;
-}
-
-interface BootstrapStoryResponse {
-  success: boolean;
-  currentFocus: string;
-  centralConflict: string;
-  growthArc: string;
-  worldRules: string[];
-  characters: Array<{ name: string; role: string; arc?: string }>;
-  hooks: string[];
-  chapterPlan: PlanChapterResponse;
-}
-
-interface PlanningManifest {
-  currentFocus?: string;
-  worldRules?: Array<{ rule?: string }>;
-  characters?: Array<{ name?: string }>;
-  hooks?: Array<{ description?: string; status?: string }>;
-  chapterPlans?: Record<string, PlanningManifestChapterPlan>;
-}
-
-interface PlanningSources {
-  brief: string;
-  currentFocus: string;
-  worldRules: string[];
-  characters: string[];
-  hooks: string[];
-}
-
-const STEPS = [
-  { index: 1, label: '灵感与设定', icon: Lightbulb },
-  { index: 2, label: '世界观构建', icon: Wand2 },
-  { index: 3, label: '角色设计', icon: Users },
-  { index: 4, label: '分章规划', icon: ListOrdered },
-  { index: 5, label: '正文创作', icon: PenTool },
-  { index: 6, label: '守护进程', icon: Server },
-] as const;
-
-const VOLUME_TITLES = ['启程立势', '锋芒初露', '大学风云', '局势升级', '终局回收'];
-
-function stepLinkFor(index: number, bookId: string): string {
-  if (index === 1) return `/book/${bookId}`;
-  if (index === 2) return `/truth-files?bookId=${bookId}&tab=overview`;
-  if (index === 3) return `/truth-files?bookId=${bookId}&tab=characters`;
-  if (index === 4) return `/chapter-plans?bookId=${bookId}`;
-  if (index === 5) return `/writing?bookId=${bookId}`;
-  return `/daemon?bookId=${bookId}`;
-}
-
-function emptyPlan(chapterNumber: number): ChapterPlan {
-  return { chapterNumber, title: '', goal: '', characters: '', keyEvents: '', hooks: '' };
-}
-
-function isPlanReadyForWriting(plan: ChapterPlan): boolean {
-  return Boolean(
-    plan.title.trim() && plan.goal.trim() && plan.characters.trim() && plan.keyEvents.trim(),
-  );
-}
-
-function isPlanEmpty(plan: ChapterPlan): boolean {
-  return (
-    !plan.title.trim() &&
-    !plan.goal.trim() &&
-    !plan.characters.trim() &&
-    !plan.keyEvents.trim() &&
-    !plan.hooks.trim()
-  );
-}
-
-function getPlanStorageKey(bookId: string): string {
-  return `chapter_plans_${bookId}`;
-}
-
-function loadStoredPlans(bookId: string): Record<number, ChapterPlan> {
-  if (typeof window === 'undefined' || !bookId) {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(getPlanStorageKey(bookId));
-    if (!raw) {
-      return {};
-    }
-
-    const parsed = JSON.parse(raw) as Record<string, ChapterPlan>;
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([chapterNumber, plan]) => [Number(chapterNumber), plan])
-        .filter(([chapterNumber, plan]) => Number.isFinite(chapterNumber) && plan),
-    );
-  } catch {
-    return {};
-  }
-}
-
-function normalizeHookText(hooks: Array<string | { description?: string }> | undefined): string {
-  return (Array.isArray(hooks) ? hooks : [])
-    .map((hook) => {
-      if (typeof hook === 'string') {
-        return hook.trim();
-      }
-      return typeof hook?.description === 'string' ? hook.description.trim() : '';
-    })
-    .filter(Boolean)
-    .join('、');
-}
-
-function extractManifestPlans(manifest: PlanningManifest | null): Record<number, ChapterPlan> {
-  return Object.fromEntries(
-    Object.entries(manifest?.chapterPlans ?? {})
-      .map(([chapterKey, plan]) => {
-        const chapterNumber = plan.chapterNumber ?? Number(chapterKey);
-        if (!Number.isFinite(chapterNumber) || chapterNumber <= 0) {
-          return null;
-        }
-
-        return [
-          chapterNumber,
-          {
-            chapterNumber,
-            title: plan.title?.trim() ?? '',
-            goal: plan.intention?.trim() ?? '',
-            characters: Array.isArray(plan.characters) ? plan.characters.join(' ') : '',
-            keyEvents: Array.isArray(plan.keyEvents) ? plan.keyEvents.join('\n') : '',
-            hooks: normalizeHookText(plan.hooks),
-          } satisfies ChapterPlan,
-        ] as const;
-      })
-      .filter((entry): entry is readonly [number, ChapterPlan] => entry !== null),
-  );
-}
-
-function selectPreferredPlanValue(
-  storedValue: string | undefined,
-  manifestValue: string,
-  options: { rejectSerializedObjects?: boolean } = {},
-): string {
-  const candidate = storedValue?.trim() ?? '';
-  if (!candidate) {
-    return manifestValue;
-  }
-  if (options.rejectSerializedObjects && candidate.includes('[object Object]')) {
-    return manifestValue;
-  }
-  return storedValue ?? manifestValue;
-}
-
-function mergeInitialPlans(
-  manifestPlans: Record<number, ChapterPlan>,
-  storedPlans: Record<number, ChapterPlan>,
-): Record<number, ChapterPlan> {
-  const chapterNumbers = new Set([
-    ...Object.keys(manifestPlans).map(Number),
-    ...Object.keys(storedPlans).map(Number),
-  ]);
-
-  return Object.fromEntries(
-    [...chapterNumbers]
-      .filter((chapterNumber) => Number.isFinite(chapterNumber) && chapterNumber > 0)
-      .map((chapterNumber) => {
-        const manifestPlan = manifestPlans[chapterNumber] ?? emptyPlan(chapterNumber);
-        const storedPlan = storedPlans[chapterNumber];
-
-        return [
-          chapterNumber,
-          {
-            chapterNumber,
-            title: selectPreferredPlanValue(storedPlan?.title, manifestPlan.title),
-            goal: selectPreferredPlanValue(storedPlan?.goal, manifestPlan.goal),
-            characters: selectPreferredPlanValue(storedPlan?.characters, manifestPlan.characters),
-            keyEvents: selectPreferredPlanValue(storedPlan?.keyEvents, manifestPlan.keyEvents),
-            hooks: selectPreferredPlanValue(storedPlan?.hooks, manifestPlan.hooks, {
-              rejectSerializedObjects: true,
-            }),
-          } satisfies ChapterPlan,
-        ] as const;
-      }),
-  );
-}
-
-function persistPlans(bookId: string, plans: Record<number, ChapterPlan>): void {
-  if (typeof window === 'undefined' || !bookId) {
-    return;
-  }
-
-  window.localStorage.setItem(getPlanStorageKey(bookId), JSON.stringify(plans));
-}
-
-function buildChapterWindow(selectedChapter: number, totalSlots: number): number[] {
-  let start = Math.max(1, selectedChapter - 2);
-  const end = Math.min(totalSlots, start + 4);
-  start = Math.max(1, end - 4);
-  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-}
-
-function getVolumeMeta(chapterNumber: number): { number: number; title: string } {
-  const volumeNumber = Math.max(1, Math.ceil(chapterNumber / 20));
-  return {
-    number: volumeNumber,
-    title: VOLUME_TITLES[volumeNumber - 1] ?? '主线推进',
-  };
-}
-
-function stripLeadingLabel(value: string, label: string): string {
-  return value.replace(new RegExp(`^${label}[：:]?\\s*`), '').trim();
-}
-
-function truncateSummary(value: string, maxLength = 32): string {
-  if (!value) {
-    return '';
-  }
-
-  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
-}
-
-function normalizePlanningSources(
-  book: Book | null,
-  manifest: PlanningManifest | null,
-): PlanningSources {
-  return {
-    brief: (book?.brief ?? '').trim(),
-    currentFocus: stripLeadingLabel((manifest?.currentFocus ?? '').trim(), '当前重点'),
-    worldRules: (manifest?.worldRules ?? [])
-      .map((rule) => (rule?.rule ?? '').trim())
-      .filter(Boolean),
-    characters: (manifest?.characters ?? [])
-      .map((character) => (character?.name ?? '').trim())
-      .filter(Boolean),
-    hooks: (manifest?.hooks ?? [])
-      .filter(
-        (hook) =>
-          !hook?.status || ['open', 'progressing', 'deferred', 'dormant'].includes(hook.status),
-      )
-      .map((hook) => (hook?.description ?? '').trim())
-      .filter(Boolean),
-  };
-}
-
-function buildPlanContext(plan: ChapterPlan, sources: PlanningSources): string {
-  return [
-    sources.brief ? `创作简报: ${sources.brief}` : '',
-    sources.currentFocus ? `当前重点: ${sources.currentFocus}` : '',
-    sources.worldRules.length > 0 ? `世界设定: ${sources.worldRules.join('；')}` : '',
-    sources.characters.length > 0 ? `角色设定: ${sources.characters.join('、')}` : '',
-    sources.hooks.length > 0 ? `现有伏笔: ${sources.hooks.join('；')}` : '',
-    plan.title.trim() ? `章节标题: ${plan.title.trim()}` : '',
-    plan.goal.trim() ? `章节目标: ${plan.goal.trim()}` : '',
-    plan.characters.trim() ? `出场人物: ${plan.characters.trim()}` : '',
-    plan.keyEvents.trim() ? `关键事件: ${plan.keyEvents.trim()}` : '',
-    plan.hooks.trim() ? `本章伏笔: ${plan.hooks.trim()}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-function buildWritingParams(bookId: string, plan: ChapterPlan): URLSearchParams {
-  const intent = [
-    plan.title.trim() ? `章节标题: ${plan.title.trim()}` : '',
-    plan.goal.trim() ? `章节目标: ${plan.goal.trim()}` : '',
-    plan.characters.trim() ? `出场人物: ${plan.characters.trim()}` : '',
-    plan.keyEvents.trim() ? `关键事件: ${plan.keyEvents.trim()}` : '',
-    plan.hooks.trim() ? `伏笔埋设: ${plan.hooks.trim()}` : '',
-  ]
-    .filter(Boolean)
-    .join('；');
-
-  const nextParams = new URLSearchParams({
-    bookId,
-    chapter: String(plan.chapterNumber),
-  });
-
-  if (intent) {
-    nextParams.set('intent', intent);
-  }
-  if (plan.title.trim()) {
-    nextParams.set('title', plan.title.trim());
-  }
-  if (plan.characters.trim()) {
-    nextParams.set('characters', plan.characters.trim());
-  }
-  if (plan.hooks.trim()) {
-    nextParams.set('hooks', plan.hooks.trim());
-  }
-
-  return nextParams;
-}
-
-export default function ChapterPlans() {
+export default function ChapterPlansPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const bookId = searchParams.get('bookId') ?? '';
-  const autoBootstrap = searchParams.get('autoBootstrap') === '1';
-  const autoWrite = searchParams.get('autoWrite') === '1';
-
   const [book, setBook] = useState<Book | null>(null);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [plans, setPlans] = useState<Record<number, ChapterPlan>>({});
-  const [planningSources, setPlanningSources] = useState<PlanningSources>({
-    brief: '',
-    currentFocus: '',
-    worldRules: [],
-    characters: [],
-    hooks: [],
-  });
-  const [selectedChapter, setSelectedChapter] = useState<number>(1);
+  const [blueprint, setBlueprint] = useState<StoryBlueprintDocument | null>(null);
+  const [outline, setOutline] = useState<DetailedOutlineDocument | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
-  const goalRef = useRef<HTMLTextAreaElement | null>(null);
-  const autoBootstrapTriggeredRef = useRef(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bookId) {
@@ -376,595 +35,349 @@ export default function ChapterPlans() {
     }
 
     setLoading(true);
-    setLoadError(null);
-
-    Promise.all([
-      fetchBook(bookId),
-      fetchChapters(bookId),
-      fetchTruthFile(bookId, 'manifest').catch(() => null),
-    ])
-      .then(([bookData, chaptersData, manifestData]) => {
-        const manifest = (manifestData as { content?: PlanningManifest } | null)?.content ?? null;
-        const lastPublishedChapter = [...chaptersData]
-          .filter((chapter: Chapter) => chapter.status === 'published')
-          .sort((left: Chapter, right: Chapter) => right.number - left.number)[0];
-        const manifestPlans = extractManifestPlans(manifest);
-        const storedPlans = loadStoredPlans(bookId);
-
+    Promise.all([fetchBook(bookId), fetchStoryOutline(bookId), fetchDetailedOutline(bookId)])
+      .then(([bookData, blueprintData, outlineData]) => {
         setBook(bookData);
-        setChapters(chaptersData);
-        setPlans(mergeInitialPlans(manifestPlans, storedPlans));
-        setPlanningSources(normalizePlanningSources(bookData, manifest));
-        setSelectedChapter(lastPublishedChapter ? lastPublishedChapter.number + 1 : 1);
+        setBlueprint(blueprintData);
+        if (outlineData) {
+          setOutline(outlineData);
+          const firstChapter = outlineData.volumes[0]?.chapters[0]?.chapterNumber;
+          if (firstChapter) {
+            setSelectedChapter(firstChapter);
+          }
+        }
       })
-      .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : '加载规划页面失败');
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : '加载细纲失败');
       })
       .finally(() => setLoading(false));
   }, [bookId]);
 
-  const currentPlan = { ...emptyPlan(selectedChapter), ...(plans[selectedChapter] ?? {}) };
-  const canStartWriting = isPlanReadyForWriting(currentPlan);
-  const completedChapters = chapters.filter((chapter) => chapter.status === 'published').length;
-  const plannedCount = Object.values(plans).filter((plan) => !isPlanEmpty(plan)).length;
-  const totalSlots = Math.max(
-    book?.targetChapterCount ?? 0,
-    selectedChapter + 2,
-    chapters.length + 3,
-  );
-  const chapterWindow = useMemo(
-    () => buildChapterWindow(selectedChapter, totalSlots),
-    [selectedChapter, totalSlots],
-  );
-  const chapterMap = useMemo(
-    () => new Map(chapters.map((chapter) => [chapter.number, chapter])),
-    [chapters],
-  );
-  const volumeMeta = getVolumeMeta(selectedChapter);
-  const stepSummaries = useMemo(
-    () => ({
-      1: planningSources.brief ? truncateSummary(planningSources.brief) : '未填写创作简报',
-      2: planningSources.currentFocus
-        ? truncateSummary(planningSources.currentFocus)
-        : planningSources.worldRules[0]
-          ? truncateSummary(planningSources.worldRules[0])
-          : '未补充世界设定',
-      3:
-        planningSources.characters.length > 0
-          ? truncateSummary(planningSources.characters.join('、'))
-          : '未录入关键角色',
-      4:
-        currentPlan.goal.trim() || currentPlan.title.trim()
-          ? truncateSummary(currentPlan.goal.trim() || currentPlan.title.trim())
-          : '待完善本章规划',
-      5: '基于以上设定进入正文创作',
-      6: '规划完成后可交给守护进程续写',
-    }),
-    [currentPlan.goal, currentPlan.title, planningSources],
-  );
-  const completedSteps = useMemo(
-    () => ({
-      1: Boolean(planningSources.brief),
-      2: Boolean(planningSources.currentFocus || planningSources.worldRules.length > 0),
-      3: planningSources.characters.length > 0,
-      4: !isPlanEmpty(currentPlan),
-    }),
-    [currentPlan, planningSources],
-  );
+  async function handleGenerate() {
+    if (!bookId || !blueprint || outline) return;
 
-  useEffect(() => {
-    if (
-      !autoBootstrap ||
-      autoBootstrapTriggeredRef.current ||
-      loading ||
-      !bookId ||
-      !book?.brief?.trim()
-    ) {
-      return;
-    }
-
-    autoBootstrapTriggeredRef.current = true;
-    setAiLoading(true);
-    setAiError(null);
-
-    void bootstrapStory(bookId, selectedChapter)
-      .then((result) => {
-        const bootstrap = result as BootstrapStoryResponse;
-        const plannedChapter = bootstrap.chapterPlan.chapterNumber || selectedChapter;
-        const nextPlan: ChapterPlan = {
-          chapterNumber: plannedChapter,
-          title: bootstrap.chapterPlan.title ?? '',
-          goal: bootstrap.chapterPlan.summary ?? '',
-          characters: Array.isArray(bootstrap.chapterPlan.characters)
-            ? bootstrap.chapterPlan.characters.join(' ')
-            : '',
-          keyEvents: Array.isArray(bootstrap.chapterPlan.keyEvents)
-            ? bootstrap.chapterPlan.keyEvents.join('\n')
-            : '',
-          hooks: Array.isArray(bootstrap.chapterPlan.hooks)
-            ? bootstrap.chapterPlan.hooks.join('、')
-            : '',
-        };
-
-        setPlanningSources({
-          brief: book.brief?.trim() ?? '',
-          currentFocus: bootstrap.currentFocus,
-          worldRules: bootstrap.worldRules ?? [],
-          characters: bootstrap.characters.map((character) => character.name).filter(Boolean),
-          hooks: bootstrap.hooks ?? [],
-        });
-        setSelectedChapter(plannedChapter);
-        setPlans((previous) => {
-          const nextPlans = {
-            ...previous,
-            [plannedChapter]: nextPlan,
-          };
-          persistPlans(bookId, nextPlans);
-          return nextPlans;
-        });
-
-        if (autoWrite) {
-          const nextParams = buildWritingParams(bookId, nextPlan);
-          nextParams.set('autoStart', '1');
-          navigate(`/writing?${nextParams.toString()}`);
-        }
-      })
-      .catch((error: unknown) => {
-        setAiError(error instanceof Error ? error.message : '自动规划链启动失败');
-      })
-      .finally(() => {
-        setAiLoading(false);
-      });
-  }, [autoBootstrap, autoWrite, book, bookId, loading, navigate, selectedChapter]);
-
-  function updatePlan(field: keyof Omit<ChapterPlan, 'chapterNumber'>, value: string): void {
-    setSaveNotice(null);
-    setPlans((previous) => ({
-      ...previous,
-      [selectedChapter]: {
-        ...currentPlan,
-        [field]: value,
-      },
-    }));
-  }
-
-  function handleSavePlan(): void {
-    if (!bookId) {
-      return;
-    }
-
-    const nextPlans = { ...plans };
-    if (isPlanEmpty(currentPlan)) {
-      delete nextPlans[selectedChapter];
-    } else {
-      nextPlans[selectedChapter] = currentPlan;
-    }
-
-    persistPlans(bookId, nextPlans);
-    setPlans(nextPlans);
-    setSaveNotice('规划已保存');
-  }
-
-  async function handleAiPlan(): Promise<void> {
-    if (!bookId) {
-      return;
-    }
-
-    setAiLoading(true);
-    setAiError(null);
-
-    const outlineContext = buildPlanContext(currentPlan, planningSources);
+    setGenerating(true);
+    setError(null);
+    setNotice(null);
 
     try {
-      const result = (await planChapter(
-        bookId,
-        selectedChapter,
-        outlineContext,
-      )) as PlanChapterResponse;
-      setPlans((previous) => ({
-        ...previous,
-        [selectedChapter]: {
-          chapterNumber: selectedChapter,
-          title: result.title ?? currentPlan.title,
-          goal: result.summary ?? currentPlan.goal,
-          characters:
-            Array.isArray(result.characters) && result.characters.length > 0
-              ? result.characters.join(' ')
-              : currentPlan.characters,
-          keyEvents:
-            Array.isArray(result.keyEvents) && result.keyEvents.length > 0
-              ? result.keyEvents.join('\n')
-              : currentPlan.keyEvents,
-          hooks:
-            Array.isArray(result.hooks) && result.hooks.length > 0
-              ? result.hooks.join('、')
-              : currentPlan.hooks,
-        },
-      }));
-    } catch (error: unknown) {
-      setAiError(error instanceof Error ? error.message : 'AI 规划失败');
+      const result = await generateDetailedOutline(bookId);
+      setOutline(result);
+      const firstChapter = result.volumes[0]?.chapters[0]?.chapterNumber;
+      if (firstChapter) {
+        setSelectedChapter(firstChapter);
+      }
+      setNotice('AI 已生成全书细纲');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'AI 生成细纲失败');
     } finally {
-      setAiLoading(false);
+      setGenerating(false);
     }
-  }
-
-  function handleStartWriting(): void {
-    if (!bookId || !canStartWriting) {
-      return;
-    }
-
-    handleSavePlan();
-    const nextParams = buildWritingParams(bookId, currentPlan);
-    navigate(`/writing?${nextParams.toString()}`);
-  }
-
-  if (!bookId) {
-    return (
-      <div className="flex h-64 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-        <ListOrdered size={32} className="opacity-40" />
-        <p>请先选择一本书籍，再进入创作规划。</p>
-        <Link to="/" className="text-primary underline underline-offset-4">
-          返回仪表盘
-        </Link>
-      </div>
-    );
   }
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        加载中…
-      </div>
+      <div className="flex h-64 items-center justify-center text-muted-foreground">加载中…</div>
     );
   }
 
-  if (loadError) {
+  if (!bookId) {
     return (
-      <div
-        role="alert"
-        className="flex h-64 flex-col items-center justify-center gap-2 text-sm text-rose-500"
-      >
-        <AlertCircle size={20} />
-        <span>{loadError}</span>
+      <div className="rounded-lg border bg-card px-6 py-12 text-center text-muted-foreground">
+        请先选择一本书,再进入细纲规划阶段。
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 bg-background">
-      <aside className="w-60 shrink-0 border-r bg-muted/20 px-5 py-6">
-        <div className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            步骤导航
+    <div className="mx-auto max-w-7xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">细纲规划</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            从故事总纲一键生成全书章节地图,每章含 contextForWriter 自给自足上下文。
+            {book ? `当前书籍:${book.title}` : ''}
           </p>
         </div>
+        <div className="flex gap-3">
+          <Link
+            to={bookId ? `/story-outline?bookId=${bookId}` : '#'}
+            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm hover:bg-accent"
+          >
+            返回总纲
+          </Link>
+          <Link
+            to={bookId ? `/writing?bookId=${bookId}` : '#'}
+            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm hover:bg-accent"
+          >
+            进入正文创作
+          </Link>
+        </div>
+      </div>
 
-        <div className="space-y-2">
-          {STEPS.map(({ index, label, icon: Icon }) => {
-            const isDone = Boolean(completedSteps[index as keyof typeof completedSteps]);
-            const isActive = index === 4;
-            const canNavigate = index !== 4;
-            const canAutoPlanFromSummary = index < 4;
-            const stepSummary = stepSummaries[index as keyof typeof stepSummaries];
+      {!blueprint && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          请先完成故事总纲,再进入细纲页。
+        </div>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {notice}
+        </div>
+      )}
 
-            return (
-              <div
-                key={label}
-                className={`flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : isDone
-                      ? 'text-emerald-600 hover:bg-emerald-50'
-                      : 'text-muted-foreground hover:bg-accent'
-                }`}
-              >
-                <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    isActive
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : isDone
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
-                        : 'border-border text-muted-foreground'
-                  }`}
-                >
-                  {isDone ? <Check size={12} /> : index}
+      {!outline && (
+        <div className="rounded-xl border bg-card p-8 text-center shadow-sm">
+          <Sparkles className="mx-auto h-12 w-12 text-amber-500" />
+          <h2 className="mt-4 text-lg font-semibold">尚未生成全书细纲</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            从故事总纲一键生成全书章节地图(卷 → 章节),每章带 contextForWriter
+            包含人物状态/世界规则/伏笔状态/前后衔接。
+          </p>
+          <button
+            type="button"
+            disabled={!blueprint || generating}
+            onClick={handleGenerate}
+            className="mt-6 inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Sparkles size={16} />
+            {generating ? 'AI 生成中…(可能耗时数分钟)' : 'AI 自动生成全书细纲'}
+          </button>
+        </div>
+      )}
+
+      {outline && (
+        <DetailedOutlineViewer
+          outline={outline}
+          selectedChapter={selectedChapter}
+          onSelectChapter={setSelectedChapter}
+          onStartWriting={(chapter) => navigate(`/writing?bookId=${bookId}&chapter=${chapter}`)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DetailedOutlineViewer({
+  outline,
+  selectedChapter,
+  onSelectChapter,
+  onStartWriting,
+}: {
+  outline: DetailedOutlineDocument;
+  selectedChapter: number | null;
+  onSelectChapter: (chapter: number) => void;
+  onStartWriting: (chapter: number) => void;
+}) {
+  const selectedEntry = selectedChapter
+    ? outline.volumes.flatMap((v) => v.chapters).find((c) => c.chapterNumber === selectedChapter)
+    : null;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <aside className="rounded-xl border bg-card shadow-sm">
+        <div className="border-b px-4 py-3">
+          <p className="text-sm font-semibold">
+            全书 {outline.totalChapters} 章 · {outline.volumes.length} 卷
+          </p>
+          {outline.estimatedTotalWords && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              预计字数:{outline.estimatedTotalWords}
+            </p>
+          )}
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto px-2 py-2">
+          {outline.volumes.map((volume) => (
+            <details key={volume.volumeNumber} className="mb-2 rounded-lg border" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium hover:bg-accent/40">
+                第 {volume.volumeNumber} 卷 · {volume.title}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  第 {volume.startChapter}-{volume.endChapter} 章
                 </span>
-                <span className="min-w-0 flex-1">
-                  {canNavigate ? (
-                    <Link to={stepLinkFor(index, bookId)} className="flex items-center gap-2">
-                      <Icon size={14} />
-                      {label}
-                    </Link>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Icon size={14} />
-                      {label}
-                    </span>
-                  )}
-                  {canAutoPlanFromSummary ? (
+              </summary>
+              <ul className="space-y-0.5 px-1 py-1 text-sm">
+                {volume.chapters.map((chapter) => (
+                  <li key={chapter.chapterNumber}>
                     <button
                       type="button"
-                      onClick={() => {
-                        void handleAiPlan();
-                      }}
-                      className={`mt-1 block text-left text-xs leading-5 hover:underline underline-offset-2 ${
-                        isActive
-                          ? 'text-primary/80'
-                          : isDone
-                            ? 'text-emerald-700/80'
-                            : 'text-muted-foreground'
+                      onClick={() => onSelectChapter(chapter.chapterNumber)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left ${
+                        selectedChapter === chapter.chapterNumber
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-accent/40'
                       }`}
-                      title="基于当前上游设定自动生成本章规划"
                     >
-                      {stepSummary}
+                      <span className="text-xs text-muted-foreground">
+                        第 {chapter.chapterNumber} 章
+                      </span>
+                      <span className="flex-1 truncate">{chapter.title}</span>
                     </button>
-                  ) : (
-                    <span
-                      className={`mt-1 block text-xs leading-5 ${
-                        isActive
-                          ? 'text-primary/80'
-                          : isDone
-                            ? 'text-emerald-700/80'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      {stepSummary}
-                    </span>
-                  )}
-                </span>
-                {isActive ? <ChevronRight size={14} className="ml-auto" /> : null}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-8 border-t pt-4 text-sm text-muted-foreground">
-          <p className="mb-1">已规划: {book?.targetChapterCount ?? 0} 章</p>
-          <p className="mb-1">已完成: {completedChapters} 章</p>
-          <p className="mb-1">本地规划: {plannedCount} 章</p>
-          <p>当前题材: {book?.genre ?? '未设置'}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">
-        <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">
-              创作规划
-              <span className="ml-3 text-base font-normal text-muted-foreground">
-                {book?.title}
-              </span>
-            </h1>
-          </div>
-          <div className="rounded-full border bg-background px-4 py-1.5 text-sm text-muted-foreground">
-            当前：第 {selectedChapter} 章规划
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+      <section className="rounded-xl border bg-card p-5 shadow-sm">
+        {!selectedEntry && (
+          <p className="text-sm text-muted-foreground">从左侧选择一章查看详细规划。</p>
+        )}
+        {selectedEntry && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b pb-3">
               <div>
-                <h2 className="text-lg font-semibold">大纲规划</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  当前卷: 第{volumeMeta.number}卷 · {volumeMeta.title}
-                </p>
+                <h2 className="text-lg font-semibold">
+                  第 {selectedEntry.chapterNumber} 章 · {selectedEntry.title}
+                </h2>
+                {selectedEntry.wordCountTarget && (
+                  <p className="text-xs text-muted-foreground">
+                    字数目标:{selectedEntry.wordCountTarget}
+                  </p>
+                )}
               </div>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                {chapterWindow[0]} - {chapterWindow[chapterWindow.length - 1]}
-              </span>
+              <button
+                type="button"
+                onClick={() => onStartWriting(selectedEntry.chapterNumber)}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                创作本章
+                <ChevronRight size={14} />
+              </button>
             </div>
 
-            <div className="rounded-xl border bg-muted/20 p-2">
-              {chapterWindow.map((chapterNumber) => {
-                const chapter = chapterMap.get(chapterNumber);
-                const isCurrent = chapterNumber === selectedChapter;
-                const isPublished = chapter?.status === 'published';
-                const isDraft = chapter?.status === 'draft';
-                const localPlan = plans[chapterNumber];
-                const title =
-                  chapter?.title ??
-                  (localPlan?.title
-                    ? localPlan.title
-                    : chapterNumber === selectedChapter
-                      ? '编辑中'
-                      : localPlan?.goal
-                        ? localPlan.goal.slice(0, 14)
-                        : '待规划');
-                const statusText = isPublished ? '✓' : isDraft ? '草稿' : isCurrent ? '◀' : '';
+            <KV label="场景设定" value={selectedEntry.sceneSetup} multiline />
+            <KV label="出场角色" value={selectedEntry.charactersPresent.join('、') || '—'} />
+            <KVList label="核心事件" items={selectedEntry.coreEvents} />
+            <KV label="情感弧线" value={selectedEntry.emotionArc} multiline />
+            <KV label="结尾钩子" value={selectedEntry.chapterEndHook} multiline />
 
-                return (
-                  <button
-                    key={chapterNumber}
-                    type="button"
-                    onClick={() => {
-                      setSelectedChapter(chapterNumber);
-                      setSaveNotice(null);
-                      setAiError(null);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      isCurrent ? 'bg-primary/10 text-primary' : 'hover:bg-background'
-                    }`}
-                  >
-                    <span className="w-12 shrink-0 text-muted-foreground">第{chapterNumber}章</span>
-                    <span className="min-w-0 flex-1 truncate">{title}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{statusText}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            {selectedEntry.foreshadowingOps.length > 0 && (
               <div>
-                <h2 className="text-lg font-semibold">第{selectedChapter}章 详细规划</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  先锁定章目标、关键事件和伏笔，再进入正文创作。
-                </p>
+                <p className="text-xs text-muted-foreground">伏笔操作</p>
+                <ul className="mt-1 space-y-1 text-sm">
+                  {selectedEntry.foreshadowingOps.map((op, idx) => (
+                    <li key={idx}>
+                      <span className="font-mono text-xs">{op.foreshadowingId}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">[{op.operation}]</span>
+                      {op.description && <span className="ml-2">{op.description}</span>}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleAiPlan}
-                  disabled={aiLoading}
-                  className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
-                >
-                  <Sparkles size={14} className={aiLoading ? 'animate-spin' : ''} />
-                  {aiLoading ? 'AI 规划中…' : 'AI 辅助生成规划'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => goalRef.current?.focus()}
-                  className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent"
-                >
-                  <PenTool size={14} />
-                  手动编辑
-                </button>
-              </div>
-            </div>
+            )}
 
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="chapter-title" className="mb-2 block text-sm font-medium">
-                  章节标题
-                </label>
-                <input
-                  id="chapter-title"
-                  value={currentPlan.title}
-                  onChange={(event) => updatePlan('title', event.target.value)}
-                  placeholder="例如：竞赛邀约"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
-                  aria-label="章节标题"
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <p className="text-sm font-semibold">contextForWriter(自给自足上下文)</p>
+              <div className="mt-3 space-y-2">
+                <KV
+                  label="故事进度"
+                  value={selectedEntry.contextForWriter.storyProgress}
+                  multiline
+                />
+                <KV label="本章位置" value={selectedEntry.contextForWriter.chapterPositionNote} />
+                {selectedEntry.contextForWriter.characterStates.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">角色当前状态</p>
+                    <ul className="mt-1 space-y-1 text-sm">
+                      {selectedEntry.contextForWriter.characterStates.map((s, idx) => (
+                        <li key={idx}>
+                          <span className="font-mono text-xs">{s.characterId}</span>
+                          {s.powerLevel && (
+                            <span className="ml-2 text-xs">境界:{s.powerLevel}</span>
+                          )}
+                          {s.emotionalState && (
+                            <span className="ml-2 text-xs">情绪:{s.emotionalState}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {selectedEntry.contextForWriter.activeWorldRules.length > 0 && (
+                  <KV
+                    label="本章相关世界规则"
+                    value={selectedEntry.contextForWriter.activeWorldRules.join('、')}
+                    multiline
+                  />
+                )}
+                {selectedEntry.contextForWriter.activeForeshadowingStatus.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">活跃伏笔状态</p>
+                    <ul className="mt-1 space-y-1 text-sm">
+                      {selectedEntry.contextForWriter.activeForeshadowingStatus.map((s, idx) => (
+                        <li key={idx}>
+                          <span className="font-mono text-xs">{s.foreshadowingId}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">[{s.status}]</span>
+                          {s.note && <span className="ml-2">{s.note}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <KV
+                  label="承上(悬念)"
+                  value={selectedEntry.contextForWriter.precedingChapterBridge.cliffhanger}
+                  multiline
+                />
+                <KV
+                  label="启下(种子)"
+                  value={selectedEntry.contextForWriter.nextChapterSetup.seedForNext}
+                  multiline
                 />
               </div>
-
-              <div>
-                <label htmlFor="chapter-goal" className="mb-2 block text-sm font-medium">
-                  章目标
-                </label>
-                <div className="rounded-xl border bg-muted/20 p-3">
-                  <textarea
-                    id="chapter-goal"
-                    ref={goalRef}
-                    rows={4}
-                    value={currentPlan.goal}
-                    onChange={(event) => updatePlan('goal', event.target.value)}
-                    placeholder="展示主角在首次测验中的惊艳表现，引出竞赛老师的注意，埋下后续竞赛伏笔。"
-                    className="w-full resize-none bg-transparent text-sm leading-6 outline-none"
-                    aria-label="章目标"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div>
-                  <label htmlFor="chapter-characters" className="mb-2 block text-sm font-medium">
-                    出场人物
-                  </label>
-                  <input
-                    id="chapter-characters"
-                    value={currentPlan.characters}
-                    onChange={(event) => updatePlan('characters', event.target.value)}
-                    placeholder="林晨(主) 王老师 苏小雨"
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
-                    aria-label="出场人物"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="chapter-hooks" className="mb-2 block text-sm font-medium">
-                    伏笔埋设
-                  </label>
-                  <input
-                    id="chapter-hooks"
-                    value={currentPlan.hooks}
-                    onChange={(event) => updatePlan('hooks', event.target.value)}
-                    placeholder="全国竞赛通知"
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
-                    aria-label="伏笔埋设"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="chapter-key-events" className="mb-2 block text-sm font-medium">
-                  关键事件
-                </label>
-                <textarea
-                  id="chapter-key-events"
-                  rows={5}
-                  value={currentPlan.keyEvents}
-                  onChange={(event) => updatePlan('keyEvents', event.target.value)}
-                  placeholder={'测验满分\n老师约谈\n竞赛意图露出'}
-                  className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary"
-                  aria-label="关键事件"
-                />
-              </div>
-
-              {aiError ? (
-                <div
-                  role="alert"
-                  className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600"
-                >
-                  <AlertCircle size={14} />
-                  {aiError}
-                </div>
-              ) : null}
-
-              {saveNotice ? (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  <Check size={14} />
-                  {saveNotice}
-                </div>
-              ) : null}
-
-              {!canStartWriting ? (
-                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  <AlertCircle size={14} />
-                  进入正文前必须补齐章节标题、章目标、出场人物和关键事件。
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextPlans = { ...plans };
-                    delete nextPlans[selectedChapter];
-                    setPlans(nextPlans);
-                    persistPlans(bookId, nextPlans);
-                    setSaveNotice('已清空本章规划');
-                  }}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  清空本章
-                </button>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={handleSavePlan}
-                    className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm hover:bg-accent"
-                  >
-                    <Save size={14} />
-                    保存规划
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleStartWriting}
-                    disabled={!canStartWriting}
-                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    开始创作
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
             </div>
-          </section>
-        </div>
-      </main>
+
+            {selectedEntry.writingNotes && (
+              <KV label="执笔提醒" value={selectedEntry.writingNotes} multiline />
+            )}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function KV({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+}) {
+  return (
+    <div className={multiline ? '' : 'flex gap-2 text-sm'}>
+      <span
+        className={multiline ? 'text-xs text-muted-foreground' : 'min-w-32 text-muted-foreground'}
+      >
+        {label}
+      </span>
+      <span className={multiline ? 'mt-1 block text-sm' : ''}>{value || '—'}</span>
+    </div>
+  );
+}
+
+function KVList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {items.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">—</p>
+      ) : (
+        <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+          {items.map((item, idx) => (
+            <li key={idx}>{item}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
