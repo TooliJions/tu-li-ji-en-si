@@ -8,7 +8,6 @@ import { createBookRouter } from './routes/books';
 import { createChapterRouter } from './routes/chapters';
 import { createPipelineRouter } from './routes/pipeline';
 import { createStateRouter } from './routes/state';
-import { createDaemonRouter } from './routes/daemon';
 import { createHooksRouter } from './routes/hooks';
 import { createAnalyticsRouter } from './routes/analytics';
 import { createConfigRouter } from './routes/config';
@@ -16,8 +15,6 @@ import { createExportRouter } from './routes/export';
 import { createSystemRouter } from './routes/system';
 import { createPromptsRouter } from './routes/prompts';
 import { createContextRouter } from './routes/context';
-import { createNaturalAgentRouter } from './routes/natural-agent';
-import { createFanficRouter } from './routes/fanfic';
 import { createStyleRouter } from './routes/style';
 import { createGenreRouter } from './routes/genres';
 import { createInspirationRouter } from './routes/inspiration';
@@ -46,11 +43,21 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       err instanceof Error && 'status' in err
         ? ((err as unknown as Record<string, unknown>).status as number)
         : 500;
+    const isDev = process.env.NODE_ENV === 'development' || process.env.VITEST === 'true';
+    const rawMessage = err instanceof Error ? err.message : 'Internal Server Error';
+    const safeMessage = isDev
+      ? rawMessage.slice(0, 500)
+      : status >= 500
+        ? '服务器内部错误'
+        : rawMessage
+            .replace(/Bearer\s+[A-Za-z0-9_\-.~+/=]+/gi, 'Bearer ***')
+            .replace(/\bsk-[A-Za-z0-9_-]+/g, 'sk-***')
+            .slice(0, 200);
     return c.json(
       {
         error: {
           code: 'INTERNAL_ERROR',
-          message: err instanceof Error ? err.message : 'Internal Server Error',
+          message: safeMessage,
         },
       },
       status as 500,
@@ -58,7 +65,20 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Middleware
-  app.use('*', cors());
+  const allowedOrigins = (
+    process.env.CYBERNOVELIST_CORS_ORIGINS ??
+    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000'
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.use(
+    '*',
+    cors({
+      origin: allowedOrigins,
+      credentials: false,
+    }),
+  );
   if (enableLogger) {
     app.use('*', logger());
   }
@@ -66,7 +86,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // Bearer token 认证（开发环境跳过）
   const apiToken = process.env.CYBERNOVELIST_API_TOKEN;
-  if (apiToken && process.env.NODE_ENV !== 'development') {
+  const isDevEnv = process.env.NODE_ENV === 'development' || process.env.VITEST === 'true';
+  if (apiToken && !isDevEnv) {
     app.use('/api/*', async (c, next) => {
       const auth = c.req.header('Authorization');
       if (auth === `Bearer ${apiToken}`) {
@@ -75,12 +96,22 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       }
       return c.json({ error: { code: 'UNAUTHORIZED', message: '认证失败' } }, 401);
     });
+  } else if (!apiToken && !isDevEnv) {
+    console.warn(
+      '[server] WARN: CYBERNOVELIST_API_TOKEN 未设置，所有 API 端点将无认证保护。' +
+        '生产部署请设置该环境变量。',
+    );
   }
 
   // 速率限制：pipeline 端点 10 req/min，全局 100 req/min
   const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+  const disableRateLimit = process.env.CYBERNOVELIST_DISABLE_RATE_LIMIT === '1';
   function rateLimit(maxPerMinute: number, prefix: string) {
     return async (c: Context, next: () => Promise<void>) => {
+      if (disableRateLimit) {
+        await next();
+        return;
+      }
       const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
       const key = `${prefix}:${ip}`;
       const now = Date.now();
@@ -92,8 +123,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       }
       entry.count++;
       if (entry.count > maxPerMinute) {
-        c.json({ error: { code: 'RATE_LIMITED', message: '请求过于频繁，请稍后再试' } }, 429);
-        return;
+        return c.json(
+          { error: { code: 'RATE_LIMITED', message: '请求过于频繁，请稍后再试' } },
+          429,
+        );
       }
       await next();
     };
@@ -149,14 +182,11 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   bookScope.route('/chapters', createChapterRouter());
   bookScope.route('/pipeline', createPipelineRouter());
   bookScope.route('/state', createStateRouter());
-  bookScope.route('/daemon', createDaemonRouter());
   bookScope.route('/hooks', createHooksRouter());
   bookScope.route('/analytics', createAnalyticsRouter());
   bookScope.route('/export', createExportRouter());
   bookScope.route('/prompts', createPromptsRouter());
   bookScope.route('/context', createContextRouter());
-  bookScope.route('/natural-agent', createNaturalAgentRouter());
-  bookScope.route('/fanfic', createFanficRouter());
   bookScope.route('/style', createStyleRouter());
   bookScope.route('/inspiration', createInspirationRouter());
   bookScope.route('/planning-brief', createPlanningBriefRouter());

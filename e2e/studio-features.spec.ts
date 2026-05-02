@@ -206,69 +206,6 @@ test.describe('数据分析完整功能', () => {
 });
 
 /**
- * E2E Test: 守护进程控制完整功能
- */
-test.describe('守护进程控制完整功能', () => {
-  const testBookTitle = `E2E-守护完整-${Date.now()}`;
-  let bookId: string;
-
-  test.beforeAll(async ({ request }) => {
-    const res = await request.post('/api/books', {
-      data: {
-        title: testBookTitle,
-        genre: '仙侠',
-        targetChapterCount: 200,
-        targetWordsPerChapter: 3000,
-        targetWords: 600000,
-        brief: 'E2E 守护进程完整功能测试',
-      },
-    });
-    const data = await res.json();
-    bookId = data.data.id;
-  });
-
-  test('守护进程状态显示', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: '守护进程' })).toBeVisible();
-
-    // 验证状态总览标题存在
-    await expect(page.getByText('状态总览')).toBeVisible({ timeout: 5000 });
-  });
-
-  test('启动/暂停按钮', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: '守护进程' })).toBeVisible();
-
-    // 查找启动按钮
-    const startBtn = page.getByRole('button', { name: /启动|Start/i });
-    await expect(startBtn).toBeVisible();
-
-    // 查找暂停按钮（可能需要先启动）
-    const pauseBtn = page.getByRole('button', { name: /暂停|Pause/i });
-    if (await pauseBtn.isVisible()) {
-      await expect(pauseBtn).toBeVisible();
-    }
-  });
-
-  test('间隔配置', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: '守护进程' })).toBeVisible();
-
-    // 查找间隔配置相关元素
-    const intervalInput = page.locator('input[type="number"], input[placeholder*="间隔"]');
-    if (await intervalInput.first().isVisible({ timeout: 3000 })) {
-      await expect(intervalInput.first()).toBeVisible();
-    }
-  });
-
-  test.afterAll('清理测试书籍', async ({ request }) => {
-    if (bookId) {
-      await request.delete(`/api/books/${bookId}`);
-    }
-  });
-});
-
-/**
  * E2E Test: 书籍详情页
  */
 test.describe('书籍详情页', () => {
@@ -325,7 +262,7 @@ test.describe('书籍详情页', () => {
 test.describe('仪表盘功能', () => {
   test('仪表盘书籍列表', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 验证书籍列表容器存在
     await page.waitForTimeout(1000); // 等待加载
@@ -333,13 +270,13 @@ test.describe('仪表盘功能', () => {
 
   test('新建书籍入口', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '新建书籍' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
+    await expect(page.locator('main').getByRole('link', { name: '新建书籍' })).toBeVisible();
   });
 
   test('最近活动显示', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 查找最近活动相关元素
     const recentActivity = page.locator('text=/最近|活动|activity/i');
@@ -460,99 +397,6 @@ test.describe('PRD-027: 规则栈编译', () => {
     const worldRules = page.getByText(/世界规则|规则栈|world.*rule/i);
     if (await worldRules.first().isVisible({ timeout: 3000 })) {
       await expect(worldRules.first()).toBeVisible();
-    }
-  });
-
-  test.afterAll('清理', async ({ request }) => {
-    if (bookId) await request.delete(`/api/books/${bookId}`);
-  });
-});
-
-/**
- * E2E Test: PRD-028/029 守护进程 + 智能间隔
- */
-test.describe('PRD-028/029: 守护进程 + 智能间隔', () => {
-  const testBookTitle = `E2E-守护进程-${Date.now()}`;
-  let bookId: string;
-
-  test.beforeAll(async ({ request }) => {
-    const res = await request.post('/api/books', {
-      data: {
-        title: testBookTitle,
-        genre: '游戏',
-        targetChapterCount: 50,
-        targetWordsPerChapter: 3000,
-        targetWords: 150000,
-        brief: 'E2E 守护进程测试',
-      },
-    });
-    const data = await res.json();
-    bookId = data.data.id;
-  });
-
-  test('守护进程控制面板', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
-  });
-
-  test('启动/暂停按钮', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-
-    const startBtn = page.getByRole('button', { name: /启动|Start/i });
-    await expect(startBtn).toBeVisible();
-  });
-
-  test('智能间隔配置', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-
-    const intervalInput = page.locator('input[type="number"], input[placeholder*="间隔"]');
-    if (await intervalInput.first().isVisible({ timeout: 3000 })) {
-      await expect(intervalInput.first()).toBeVisible();
-    }
-  });
-
-  test('即时启动模式（间隔=0）', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-
-    const instantMode = page.getByText(/即时|immediate|间隔.*0/i);
-    if (await instantMode.first().isVisible({ timeout: 2000 })) {
-      await expect(instantMode.first()).toBeVisible();
-    }
-  });
-
-  test.afterAll('清理', async ({ request }) => {
-    if (bookId) await request.delete(`/api/books/${bookId}`);
-  });
-});
-
-/**
- * E2E Test: PRD-030 每日配额保护
- */
-test.describe('PRD-030: 每日配额保护', () => {
-  const testBookTitle = `E2E-配额-${Date.now()}`;
-  let bookId: string;
-
-  test.beforeAll(async ({ request }) => {
-    const res = await request.post('/api/books', {
-      data: {
-        title: testBookTitle,
-        genre: '科幻',
-        targetChapterCount: 10,
-        targetWordsPerChapter: 2000,
-        targetWords: 20000,
-        brief: 'E2E 配额测试',
-      },
-    });
-    const data = await res.json();
-    bookId = data.data.id;
-  });
-
-  test('配额设置显示', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-
-    const quotaLabel = page.getByText(/配额|quota|每日.*上限/i);
-    if (await quotaLabel.first().isVisible({ timeout: 3000 })) {
-      await expect(quotaLabel.first()).toBeVisible();
     }
   });
 

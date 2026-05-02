@@ -9,7 +9,6 @@ import {
   fetchTruthFile,
   fetchTruthFiles,
   importMarkdown,
-  initFanfic,
   reorgRecovery,
   updateTruthFile,
 } from './api';
@@ -29,7 +28,10 @@ describe('studio api client paths', () => {
     await fetchBooks({ status: 'active', genre: '玄幻' });
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/books');
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/books?status=active&genre=%E7%8E%84%E5%B9%BB');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/books?status=active&genre=%E7%8E%84%E5%B9%BB',
+    );
   });
 
   it('uses book-scoped truth file endpoints', async () => {
@@ -46,10 +48,7 @@ describe('studio api client paths', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/books/book-001/state');
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/books/book-001/state/current_state');
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      '/api/books/book-001/state/projection-status'
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/books/book-001/state/projection-status');
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/books/book-001/state/import-markdown', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,17 +78,12 @@ describe('studio api client paths', () => {
     });
   });
 
-  it('uses mounted fanfic, style and emotional-arc endpoints', async () => {
+  it('uses mounted style and emotional-arc endpoints', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ data: { success: true, fingerprint: {}, characters: [], alerts: [] } }),
     } as Response);
 
-    await initFanfic('book-001', {
-      mode: 'au',
-      description: 'parallel world',
-      canonReference: '',
-    });
     await extractStyleFingerprint('book-001', {
       referenceText: 'reference text',
       genre: '都市',
@@ -100,25 +94,16 @@ describe('studio api client paths', () => {
     });
     await fetchEmotionalArcs('book-001');
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/books/book-001/fanfic/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'au',
-        description: 'parallel world',
-        canonReference: '',
-      }),
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/books/book-001/style/fingerprint', {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/books/book-001/style/fingerprint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ referenceText: 'reference text', genre: '都市' }),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/books/book-001/style/apply', {
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/books/book-001/style/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fingerprint: { avgSentenceLength: 12 }, intensity: 70 }),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/books/book-001/analytics/emotional-arcs');
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/books/book-001/analytics/emotional-arcs');
   });
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const InspirationSourceTypeSchema = z.enum(['manual', 'shuffle', 'natural-agent', 'import']);
+export const InspirationSourceTypeSchema = z.enum(['manual', 'shuffle', 'import']);
 
 export const InspirationSeedSchema = z.object({
   id: z.string().min(1),

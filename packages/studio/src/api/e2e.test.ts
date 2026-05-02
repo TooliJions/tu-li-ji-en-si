@@ -31,7 +31,7 @@ describe('E2E: Critical User Paths', () => {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
-      })
+      }),
     );
     return {
       status: res.status,
@@ -137,7 +137,7 @@ describe('E2E: Critical User Paths', () => {
       expect(status).toBe(200);
       const data = body as { data: Array<{ number: number; status: string }> };
       expect(data.data.some((chapter) => chapter.number === 1 && chapter.status === 'draft')).toBe(
-        true
+        true,
       );
     });
   });
@@ -221,36 +221,8 @@ describe('E2E: Critical User Paths', () => {
 
     it('fetches hook timeline', async () => {
       const { status } = await get(
-        `/api/books/${bookId}/hooks/timeline?fromChapter=1&toChapter=10`
+        `/api/books/${bookId}/hooks/timeline?fromChapter=1&toChapter=10`,
       );
-      expect(status).toBe(200);
-    });
-  });
-
-  // ── 9. Daemon Control ───────────────────────────────────
-
-  describe('9. Daemon control', () => {
-    it('fetches daemon status', async () => {
-      const { status } = await get(`/api/books/${bookId}/daemon`);
-      expect(status).toBe(200);
-    });
-
-    it('starts daemon (short run for testing)', async () => {
-      const { status } = await post(`/api/books/${bookId}/daemon/start`, {
-        fromChapter: 3,
-        toChapter: 3,
-        interval: 1,
-      });
-      expect(status).toBe(200);
-    });
-
-    it('pauses daemon', async () => {
-      const { status } = await post(`/api/books/${bookId}/daemon/pause`);
-      expect(status).toBe(200);
-    });
-
-    it('stops daemon', async () => {
-      const { status } = await post(`/api/books/${bookId}/daemon/stop`);
       expect(status).toBe(200);
     });
   });
@@ -301,7 +273,8 @@ describe('E2E: Critical User Paths', () => {
 
     it('updates configuration', async () => {
       const { status } = await put('/api/config', {
-        llm: { apiKey: 'test-key', model: 'test-model' },
+        defaultProvider: 'OpenAI',
+        defaultModel: 'gpt-4o',
       });
       expect(status).toBe(200);
     });

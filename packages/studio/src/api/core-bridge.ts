@@ -9,7 +9,6 @@ import {
   setStudioRuntimeRootDir,
   isManagedTempDir,
 } from '../runtime/runtime-config';
-import { stopAllStudioDaemons, clearAllStudioDaemons } from '../daemon/daemon-registry';
 
 // Re-export everything for backward compatibility
 
@@ -25,14 +24,9 @@ export {
   saveBookManifest,
 } from '../runtime/book-repository';
 
-export { setStudioDaemon, getStudioDaemon, clearStudioDaemon } from '../daemon/daemon-registry';
-
 // ─── Test reset ─────────────────────────────────────────────────
 
 export function resetStudioCoreBridgeForTests(rootDir?: string): void {
-  stopAllStudioDaemons();
-  clearAllStudioDaemons();
-
   const currentRoot = getStudioRuntimeRootDir();
   if (isManagedTempDir(currentRoot) && fs.existsSync(currentRoot)) {
     fs.rmSync(currentRoot, { recursive: true, force: true });

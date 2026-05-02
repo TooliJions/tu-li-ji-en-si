@@ -108,12 +108,6 @@ export * from './agents/entity-registry';
 // Pipeline
 export * from './pipeline/runner';
 export * from './pipeline/persistence';
-export {
-  PipelineScheduler,
-  type PipelineStage,
-  type PipelineContext,
-  type PipelineExecutionResult,
-} from './pipeline/scheduler';
 export * from './pipeline/restructurer';
 export * from './pipeline/revision-loop';
 export { AtomicPipelineOps, type AtomicOperationResult } from './pipeline/atomic-ops';
@@ -131,14 +125,10 @@ export * from './governance/hook-admission';
 export * from './governance/hook-arbiter';
 export * from './governance/hook-lifecycle';
 export * from './governance/rule-stack-compiler';
-export * from './governance/wake-smoothing';
 export * from './governance/context-governor';
 
 // Other Modules
-export * from './daemon';
-export * from './notify/index';
 export * from './prompts/index';
-export * from './fanfic';
 
 // Quality & Telemetry
 export * from './telemetry/logger';
@@ -152,6 +142,3 @@ export * from './errors';
 // Workflow
 export * from './workflow/contracts';
 export * from './workflow/services';
-
-// Scheduler
-export * from './scheduler/task-queue';

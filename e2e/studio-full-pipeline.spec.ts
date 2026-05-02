@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 /**
  * E2E Test: 完整创作流程（PRD-10.6 关键路径）
- * 覆盖：创建书籍 → 快速试写 → 升级为正式章节 → 守护进程自动创作 → 导出 EPUB
+ * 覆盖:创建书籍 → 灵感输入 → 规划 → 总纲 → 细纲 → 章节正文 → 质量审计 → 导出 EPUB
  *
  * 这是最重要的 E2E 测试，验证端到端创作流程
  */
@@ -14,10 +14,10 @@ test.describe('完整创作流程 E2E', () => {
   test('Step 1: 创建书籍', async ({ page }) => {
     // 1. 访问首页仪表盘
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 2. 点击新建书籍
-    await page.getByRole('link', { name: '新建书籍' }).click();
+    await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
     await expect(page.getByRole('heading', { name: '新建书籍' })).toBeVisible();
 
     // 3. 填写基本信息（第一步）—— 题材使用 select 下拉框
@@ -30,16 +30,18 @@ test.describe('完整创作流程 E2E', () => {
     await page
       .getByLabel('创作简报')
       .fill(
-        '这是一个关于修仙少年觉醒神秘力量的玄幻故事，主角林辰在天玄宗修行，逐步发现自己的星辰灵体天赋。'
+        '这是一个关于修仙少年觉醒神秘力量的玄幻故事，主角林辰在天玄宗修行，逐步发现自己的星辰灵体天赋。',
       );
     await page.getByRole('button', { name: '创建书籍' }).click();
 
-    // 5. 验证跳转到书籍详情页
-    await expect(page).toHaveURL(/\/book\/book-/);
-    await expect(page.getByRole('heading', { name: TEST_BOOK_TITLE })).toBeVisible();
+    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+      timeout: 30000,
+    });
 
-    // 6. 提取 bookId 供后续测试使用
-    bookId = page.url().split('/').pop() as string;
+    // 5. 提取 bookId 供后续测试使用
+    const createdUrl = new URL(page.url());
+    bookId = (createdUrl.searchParams.get('bookId') ??
+      createdUrl.pathname.split('/').pop()) as string;
     expect(bookId).toMatch(/^book-/);
   });
 
@@ -105,39 +107,6 @@ test.describe('完整创作流程 E2E', () => {
     await expect(page.getByText('星辰灵体的真正来源')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Step 6: 守护进程自动创作（PRD-028~PRD-030）', async ({ page }) => {
-    expect(bookId).toBeDefined();
-
-    // 1. 访问守护进程控制页面
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
-
-    // 2. 验证当前状态
-    await page.waitForTimeout(1000);
-
-    // 3. 点击启动守护进程
-    const startBtn = page.getByRole('button', { name: /启动|Start/i });
-    if (await startBtn.isVisible()) {
-      await startBtn.click();
-
-      // 4. 等待守护进程启动
-      await page.waitForTimeout(3000);
-
-      // 5. 验证状态变为 running
-      const runningIndicator = page.getByText(/running|运行中/i);
-      if (await runningIndicator.isVisible({ timeout: 5000 })) {
-        await expect(runningIndicator).toBeVisible();
-      }
-
-      // 6. 暂停守护进程（防止无限创作）
-      const pauseBtn = page.getByRole('button', { name: /暂停|Pause/i });
-      if (await pauseBtn.isVisible()) {
-        await pauseBtn.click();
-        await page.waitForTimeout(1000);
-      }
-    }
-  });
-
   test('Step 7: 导出功能（PRD-070~PRD-073）', async ({ page }) => {
     expect(bookId).toBeDefined();
 
@@ -146,7 +115,7 @@ test.describe('完整创作流程 E2E', () => {
     await expect(page.getByRole('heading', { name: TEST_BOOK_TITLE })).toBeVisible();
 
     // 2. 查找导出相关链接
-    const exportLink = page.getByRole('link', { name: /导出|EPUB|TXT|Markdown/i });
+    const exportLink = page.locator('main').getByRole('link', { name: /导出|EPUB|TXT|Markdown/i });
 
     if (await exportLink.isVisible()) {
       await exportLink.click();
@@ -157,12 +126,7 @@ test.describe('完整创作流程 E2E', () => {
       // 4. 验证不是 404
       await expect(page).not.toHaveURL(/404|error/i);
 
-      // 5. 尝试触发导出
-      const exportBtn = page.getByRole('button', { name: /导出|Download/i });
-      if (await exportBtn.isVisible()) {
-        // 注意：不实际下载文件，只验证按钮可点击
-        await expect(exportBtn).toBeVisible();
-      }
+      await expect(page.getByRole('button', { name: '开始导出' })).toBeVisible();
     }
   });
 
@@ -265,7 +229,7 @@ test.describe('完整创作流程 E2E', () => {
 
     // 查找自然语言输入框
     const nlInput = page.locator(
-      'input[placeholder*="自然语言"], input[placeholder*="对话"], textarea[placeholder*="提问"]'
+      'input[placeholder*="自然语言"], input[placeholder*="对话"], textarea[placeholder*="提问"]',
     );
 
     if (await nlInput.first().isVisible({ timeout: 3000 })) {
@@ -280,26 +244,6 @@ test.describe('完整创作流程 E2E', () => {
 
     // 访问风格管理页面
     await page.goto(`/style?bookId=${bookId}`);
-
-    // 验证页面可访问
-    await expect(page).not.toHaveURL(/404|error/i);
-    await page.waitForTimeout(2000);
-  });
-
-  test('Step 15: 同人模式初始化（PRD-004）', async ({ page }) => {
-    expect(bookId).toBeDefined();
-
-    // 访问同人初始化页面
-    await page.goto(`/fanfic?bookId=${bookId}`);
-
-    // 验证页面可访问
-    await expect(page).not.toHaveURL(/404|error/i);
-    await page.waitForTimeout(2000);
-  });
-
-  test('Step 16: 配置页面（配置 LLM Provider）', async ({ page }) => {
-    // 访问配置页面
-    await page.goto('/config');
 
     // 验证页面可访问
     await expect(page).not.toHaveURL(/404|error/i);
@@ -394,16 +338,19 @@ test.describe('完整创作端到端流水线', () => {
 
   test('1. 创建书籍并验证', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
-    await page.getByRole('link', { name: '新建书籍' }).click();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
+    await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
     await page.getByLabel('书名').fill(testBookTitle);
     await page.locator('#book-genre').selectOption('玄幻');
     await page.getByRole('button', { name: '下一步' }).click();
     await page.getByLabel('创作简报').fill('主角踏上修仙之路。');
     await page.getByRole('button', { name: '创建书籍' }).click();
-    await expect(page).toHaveURL(/\/book\/book-/);
-    await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
-    bookId = page.url().split('/').pop() as string;
+    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+      timeout: 30000,
+    });
+    const createdUrl = new URL(page.url());
+    bookId = (createdUrl.searchParams.get('bookId') ??
+      createdUrl.pathname.split('/').pop()) as string;
     expect(bookId).toMatch(/^book-/);
   });
 
@@ -434,11 +381,6 @@ test.describe('完整创作端到端流水线', () => {
     await page.goto(`/book/${bookId}`);
     await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
     await expect(page.getByText('章节列表')).toBeVisible();
-  });
-
-  test('6. 守护进程启动', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
   });
 
   test('7. 导出验证', async ({ page }) => {
@@ -493,20 +435,10 @@ test.describe('PRD-090: 状态差异分类展示', () => {
 
   test('分类标签：角色/关系/物品/事实/伏笔', async ({ page }) => {
     await page.goto(`/doctor?bookId=${bookId}`);
-    const categories = ['角色', '关系', '物品', '事实', '伏笔'];
-    let foundCount = 0;
-    for (const cat of categories) {
-      if (
-        await page
-          .getByText(cat)
-          .first()
-          .isVisible({ timeout: 1000 })
-          .catch(() => false)
-      ) {
-        foundCount++;
-      }
-    }
-    expect(foundCount).toBeGreaterThanOrEqual(1);
+    await page.getByRole('button', { name: '运行对比' }).click();
+
+    const resultMarker = page.getByText(/无差异|角色|关系|物品|事实|伏笔/).first();
+    await expect(resultMarker).toBeVisible({ timeout: 5000 });
   });
 
   test('多选框勾选交互', async ({ page }) => {
@@ -599,7 +531,7 @@ test.describe('PRD-024b: 心流模式实体感知', () => {
   test('实体虚线底纹', async ({ page }) => {
     await page.goto(`/writing?bookId=${bookId}`);
     const dashedUnderline = page.locator(
-      'mark[class*="border-dashed"], [style*="border-bottom: dashed"]'
+      'mark[class*="border-dashed"], [style*="border-bottom: dashed"]',
     );
     if (await dashedUnderline.first().isVisible({ timeout: 5000 })) {
       await expect(dashedUnderline.first()).toBeVisible();

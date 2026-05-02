@@ -1,5 +1,5 @@
 import { Terminal } from 'lucide-react';
-import DaemonLogStream from './daemon-log-stream';
+import LogStream from './log-stream';
 
 export default function LogViewer({
   bookId,
@@ -28,7 +28,7 @@ export default function LogViewer({
           <option value="error">ERROR</option>
         </select>
       </div>
-      <DaemonLogStream bookId={bookId} levelFilter={logFilter} />
+      <LogStream bookId={bookId} levelFilter={logFilter} />
     </div>
   );
 }

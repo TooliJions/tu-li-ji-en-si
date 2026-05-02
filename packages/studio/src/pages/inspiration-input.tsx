@@ -259,7 +259,6 @@ export default function InspirationInput() {
           >
             <option value="manual">手动输入</option>
             <option value="shuffle">灵感洗牌</option>
-            <option value="natural-agent">自然语言整理</option>
             <option value="import">外部导入</option>
           </select>
         </div>

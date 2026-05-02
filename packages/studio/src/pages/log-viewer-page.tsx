@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Terminal } from 'lucide-react';
-import DaemonLogStream from '../components/daemon-log-stream';
+import LogStream from '../components/log-stream';
 
 export default function LogViewerPage() {
   const [searchParams] = useSearchParams();
@@ -26,15 +26,9 @@ export default function LogViewerPage() {
             <h1 className="text-2xl font-bold">日志查看</h1>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            实时查看当前书籍的守护进程与流水线事件，并按级别或关键词检索日志内容。
+            实时查看当前书籍的流水线、伏笔与质量事件,可按级别或关键词检索。
           </p>
         </div>
-        <Link
-          to={`/daemon?bookId=${bookId}`}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          返回守护进程
-        </Link>
       </div>
 
       <div className="rounded-lg border bg-card p-6 shadow-sm">
@@ -67,7 +61,7 @@ export default function LogViewerPage() {
         </div>
 
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-800">
-          <DaemonLogStream bookId={bookId} levelFilter={levelFilter} searchQuery={searchQuery} />
+          <LogStream bookId={bookId} levelFilter={levelFilter} searchQuery={searchQuery} />
         </div>
       </div>
     </div>

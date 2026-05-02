@@ -4,7 +4,6 @@ export type SSEEventType =
   | 'pipeline_progress'
   | 'memory_extracted'
   | 'chapter_complete'
-  | 'daemon_event'
   | 'hook_wake'
   | 'thundering_herd'
   | 'quality_drift'

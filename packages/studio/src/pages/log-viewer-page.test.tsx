@@ -3,17 +3,35 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import LogViewerPage from './log-viewer-page';
 
-const mockEventSource = {
-  close: vi.fn(),
-  onmessage: null as ((event: { data: string }) => void) | null,
-  onerror: null as (() => void) | null,
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-};
+interface EventListenerEntry {
+  type: string;
+  handler: (event: MessageEvent) => void;
+}
+
+class MockEventSource {
+  listeners: EventListenerEntry[] = [];
+  close = vi.fn();
+  addEventListener(type: string, handler: EventListener) {
+    this.listeners.push({ type, handler: handler as (event: MessageEvent) => void });
+  }
+  removeEventListener = vi.fn();
+  dispatch(type: string, data: unknown) {
+    for (const entry of this.listeners) {
+      if (entry.type === type) {
+        entry.handler({ data: JSON.stringify(data) } as MessageEvent);
+      }
+    }
+  }
+}
+
+let mockSource: MockEventSource;
 
 vi.stubGlobal(
   'EventSource',
-  vi.fn(() => mockEventSource)
+  vi.fn(() => {
+    mockSource = new MockEventSource();
+    return mockSource;
+  }),
 );
 
 function renderWithRouter(entry = '/logs?bookId=book-001') {
@@ -22,17 +40,13 @@ function renderWithRouter(entry = '/logs?bookId=book-001') {
       <Routes>
         <Route path="/logs" element={<LogViewerPage />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
 describe('LogViewerPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockEventSource.close.mockClear();
-    mockEventSource.addEventListener.mockClear();
-    mockEventSource.onmessage = null;
-    mockEventSource.onerror = null;
   });
 
   it('shows empty-book state when bookId is missing', () => {
@@ -48,35 +62,22 @@ describe('LogViewerPage', () => {
     expect(screen.getByPlaceholderText('搜索章节、错误或事件描述')).toBeTruthy();
 
     await act(async () => {
-      mockEventSource.onmessage?.({
-        data: JSON.stringify({
-          type: 'daemon_event',
-          timestamp: '2026-04-21T08:00:00.000Z',
-          message: '守护进程启动',
-        }),
-      });
-      mockEventSource.onmessage?.({
-        data: JSON.stringify({
-          type: 'chapter_error',
-          timestamp: '2026-04-21T08:01:00.000Z',
-          chapter: 3,
-          error: '创作失败',
-        }),
-      });
+      mockSource.dispatch('pipeline_progress', { chapter: 1, status: 'started' });
+      mockSource.dispatch('hook_wake', { hookId: 'h1', priority: 'high' });
     });
 
     await waitFor(() => {
-      expect(screen.getByText('守护进程启动')).toBeTruthy();
-      expect(screen.getByText('第3章 创作失败: 创作失败')).toBeTruthy();
+      expect(screen.getByText('pipeline_progress')).toBeTruthy();
+      expect(screen.getByText('hook_wake')).toBeTruthy();
     });
 
     fireEvent.change(screen.getByPlaceholderText('搜索章节、错误或事件描述'), {
-      target: { value: '创作失败' },
+      target: { value: 'h1' },
     });
 
     await waitFor(() => {
-      expect(screen.getByText('第3章 创作失败: 创作失败')).toBeTruthy();
-      expect(screen.queryByText('守护进程启动')).toBeNull();
+      expect(screen.getByText('hook_wake')).toBeTruthy();
+      expect(screen.queryByText('pipeline_progress')).toBeNull();
     });
   });
 });

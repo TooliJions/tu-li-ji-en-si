@@ -51,7 +51,7 @@ test.describe('侧边栏导航全覆盖测试', () => {
 
   test('主导航: 仪表盘', async ({ page }) => {
     await page.goto('/');
-    await expectPageLoaded(page, /仪表盘/);
+    await expectPageLoaded(page, /我的书籍/);
   });
 
   test('主导航: 我的书籍', async ({ page }) => {
@@ -169,11 +169,6 @@ test.describe('侧边栏导航全覆盖测试', () => {
     await expectPageLoaded(page, /配置|Config/);
   });
 
-  test('系统导航: 守护进程', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expectPageLoaded(page, /守护|Daemon/);
-  });
-
   test('系统导航: 诊断', async ({ page }) => {
     await page.goto(`/doctor?bookId=${bookId}`);
     await expectPageLoaded(page, /诊断|Doctor/);
@@ -182,10 +177,5 @@ test.describe('侧边栏导航全覆盖测试', () => {
   test('系统导航: 日志', async ({ page }) => {
     await page.goto(`/logs?bookId=${bookId}`);
     await expectPageLoaded(page, /日志|Log/);
-  });
-
-  test('系统导航: 自然Agent', async ({ page }) => {
-    await page.goto(`/natural-agent?bookId=${bookId}`);
-    await expectPageLoaded(page, /自然|Agent/);
   });
 });

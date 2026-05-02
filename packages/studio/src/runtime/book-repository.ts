@@ -7,7 +7,7 @@ import {
   type Manifest,
 } from '@cybernovelist/core';
 import { getStudioRuntimeRootDir } from './runtime-config';
-import { getStudioDaemon, clearStudioDaemon } from '../daemon/daemon-registry';
+import { validateBookId } from './validation';
 
 export interface StudioRuntimeBookRecord {
   id: string;
@@ -49,10 +49,16 @@ function buildInitialManifest(bookId: string): Manifest {
 }
 
 export function loadBookManifest(bookId: string): Manifest {
+  if (!validateBookId(bookId)) {
+    throw new Error('invalid bookId');
+  }
   return buildInitialManifest(bookId);
 }
 
 export function saveBookManifest(bookId: string, manifest: Manifest): void {
+  if (!validateBookId(bookId)) {
+    return;
+  }
   const manager = new StateManager(getStudioRuntimeRootDir());
   const store = new RuntimeStateStore(manager);
   store.saveRuntimeStateSnapshot(bookId, manifest);
@@ -82,10 +88,16 @@ function syncBookRuntimeWithIndex(book: StudioRuntimeBookRecord): StudioRuntimeB
 }
 
 export function hasStudioBookRuntime(bookId: string): boolean {
+  if (!validateBookId(bookId)) {
+    return false;
+  }
   return fs.existsSync(path.join(getStudioRuntimeRootDir(), bookId, 'book.json'));
 }
 
 export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void {
+  if (!validateBookId(book.id)) {
+    throw new Error('invalid bookId');
+  }
   const rootDir = getStudioRuntimeRootDir();
   const manager = new StateManager(rootDir);
   const stateStore = new RuntimeStateStore(manager);
@@ -144,6 +156,9 @@ export function initializeStudioBookRuntime(book: StudioRuntimeBookRecord): void
 }
 
 export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
+  if (!validateBookId(book.id)) {
+    return;
+  }
   if (!hasStudioBookRuntime(book.id)) {
     return;
   }
@@ -181,13 +196,16 @@ export function updateStudioBookRuntime(book: StudioRuntimeBookRecord): void {
 }
 
 export function deleteStudioBookRuntime(bookId: string): void {
-  const daemon = getStudioDaemon(bookId);
-  daemon?.stop();
-  clearStudioDaemon(bookId);
+  if (!validateBookId(bookId)) {
+    return;
+  }
   fs.rmSync(path.join(getStudioRuntimeRootDir(), bookId), { recursive: true, force: true });
 }
 
 export function readStudioBookRuntime(bookId: string): StudioRuntimeBookRecord | null {
+  if (!validateBookId(bookId)) {
+    return null;
+  }
   const bookPath = path.join(getStudioRuntimeRootDir(), bookId, 'book.json');
   if (!fs.existsSync(bookPath)) {
     return null;

@@ -1,7 +1,6 @@
 // CyberNovelist Core — Pipeline Domain Exports
 export * from './runner';
 export * from './types';
-export * from './scheduler';
 export * from './persistence';
 export * from './detection-runner';
 export * from './atomic-ops';

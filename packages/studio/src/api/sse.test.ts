@@ -96,7 +96,6 @@ describe('SSE Infrastructure', () => {
         'pipeline_progress',
         'memory_extracted',
         'chapter_complete',
-        'daemon_event',
         'hook_wake',
         'thundering_herd',
         'quality_drift',
@@ -152,12 +151,12 @@ describe('SSE Infrastructure', () => {
       hub.addClient('book-001', new SSEClient(makeMock()));
       hub.addClient('book-001', new SSEClient(makeMock()));
 
-      hub.sendEvent('book-001', 'daemon_event', { data: 1 });
+      hub.sendEvent('book-001', 'hook_wake', { data: 1 });
 
       expect(sent.length).toBe(3);
       for (const s of sent) {
         expect(s.length).toBe(1);
-        expect(s[0]).toContain('daemon_event');
+        expect(s[0]).toContain('hook_wake');
       }
     });
   });

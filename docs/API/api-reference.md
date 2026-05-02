@@ -1,30 +1,46 @@
 # CyberNovelist API 接口文档
 
-> 版本: 1.0 | 日期: 2026-04-18 | 状态: 初始版本
+> 版本: 2.0 | 日期: 2026-05-02 | 配套架构 v2.0 | 7 阶段流程瘦身后正式发布
 
 ## 1. 概述
 
+CyberNovelist 提供 RESTful JSON + SSE 推送接口,严格按照 7 阶段同步流程组织路由模块。
+
 ### 1.1 技术栈
 
-| 项目 | 值 |
-|------|------|
-| 框架 | Hono（轻量高性能 API 框架） |
-| 协议 | RESTful JSON + SSE（Server-Sent Events） |
-| 数据格式 | JSON（请求/响应） |
-| 认证 | 本地运行，无需认证（仅 localhost 访问） |
-| 基础路径 | `http://localhost:3000/api` |
+- **Web 框架**:Hono v4.6+
+- **校验**:Zod 3.24+
+- **数据格式**:JSON / SSE 推送
+- **认证**:目前为本地优先,无需 token
 
 ### 1.2 通用约定
 
-- 所有时间字段为 ISO 8601 格式
-- 分页使用 `page` + `pageSize` 参数
-- 错误响应统一格式：`{ "error": { "code": string, "message": string } }`
-- 成功响应统一格式：`{ "data": T }`
-- 列表响应统一格式：`{ "data": T[], "total": number }`
+| 项 | 约定 |
+|---|---|
+| 基础路径 | `http://localhost:3000/api` |
+| 内容类型 | `application/json; charset=utf-8` |
+| 时间戳 | ISO 8601(`2026-05-02T08:30:00.000Z`) |
+| 章节号 | 从 1 起的整数 |
+| ID 格式 | `{prefix}_{uuid}`,如 `seed_abc123` |
+| 错误响应 | `{ error: { code: 'XXX', message: '...' } }` |
+| 成功响应 | `{ data: ... }` 或 `{ data, exists }`(GET 工作流文档时) |
+
+### 1.3 7 阶段路由分布
+
+| 阶段 | 路由前缀 | 端点数 | 路由文件 |
+|---|---|---|---|
+| ① 灵感输入 | `/api/books/:bookId/inspiration` | 3 | `routes/inspiration.ts` |
+| ② 规划 | `/api/books/:bookId/planning-brief` | 3 | `routes/planning-brief.ts` |
+| ③ 总纲规划 | `/api/books/:bookId/story-outline` | 4 | `routes/story-outline.ts` |
+| ④ 细纲规划 | `/api/books/:bookId/detailed-outline` | 4 | `routes/detailed-outline.ts` |
+| ⑤ 章节正文 | `/api/books/:bookId/chapters/*` `/pipeline` `/writing` | ~15 | `routes/chapters/`、`routes/pipeline.ts` |
+| ⑥ 质量检查 | `/api/books/:bookId/quality` `/analytics` `/hooks` | ~15 | `routes/quality.ts`、`routes/analytics.ts`、`routes/hooks.ts` |
+| ⑦ 导出 | `/api/books/:bookId/export` | 4 | `routes/export.ts` |
+| 基础设施 | `/api/books`、`/api/state`、`/api/config`、`/api/system`、`/api/prompts`、`/api/genres`、`/api/sse` | ~15 | `routes/books.ts` 等 |
 
 ---
 
-## 2. 书籍管理 (`/api/books`)
+## 2. 基础:书籍管理(`/api/books`)
 
 ### 2.1 获取书籍列表
 
@@ -32,1296 +48,672 @@
 GET /api/books
 ```
 
-**Query 参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| status | string | 否 | 过滤状态：all/active/archived |
-| genre | string | 否 | 按题材过滤 |
-
-**响应：**
-
+响应:
 ```json
 {
   "data": [
     {
-      "id": "book-001",
-      "title": "重生-从高考满分作文开始",
-      "genre": "都市",
-      "targetWords": 1000000,
-      "currentWords": 342500,
-      "chapterCount": 45,
-      "status": "active",
-      "createdAt": "2026-04-15T10:00:00Z",
-      "updatedAt": "2026-04-18T14:30:00Z"
+      "id": "book_001",
+      "title": "示例书名",
+      "genre": "xuanhuan",
+      "chapterCount": 12,
+      "wordCount": 36000,
+      "createdAt": "2026-04-18T10:00:00.000Z"
     }
-  ],
-  "total": 1
+  ]
 }
 ```
 
-### 2.2 获取书籍详情
-
-```
-GET /api/books/:bookId
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "id": "book-001",
-    "title": "重生-从高考满分作文开始",
-    "genre": "都市",
-    "targetWords": 1000000,
-    "currentWords": 342500,
-    "chapterCount": 45,
-    "targetChapterCount": 100,
-    "status": "active",
-    "createdAt": "2026-04-15T10:00:00Z",
-    "updatedAt": "2026-04-18T14:30:00Z",
-    "fanficMode": null,
-    "promptVersion": "v2"
-  }
-}
-```
-
-### 2.3 创建书籍
+### 2.2 创建书籍
 
 ```
 POST /api/books
 ```
 
-**请求体：**
-
+请求:
 ```json
 {
-  "title": "书名",
-  "genre": "都市",
-  "targetWords": 1000000,
-  "language": "zh-CN",
-  "brief": "创作简报内容（可选）"
+  "title": "新书",
+  "genre": "xuanhuan",
+  "language": "zh-CN"
 }
 ```
 
-**响应：** `201 Created`，返回书籍详情对象
+### 2.3 获取/更新/删除书籍
 
-### 2.4 更新书籍
-
-```
-PATCH /api/books/:bookId
-```
-
-**请求体：** 需更新的字段（title / targetWords / status / promptVersion 等）
-
-### 2.5 删除书籍
-
-```
-DELETE /api/books/:bookId
-```
-
-**响应：** `204 No Content`
-
-### 2.6 获取书籍最近活动
-
-```
-GET /api/books/:bookId/activity
-```
-
-**Query 参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| limit | number | 否 | 返回条数，默认 10 |
-
-**响应：**
-
-```json
-{
-  "data": [
-    {
-      "type": "chapter_created",
-      "chapterId": "chapter-045",
-      "timestamp": "2026-04-18T14:30:00Z",
-      "detail": "第45章「逆袭开始」创作完成"
-    }
-  ]
-}
-```
+- `GET /api/books/:bookId`
+- `PATCH /api/books/:bookId`
+- `DELETE /api/books/:bookId`
+- `GET /api/books/:bookId/recent-activity`
 
 ---
 
-## 3. 章节管理 (`/api/books/:bookId/chapters`)
+## 3. 阶段 ① 灵感输入(`/api/books/:bookId/inspiration`)
 
-### 3.1 获取章节列表
-
-```
-GET /api/books/:bookId/chapters
-```
-
-**Query 参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| status | string | 否 | draft/published/all |
-
-**响应：**
-
-```json
-{
-  "data": [
-    {
-      "number": 45,
-      "title": "逆袭开始",
-      "status": "published",
-      "wordCount": 3200,
-      "qualityScore": 85,
-      "aiTraceScore": 0.15,
-      "auditStatus": "passed",
-      "createdAt": "2026-04-18T14:30:00Z",
-      "updatedAt": "2026-04-18T14:35:00Z"
-    },
-    {
-      "number": 46,
-      "title": null,
-      "status": "draft",
-      "wordCount": 800,
-      "qualityScore": null,
-      "createdAt": "2026-04-18T16:00:00Z"
-    }
-  ],
-  "total": 46
-}
-```
-
-### 3.2 获取章节详情
+### 3.1 获取当前灵感种子
 
 ```
-GET /api/books/:bookId/chapters/:chapterNumber
+GET /api/books/:bookId/inspiration
 ```
 
-**响应：**
-
+响应:
 ```json
 {
   "data": {
-    "number": 45,
-    "title": "逆袭开始",
-    "content": "正文内容...",
-    "status": "published",
-    "wordCount": 3200,
-    "qualityScore": 85,
-    "auditReport": { "passed": true, "dimensions": [] },
-    "aiTraceScore": 0.15,
-    "createdAt": "2026-04-18T14:30:00Z",
-    "updatedAt": "2026-04-18T14:35:00Z"
+    "id": "seed_abc",
+    "sourceText": "原始灵感文本...",
+    "genre": "xuanhuan",
+    "theme": "逆袭",
+    "conflict": "身份暴露",
+    "tone": "热血",
+    "constraints": ["不降智", "升级明确"],
+    "sourceType": "manual",
+    "createdAt": "2026-05-02T08:00:00.000Z"
+  },
+  "exists": true
+}
+```
+
+### 3.2 创建灵感种子
+
+```
+POST /api/books/:bookId/inspiration
+```
+
+请求:
+```json
+{
+  "sourceText": "把你的灵感、片段、想法先倒进来",
+  "genre": "xuanhuan",
+  "theme": "逆袭",
+  "conflict": "身份暴露",
+  "tone": "热血",
+  "constraints": ["不降智", "升级明确"],
+  "sourceType": "manual"
+}
+```
+
+`sourceType` 取值:`manual` / `shuffle` / `import`
+
+### 3.3 更新灵感种子
+
+```
+PATCH /api/books/:bookId/inspiration
+```
+
+请求体为部分字段补丁。
+
+---
+
+## 4. 阶段 ② 规划(`/api/books/:bookId/planning-brief`)
+
+### 4.1 获取规划简报
+
+```
+GET /api/books/:bookId/planning-brief
+```
+
+### 4.2 创建规划简报
+
+```
+POST /api/books/:bookId/planning-brief
+```
+
+请求:
+```json
+{
+  "audience": "20-30 岁男性读者",
+  "genreStrategy": "玄幻+逆袭+复仇",
+  "styleTarget": "热血爽文",
+  "lengthTarget": "200 万字",
+  "tabooRules": ["禁止主角降智", "禁止过度狗血"],
+  "marketGoals": ["进起点新书榜", "签约白银盟"],
+  "creativeConstraints": ["主线 5 卷", "感情线慢热"]
+}
+```
+
+### 4.3 更新规划简报
+
+```
+PATCH /api/books/:bookId/planning-brief
+```
+
+支持更新 `status` 字段(`draft` / `ready` / `approved`)。
+
+---
+
+## 5. 阶段 ③ 总纲规划(`/api/books/:bookId/story-outline`)
+
+### 5.1 获取总纲
+
+```
+GET /api/books/:bookId/story-outline
+```
+
+响应:
+```json
+{
+  "data": {
+    "id": "outline_xyz",
+    "planningBriefId": "brief_001",
+    "meta": {
+      "novelType": "xuanhuan",
+      "novelSubgenre": "东方玄幻",
+      "typeConfidence": 0.92,
+      "typeIsAuto": true,
+      "genderTarget": "male",
+      "architectureMode": "lotus_map",
+      "titleSuggestions": ["逆天剑帝", "仙路无终"],
+      "estimatedWordCount": "200 万字",
+      "endingType": "HE",
+      "oneLineSynopsis": "..."
+    },
+    "base": {
+      "sellingPoints": { ... },
+      "theme": { ... },
+      "goldenOpening": { "chapter1": ..., "chapter2": ..., "chapter3": ... },
+      "writingStyle": { ... },
+      "characters": [ ... ],
+      "relationships": [ ... ],
+      "outlineArchitecture": { ... },
+      "foreshadowingSeed": { ... },
+      "completionDesign": { ... }
+    },
+    "typeSpecific": {
+      "kind": "fantasy",
+      "data": { "powerSystem": ..., "goldenFinger": ... }
+    },
+    "createdAt": "...",
+    "updatedAt": "..."
+  },
+  "exists": true
+}
+```
+
+### 5.2 创建总纲(手动模式)
+
+```
+POST /api/books/:bookId/story-outline
+```
+
+请求:
+```json
+{
+  "mode": "manual",
+  "meta": { ... },
+  "base": { ... },
+  "typeSpecific": { ... }
+}
+```
+
+### 5.3 创建总纲(AI 自动生成模式)
+
+```
+POST /api/books/:bookId/story-outline
+```
+
+请求:
+```json
+{ "mode": "generate" }
+```
+
+**前置条件**:必须已存在 `InspirationSeed` 和 `PlanningBrief`。
+
+**行为**:调用 `OutlineGenerator` Agent 一次 LLM 调用产出三层 `StoryBlueprint`,自动跑 5 条规则校验:
+- R-01:`architectureMode == GENRE_TO_ARCHITECTURE[novelType]`
+- R-02:`typeSpecific.kind` 与 `novelType` 匹配
+- R-03:关系引用必须存在
+- R-04:至少 1 个主角
+- R-05:`endingType` 一致
+
+校验失败响应:
+```json
+{
+  "error": {
+    "code": "OUTLINE_VALIDATION_FAILED",
+    "message": "总纲一致性校验失败",
+    "issues": [
+      { "rule": "R-01", "severity": "critical", "description": "架构模式不匹配" },
+      { "rule": "R-04", "severity": "critical", "description": "缺少主角" }
+    ]
   }
 }
 ```
 
-### 3.3 更新章节
+### 5.4 更新总纲
 
 ```
-PATCH /api/books/:bookId/chapters/:chapterNumber
+PATCH /api/books/:bookId/story-outline
 ```
 
-**请求体：**
-
-```json
-{
-  "content": "修改后的正文内容",
-  "title": "修改后的标题"
-}
-```
-
-### 3.4 合并章节
-
-```
-POST /api/books/:bookId/chapters/merge
-```
-
-**请求体：**
-
-```json
-{
-  "fromChapter": 44,
-  "toChapter": 45
-}
-```
-
-**响应：** 合并后的章节对象
-
-### 3.5 拆分章节
-
-```
-POST /api/books/:bookId/chapters/:chapterNumber/split
-```
-
-**请求体：**
-
-```json
-{
-  "splitAtPosition": 15
-}
-```
-
-`splitAtPosition` 为段落编号（从 1 开始）
-
-**响应：** 拆分后的两个章节对象
-
-### 3.6 回滚章节
-
-```
-POST /api/books/:bookId/chapters/:chapterNumber/rollback
-```
-
-**请求体：**
-
-```json
-{
-  "toSnapshot": "snapshot-20260418-143000"
-}
-```
-
-**响应：** 回滚后的章节对象
+支持局部字段更新,不重新跑 LLM。
 
 ---
 
-## 4. 创作流水线 (`/api/books/:bookId/pipeline`)
+## 6. 阶段 ④ 细纲规划(`/api/books/:bookId/detailed-outline`)
 
-### 4.1 开始完整创作
+### 6.1 获取细纲
+
+```
+GET /api/books/:bookId/detailed-outline
+```
+
+响应:
+```json
+{
+  "data": {
+    "id": "detailed_001",
+    "storyBlueprintId": "outline_xyz",
+    "totalChapters": 200,
+    "estimatedTotalWords": "200 万字",
+    "volumes": [
+      {
+        "volumeNumber": 1,
+        "title": "第一卷:出山",
+        "arcSummary": "...",
+        "chapterCount": 50,
+        "chapters": [
+          {
+            "chapterNumber": 1,
+            "title": "雷霆降世",
+            "wordCountTarget": 3500,
+            "sceneSetup": "山门外暴雨夜",
+            "charactersPresent": ["mc", "mentor"],
+            "coreEvents": ["主角觉醒异象", "导师离世"],
+            "emotionArc": "悲愤 → 决然",
+            "chapterEndHook": "敌人黑影逼近",
+            "foreshadowingOps": [
+              { "foreshadowingId": "f1", "operation": "plant", "detail": "黑色印记" }
+            ],
+            "satisfactionType": "升级",
+            "keyDialogueHints": ["导师遗言"],
+            "writingNotes": "节奏:短句切割,情绪密集",
+            "contextForWriter": {
+              "storyProgress": "故事开端,主角刚拜师",
+              "chapterPositionNote": "黄金第 1 章,需建立世界观与吸引力",
+              "characterStates": [
+                { "characterId": "mc", "powerLevel": "凡人", "emotionalState": "迷茫", "keySecret": "血脉觉醒在即", "relationshipWithPov": "self" }
+              ],
+              "activeWorldRules": ["雷劫降临会唤醒血脉"],
+              "activeForeshadowingStatus": [
+                { "foreshadowingId": "f1", "status": "planted", "lastDevelopment": "" }
+              ],
+              "precedingChapterBridge": { "cliffhanger": "", "emotionalCarry": "", "unresolvedTension": "" },
+              "nextChapterSetup": { "seedForNext": "黑影身份", "expectedDevelopment": "暴露追兵" }
+            }
+          }
+        ]
+      }
+    ],
+    "createdAt": "...",
+    "updatedAt": "..."
+  },
+  "exists": true
+}
+```
+
+### 6.2 创建细纲(AI 自动生成)
+
+```
+POST /api/books/:bookId/detailed-outline
+```
+
+请求:
+```json
+{ "mode": "generate" }
+```
+
+**前置条件**:必须已存在 `StoryBlueprint`。
+
+**行为**:调用 `DetailedOutlineGenerator`,卷骨架 → 逐卷补 chapters,每章含完整 `contextForWriter`。超过 50 章按卷分批生成。
+
+跑 7 条规则校验(R-06..R-12),校验失败时按 R-XX 返回 issues 列表。
+
+### 6.3 更新单章细纲
+
+```
+PATCH /api/books/:bookId/detailed-outline/chapters/:chapterNumber
+```
+
+请求体为单章字段补丁。
+
+### 6.4 获取单章上下文
+
+```
+GET /api/books/:bookId/detailed-outline/chapters/:chapterNumber/context
+```
+
+返回该章的 `contextForWriter`,供章节正文阶段消费。
+
+---
+
+## 7. 阶段 ⑤ 章节正文(`/api/books/:bookId/chapters/*` + `/pipeline` + `/writing`)
+
+### 7.1 章节列表 / 详情 / 更新 / 合并 / 拆分 / 回滚
+
+```
+GET /api/books/:bookId/chapters
+GET /api/books/:bookId/chapters/:chapterNumber
+PATCH /api/books/:bookId/chapters/:chapterNumber
+POST /api/books/:bookId/chapters/merge       # body: { from, to }
+POST /api/books/:bookId/chapters/split       # body: { chapter, atPosition }
+POST /api/books/:bookId/chapters/:chapterNumber/rollback
+```
+
+### 7.2 完整创作
 
 ```
 POST /api/books/:bookId/pipeline/write-next
 ```
 
-**请求体：**
+调用 `PipelineRunner.writeNextChapter()`,15 步完整链路。
 
+请求(可选):
 ```json
 {
-  "chapterNumber": 46,
-  "customIntent": "自定义意图描述（可选）",
-  "skipAudit": false
+  "userIntent": "本章要展开兵分两路的支线",
+  "wordCountTarget": 3500
 }
 ```
 
-**响应：** `202 Accepted`
+响应:`{ data: { chapterNumber, title, wordCount, status, auditPassed } }`
 
-```json
-{
-  "data": {
-    "pipelineId": "pipeline-20260418-143000",
-    "status": "running",
-    "stages": ["planning", "composing", "writing", "auditing", "revising", "persisting"]
-  }
-}
-```
-
-### 4.2 快速试写
+### 7.3 快速试写
 
 ```
 POST /api/books/:bookId/pipeline/fast-draft
 ```
 
-**请求体：**
+仅单次 LLM,首段产出 < 15s,**不持久化**。
 
-```json
-{
-  "customIntent": "自定义意图（可选）",
-  "wordCount": 800
-}
+### 7.4 草稿模式
+
+```
+POST /api/books/:bookId/pipeline/draft
 ```
 
-**响应：**
+跳过审计修订,持久化为 `draft` 状态。
 
-```json
-{
-  "data": {
-    "content": "草稿正文...",
-    "wordCount": 800,
-    "elapsedMs": 12000,
-    "llmCalls": 1,
-    "draftId": "draft-temp-20260418-160000"
-  }
-}
-```
-
-### 4.3 草稿转正
+### 7.5 草稿转正
 
 ```
 POST /api/books/:bookId/pipeline/upgrade-draft
 ```
 
-**请求体：**
+把 draft 章节启动审计修订流程。会检查上下文漂移。
 
+### 7.6 单章计划(降级补全器)
+
+```
+POST /api/books/:bookId/chapter-plan
+```
+
+仅当细纲缺失或不完整时调用,补齐 sceneBreakdown / openingHook / closingHook。
+
+### 7.7 流水线进度
+
+```
+GET /api/books/:bookId/pipeline/progress
+```
+
+返回最近一次调用的详细步骤进度。
+
+### 7.8 写作意图
+
+```
+POST /api/books/:bookId/writing/intent
+```
+
+直接调用 `IntentDirector`,产出本章叙事目标。
+
+---
+
+## 8. 阶段 ⑥ 质量检查(`/api/books/:bookId/quality` + `/analytics` + `/hooks`)
+
+### 8.1 手动审计
+
+```
+POST /api/books/:bookId/quality/audit
+```
+
+请求:
 ```json
-{
-  "draftId": "draft-temp-20260418-160000",
-  "content": "可能已手动编辑的草稿正文"
-}
+{ "chapterNumber": 12 }
 ```
 
-**响应：** `202 Accepted`，返回 pipelineId
-
-### 4.4 草稿模式（跳过审计）
+### 8.2 获取审计报告(33 维分组)
 
 ```
-POST /api/books/:bookId/pipeline/write-draft
+GET /api/books/:bookId/quality/report/:chapterNumber
 ```
 
-**请求体：**
-
-```json
-{
-  "chapterNumber": 46
-}
-```
-
-**响应：** 生成的草稿写入章节文件，返回章节对象（status: "draft"）
-
-### 4.5 获取流水线进度
-
-```
-GET /api/books/:bookId/pipeline/:pipelineId
-```
-
-**响应：**
-
+响应:
 ```json
 {
   "data": {
-    "pipelineId": "pipeline-20260418-143000",
-    "status": "running",
-    "currentStage": "auditing",
-    "progress": {
-      "planning": { "status": "completed", "elapsedMs": 5200 },
-      "composing": { "status": "completed", "elapsedMs": 3100 },
-      "writing": { "status": "completed", "elapsedMs": 8500 },
-      "auditing": { "status": "running", "elapsedMs": 0 },
-      "revising": { "status": "pending", "elapsedMs": 0 },
-      "persisting": { "status": "pending", "elapsedMs": 0 }
+    "chapterNumber": 12,
+    "overallScore": 84,
+    "radar": {
+      "aiSignature": 82, "coherence": 90, "pacing": 78,
+      "dialogue": 85, "description": 80, "emotion": 88,
+      "innovation": 76, "completeness": 92
     },
-    "startedAt": "2026-04-18T14:30:00Z"
-  }
-}
-```
-
-### 4.6 手动审计
-
-```
-POST /api/books/:bookId/chapters/:chapterNumber/audit
-```
-
-**响应：** 审计报告对象
-
-### 4.7 获取审计报告（33 维分组）
-
-```
-GET /api/books/:bookId/chapters/:chapterNumber/audit-report
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "chapterNumber": 46,
-    "overallStatus": "passed_with_warnings",
     "tiers": {
-      "blocker": { "total": 12, "passed": 12, "failed": 0, "items": [] },
-      "warning": {
-        "total": 12,
-        "passed": 11,
-        "failed": 1,
-        "items": [
-          {
-            "dimension": "hook_progression",
-            "label": "伏笔推进",
-            "severity": "warning",
-            "detail": "#12 已 8 章未推进",
-            "suggestion": "建议在本章或下章推进此伏笔"
-          }
-        ]
-      },
-      "suggestion": { "total": 9, "passed": 9, "failed": 0, "items": [] }
-    },
-    "radarScores": [
-      { "dimension": "ai_trace", "label": "AI 痕迹", "score": 0.12 },
-      { "dimension": "coherence", "label": "连贯性", "score": 0.91 },
-      { "dimension": "pacing", "label": "节奏", "score": 0.78 },
-      { "dimension": "dialogue", "label": "对话", "score": 0.85 },
-      { "dimension": "description", "label": "描写", "score": 0.72 },
-      { "dimension": "emotion", "label": "情感", "score": 0.88 },
-      { "dimension": "innovation", "label": "创新", "score": 0.65 },
-      { "dimension": "completeness", "label": "完整性", "score": 0.95 }
-    ]
-  }
-}
-```
-
----
-
-## 5. 状态管理 (`/api/books/:bookId/state`)
-
-### 5.1 获取真相文件列表
-
-```
-GET /api/books/:bookId/state
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "versionToken": 13,
-    "files": [
-      { "name": "current_state", "updatedAt": "2026-04-18T14:42:18Z", "size": 2048 },
-      { "name": "hooks", "updatedAt": "2026-04-18T14:30:00Z", "size": 1024 },
-      { "name": "chapter_summaries", "updatedAt": "2026-04-18T14:30:00Z", "size": 4096 },
-      { "name": "subplot_board", "updatedAt": "2026-04-18T14:00:00Z", "size": 512 },
-      { "name": "emotional_arcs", "updatedAt": "2026-04-18T13:00:00Z", "size": 768 },
-      { "name": "character_matrix", "updatedAt": "2026-04-18T14:30:00Z", "size": 3072 },
-      { "name": "manifest", "updatedAt": "2026-04-18T14:42:18Z", "size": 256 }
-    ]
-  }
-}
-```
-
-### 5.2 获取单个真相文件
-
-```
-GET /api/books/:bookId/state/:fileName
-```
-
-`:fileName` 为 `current_state` / `hooks` / `chapter_summaries` 等
-
-**响应：** 文件内容（JSON）
-
-### 5.3 更新真相文件
-
-```
-PUT /api/books/:bookId/state/:fileName
-```
-
-**请求体：** 新的 JSON 内容
-
-**响应：** 更新后的文件内容 + 新 `versionToken`
-
-### 5.4 导入 Markdown 状态
-
-```
-POST /api/books/:bookId/state/import-markdown
-```
-
-**请求体：**
-
-```json
-{
-  "fileName": "current_state",
-  "markdownContent": "# 当前状态\n..."
-}
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "parsed": { "versionToken": 14, "diff": [...] },
-    "preview": "变更预览摘要"
-  }
-}
-```
-
-### 5.5 回滚状态
-
-```
-POST /api/books/:bookId/state/rollback
-```
-
-**请求体：**
-
-```json
-{
-  "targetChapter": 44
-}
-```
-
-### 5.6 获取状态投影校验结果
-
-```
-GET /api/books/:bookId/state/projection-status
-```
-
-**响应：** JSON 与 Markdown 的哈希对比结果
-
----
-
-## 6. 守护进程 (`/api/books/:bookId/daemon`)
-
-### 6.1 获取守护进程状态
-
-```
-GET /api/books/:bookId/daemon
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "status": "running",
-    "nextChapter": 46,
-    "chaptersCompleted": 45,
-    "intervalSeconds": 30,
-    "dailyTokenUsed": 450000,
-    "dailyTokenLimit": 1000000,
-    "consecutiveFallbacks": 0,
-    "startedAt": "2026-04-18T10:00:00Z"
-  }
-}
-```
-
-### 6.2 启动守护进程
-
-```
-POST /api/books/:bookId/daemon/start
-```
-
-**请求体：**
-
-```json
-{
-  "fromChapter": 46,
-  "toChapter": 60,
-  "interval": 30,
-  "dailyTokenLimit": 1000000
-}
-```
-
-### 6.3 暂停守护进程
-
-```
-POST /api/books/:bookId/daemon/pause
-```
-
-### 6.4 停止守护进程
-
-```
-POST /api/books/:bookId/daemon/stop
-```
-
----
-
-## 7. 伏笔管理 (`/api/books/:bookId/hooks`)
-
-### 7.1 获取伏笔列表
-
-```
-GET /api/books/:bookId/hooks
-```
-
-**Query 参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| status | string | 否 | open/progressing/deferred/dormant/resolved/abandoned |
-
-**响应：**
-
-```json
-{
-  "data": [
-    {
-      "id": "hook-001",
-      "description": "父亲失踪之谜",
-      "plantedChapter": 3,
-      "status": "open",
-      "priority": "critical",
-      "lastAdvancedChapter": 42,
-      "expectedResolutionWindow": { "min": 50, "max": 60 },
-      "healthScore": 80
-    }
-  ]
-}
-```
-
-### 7.2 创建伏笔
-
-```
-POST /api/books/:bookId/hooks
-```
-
-**请求体：**
-
-```json
-{
-  "description": "伏笔描述",
-  "chapter": 45,
-  "priority": "major",
-  "expectedResolutionWindow": { "min": 55, "max": 65 }
-}
-```
-
-### 7.3 更新伏笔状态
-
-```
-PATCH /api/books/:bookId/hooks/:hookId
-```
-
-**请求体：**
-
-```json
-{
-  "status": "dormant",
-  "expectedResolutionWindow": { "min": 65, "max": 80 }
-}
-```
-
-### 7.4 获取伏笔健康度
-
-```
-GET /api/books/:bookId/hooks/health
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "total": 25,
-    "active": 15,
-    "dormant": 2,
-    "resolved": 6,
-    "overdue": 1,
-    "recoveryRate": 0.24,
-    "overdueList": [
-      { "hookId": "hook-005", "description": "竞赛报名截止", "expectedBy": 55, "currentChapter": 46 }
-    ]
-  }
-}
-```
-
-### 7.5 获取伏笔调度时间轴（甘特图数据）
-
-```
-GET /api/books/:bookId/hooks/timeline
-```
-
-**Query 参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| fromChapter | number | 否 | 起始章节，默认 1 |
-| toChapter | number | 否 | 结束章节，默认 100 |
-| status | string | 否 | 过滤状态 |
-
-**响应：**
-
-```json
-{
-  "data": {
-    "chapterRange": { "from": 1, "to": 100 },
-    "densityHeatmap": [
-      { "chapter": 1, "density": 2 }, { "chapter": 2, "density": 3 },
-      { "chapter": 47, "density": 5, "thunderHerd": true },
-      { "chapter": 100, "density": 1 }
-    ],
-    "hooks": [
-      {
-        "id": "hook-001",
-        "description": "父亲失踪之谜",
-        "plantedChapter": 3,
-        "status": "open",
-        "priority": "critical",
-        "segments": [
-          { "fromChapter": 3, "toChapter": 42, "type": "active" }
-        ],
-        "recurrenceChapter": null
-      },
-      {
-        "id": "hook-004",
-        "description": "王老师的过去",
-        "plantedChapter": 20,
-        "status": "dormant",
-        "segments": [
-          { "fromChapter": 20, "toChapter": 64, "type": "dormant" },
-          { "fromChapter": 65, "toChapter": 80, "type": "pending_wake" }
-        ],
-        "recurrenceChapter": null
-      },
-      {
-        "id": "hook-011",
-        "description": "地下室的钥匙",
-        "plantedChapter": 30,
-        "status": "deferred",
-        "segments": [
-          { "fromChapter": 30, "toChapter": 46, "type": "active" },
-          { "fromChapter": 47, "toChapter": 47, "type": "deferred" },
-          { "fromChapter": 48, "toChapter": 48, "type": "scheduled_wake" }
-        ],
-        "recurrenceChapter": 48,
-        "originalWakeChapter": 47,
-        "deferReason": "thundering_herd_smoothing"
-      }
-    ],
-    "thunderingHerdAnimations": [
-      {
-        "triggerChapter": 47,
-        "kept": [
-          { "hookId": "hook-008", "reason": "priority_top3" },
-          { "hookId": "hook-009", "reason": "priority_top3" },
-          { "hookId": "hook-010", "reason": "priority_top3" }
-        ],
-        "parabolicDefers": [
-          {
-            "hookId": "hook-011",
-            "deferredTo": 48,
-            "animation": { "arcHeight": 60, "color": "orange", "curveThickness": 3 }
-          },
-          {
-            "hookId": "hook-012",
-            "deferredTo": 49,
-            "animation": { "arcHeight": 90, "color": "green", "curveThickness": 2 }
-          }
-        ]
-      }
-    ],
-    "thunderingHerdAlerts": [
-      {
-        "chapter": 47,
-        "totalHooks": 5,
-        "maxAllowed": 3,
-        "deferred": [
-          { "hookId": "hook-011", "deferredTo": 48 },
-          { "hookId": "hook-012", "deferredTo": 49 }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### 7.6 获取伏笔唤醒排班
-
-```
-GET /api/books/:bookId/hooks/wake-schedule
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "currentChapter": 46,
-    "maxWakePerChapter": 3,
-    "pendingWakes": [
-      { "hookId": "hook-008", "wakeAtChapter": 47, "reason": "priority" },
-      { "hookId": "hook-009", "wakeAtChapter": 47, "reason": "priority" },
-      { "hookId": "hook-011", "wakeAtChapter": 48, "reason": "deferred_by_smoothing" }
-    ]
-  }
-}
-```
-
----
-
-## 8. 数据分析 (`/api/books/:bookId/analytics`)
-
-### 8.1 获取字数统计
-
-```
-GET /api/books/:bookId/analytics/word-count
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "totalWords": 342500,
-    "averagePerChapter": 3080,
-    "chapters": [
-      { "number": 45, "wordCount": 3200 },
-      { "number": 44, "wordCount": 2950 }
-    ]
-  }
-}
-```
-
-### 8.2 获取审计通过率
-
-```
-GET /api/books/:bookId/analytics/audit-rate
-```
-
-### 8.3 获取 Token 用量
-
-```
-GET /api/books/:bookId/analytics/token-usage
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "totalTokens": 472500,
-    "perChapter": {
-      "writer": 4500,
-      "auditor": 2200,
-      "planner": 1800,
-      "composer": 1200,
-      "reviser": 800
+      "critical": [
+        { "dimension": "时间线冲突", "severity": "critical", "message": "...", "fixed": false }
+      ],
+      "warning": [ ... ],
+      "suggestion": [ ... ]
     }
   }
 }
 ```
 
-### 8.4 获取 AI 痕迹趋势
+### 8.3 数据分析
 
-```
-GET /api/books/:bookId/analytics/ai-trace
-```
+| 端点 | 说明 |
+|---|---|
+| `GET /api/books/:bookId/analytics/word-count` | 字数统计 |
+| `GET /api/books/:bookId/analytics/audit-pass-rate` | 审计通过率 |
+| `GET /api/books/:bookId/analytics/token-usage` | Token 用量 |
+| `GET /api/books/:bookId/analytics/ai-signature-trend` | AI 痕迹趋势 |
+| `GET /api/books/:bookId/analytics/quality-baseline` | 质量基线与漂移 |
+| `GET /api/books/:bookId/analytics/baseline-drift-alert` | 基线漂移告警状态 |
+| `POST /api/books/:bookId/analytics/inspiration-shuffle` | 灵感洗牌(局部重写) |
 
-### 8.5 获取质量基线与漂移
+### 8.4 伏笔管理(治理 5 层对外接口)
 
-```
-GET /api/books/:bookId/analytics/quality-baseline
-```
+| 端点 | 说明 |
+|---|---|
+| `GET /api/books/:bookId/hooks` | 伏笔列表 |
+| `POST /api/books/:bookId/hooks` | 创建伏笔 |
+| `PATCH /api/books/:bookId/hooks/:hookId/status` | 更新伏笔状态 |
+| `GET /api/books/:bookId/hooks/health` | 伏笔健康度 |
+| `GET /api/books/:bookId/hooks/timeline` | 伏笔调度时间轴(双轨视图) |
+| `GET /api/books/:bookId/hooks/wake-schedule` | 伏笔唤醒排班 |
 
-**响应：**
+### 8.5 状态管理(基础设施,服务于⑥)
 
-```json
-{
-  "data": {
-    "baseline": {
-      "version": 1,
-      "basedOnChapters": [1, 2, 3],
-      "createdAt": "2026-04-15T14:30:00Z",
-      "metrics": {
-        "aiTraceScore": 0.15,
-        "sentenceDiversity": 0.82,
-        "avgParagraphLength": 48
-      }
-    },
-    "current": {
-      "aiTraceScore": 0.38,
-      "sentenceDiversity": 0.61,
-      "avgParagraphLength": 72,
-      "driftPercentage": 153,
-      "alert": true
-    }
-  }
-}
-```
-
-### 8.6 获取基线漂移告警状态
-
-```
-GET /api/books/:bookId/analytics/baseline-alert?metric=aiTraceScore&window=3
-```
-
-**说明：** 计算指定指标在最近 N 章的滑动平均值，对比基线 + 30% 警戒线，返回是否触发告警及告警详情。
-
-**响应：**
-
-```json
-{
-  "data": {
-    "metric": "aiTraceScore",
-    "baseline": 0.15,
-    "threshold": 0.20,
-    "windowSize": 3,
-    "slidingAverage": 0.38,
-    "chaptersAnalyzed": [44, 45, 46],
-    "triggered": true,
-    "consecutiveChapters": 3,
-    "severity": "suggestion",
-    "suggestedAction": {
-      "type": "model_switch",
-      "from": "qwen3.6-plus",
-      "to": ["gpt-4o", "qwen-opus"],
-      "suggestionText": "近期的文字似乎有些刻板，建议切换至【更具创造力的模型】"
-    },
-    "inspirationShuffle": {
-      "available": true,
-      "targetChapter": 46,
-      "suggestionText": "试试「灵感洗牌」，为您生成三种不同节奏的重写方案"
-    }
-  }
-}
-```
-
-### 8.7 灵感洗牌（局部重写方案生成）
-
-```
-POST /api/books/:bookId/analytics/inspiration-shuffle
-```
-
-**说明：** 针对指定章节的当前段落，生成三种不同节奏和视角的重写方案，帮助作者打破创作僵局。
-
-**请求体：**
-
-```json
-{
-  "chapterNumber": 46,
-  "paragraphRange": { "from": 1, "to": 12 },
-  "styles": ["fast_paced", "inner_monologue", "bystander"],
-  "maxAlternatives": 3
-}
-```
-
-**响应（SSE 流式返回）：**
-
-```json
-{
-  "data": {
-    "alternatives": [
-      {
-        "id": "A",
-        "style": "fast_paced",
-        "label": "快节奏视角",
-        "text": "铃声尖锐地划破空气。林晨手中的笔一顿，最后那道题——还剩十五分钟。",
-        "wordCount": 2800,
-        "characteristics": ["短句为主", "紧张感拉满", "动作描写优先"]
-      },
-      {
-        "id": "B",
-        "style": "inner_monologue",
-        "label": "内心独白视角",
-        "text": "林晨盯着卷子，脑海中却闪过父亲离开那天的背影。这道题，他非做对不可。",
-        "wordCount": 3500,
-        "characteristics": ["第一人称内心描写", "情感深沉", "回忆穿插"]
-      },
-      {
-        "id": "C",
-        "style": "bystander",
-        "label": "旁观者视角",
-        "text": "教室后排的苏小雨注意到，林晨握笔的指节已经泛白。",
-        "wordCount": 3200,
-        "characteristics": ["侧面烘托", "留白手法", "群像描写"]
-      }
-    ],
-    "generationTime": 8.2
-  }
-}
-```
+| 端点 | 说明 |
+|---|---|
+| `GET /api/books/:bookId/state` | 真相文件列表 |
+| `GET /api/books/:bookId/state/:fileName` | 单个真相文件 |
+| `PATCH /api/books/:bookId/state/:fileName` | 更新真相文件 |
+| `POST /api/books/:bookId/state/import-markdown` | 导入 Markdown 状态(AI 解析) |
+| `POST /api/books/:bookId/state/rollback` | 回滚状态 |
+| `GET /api/books/:bookId/state/projection-validation` | 状态投影校验结果 |
 
 ---
 
-## 9. 配置 (`/api/config`)
+## 9. 阶段 ⑦ 导出(`/api/books/:bookId/export`)
 
-### 9.1 获取全局配置
-
-```
-GET /api/config
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "defaultProvider": "DashScope",
-    "defaultModel": "qwen3.6-plus",
-    "agentRouting": [
-      { "agent": "Writer", "model": "qwen3.6-plus", "provider": "DashScope", "temperature": 0.8 },
-      { "agent": "Auditor", "model": "gpt-4o", "provider": "OpenAI", "temperature": 0.2 }
-    ],
-    "providers": [
-      { "name": "DashScope", "status": "connected" },
-      { "name": "OpenAI", "status": "connected" },
-      { "name": "Gemini", "status": "connected" }
-    ]
-  }
-}
-```
-
-### 9.2 更新全局配置
-
-```
-PUT /api/config
-```
-
-**请求体：** 完整配置对象
-
-### 9.3 测试连接
-
-```
-POST /api/config/test-provider
-```
-
-**请求体：**
-
-```json
-{
-  "provider": "DashScope",
-  "apiKey": "sk-xxx",
-  "model": "qwen3.6-plus"
-}
-```
-
----
-
-## 10. 导出 (`/api/books/:bookId/export`)
-
-### 10.1 导出 EPUB
+### 9.1 导出 EPUB
 
 ```
 POST /api/books/:bookId/export/epub
 ```
 
-**请求体：**
-
+请求(可选):
 ```json
 {
-  "chapterRange": { "from": 1, "to": 45 }
+  "chapterRange": { "from": 1, "to": 50 },
+  "includeMetadata": true
 }
 ```
 
-**响应：** 文件下载
+响应:返回二进制流或下载链接。
 
-### 10.2 导出 TXT
+### 9.2 导出 TXT / Markdown / 平台格式
 
 ```
 POST /api/books/:bookId/export/txt
-```
-
-### 10.3 导出 Markdown
-
-```
 POST /api/books/:bookId/export/markdown
+POST /api/books/:bookId/export/platform   # body: { platform: 'qidian' | 'fanqie' }
 ```
 
 ---
 
-## 11. 系统诊断 (`/api/system`)
+## 10. 配置(`/api/config`)
 
-### 11.1 获取诊断信息
-
-```
-GET /api/system/doctor
-```
-
-**响应：**
-
-```json
-{
-  "data": {
-    "issues": [
-      { "type": "stale_lock", "path": "books/book-001/.pipeline.lock", "severity": "warning" }
-    ],
-    "reorgSentinels": [],
-    "qualityBaseline": { "status": "established", "version": 1 },
-    "providerHealth": [
-      { "provider": "DashScope", "status": "online", "latencyMs": 320 },
-      { "provider": "OpenAI", "status": "online", "latencyMs": 450 }
-    ]
-  }
-}
-```
-
-### 11.2 修复僵尸锁
-
-```
-POST /api/system/doctor/fix-locks
-```
-
-### 11.3 重组中断恢复
-
-```
-POST /api/system/doctor/reorg-recovery
-```
-
-**请求体：**
-
-```json
-{
-  "bookId": "book-001"
-}
-```
-
-### 11.4 状态差异对比
-
-```
-GET /api/books/:bookId/state/diff?file=current_state
-```
-
-**说明：** 比较 JSON 真相文件与 Markdown 投影的差异，返回结构化 diff + 自然语言翻译（前端直接使用 naturalLanguage 字段展示，禁止暴露 path 字段）。
-
-**响应：**
-
-```json
-{
-  "data": {
-    "file": "current_state",
-    "summary": "系统从您的小说文本中提取到 3 处设定变更",
-    "changes": [
-      {
-        "character": "林晨",
-        "field": "location",
-        "oldValue": "教室",
-        "newValue": "办公室",
-        "category": "position",
-        "naturalLanguage": "系统发现您在文本中将【林晨】的位置改为了【办公室】，当前记忆为「教室」。是否将位置更新同步到核心记忆库？"
-      },
-      {
-        "character": "林晨",
-        "field": "mood",
-        "oldValue": "紧张",
-        "newValue": "自信",
-        "category": "emotion",
-        "naturalLanguage": "系统发现您在文本中将【林晨】的心情改为了【自信】，当前记忆为「紧张」。是否将心情更新同步到核心记忆库？"
-      },
-      {
-        "character": "苏小雨",
-        "field": "relationship",
-        "oldValue": "同桌",
-        "newValue": "同桌/好友",
-        "category": "relationship",
-        "naturalLanguage": "系统发现您将【苏小雨】和【林晨】的关系描述为「同桌/好友」，当前记忆仅为「同桌」。是否更新这段关系？"
-      }
-    ],
-    "changeCount": 3,
-    "categories": ["position", "emotion", "relationship"]
-  }
-}
-```
+| 端点 | 说明 |
+|---|---|
+| `GET /api/config` | 获取全局配置 |
+| `PATCH /api/config` | 更新全局配置 |
+| `POST /api/config/test-connection` | 测试 LLM 连接 |
 
 ---
 
-## 12. 提示词版本 (`/api/books/:bookId/prompts`)
+## 11. 系统诊断(`/api/system`)
 
-### 12.1 获取提示词版本列表
-
-```
-GET /api/books/:bookId/prompts
-```
-
-### 12.2 切换提示词版本
-
-```
-POST /api/books/:bookId/prompts/set
-```
-
-**请求体：**
-
-```json
-{
-  "version": "v1"
-}
-```
-
-### 12.3 版本对比
-
-```
-GET /api/books/:bookId/prompts/diff?from=v1&to=v2
-```
+| 端点 | 说明 |
+|---|---|
+| `GET /api/system/diagnostic` | 获取诊断信息(配置 / 环境检查 / 锁状态) |
+| `POST /api/system/fix-zombie-locks` | 修复僵尸锁 |
+| `POST /api/system/recover-reorg` | 重组中断恢复 |
+| `GET /api/system/state-diff` | 状态差异对比 |
 
 ---
 
-## 13. SSE 实时推送 (`/api/books/:bookId/sse`)
+## 12. 提示词版本(`/api/books/:bookId/prompts`)
 
-### 13.1 连接 SSE
+| 端点 | 说明 |
+|---|---|
+| `GET /api/books/:bookId/prompts/versions` | 提示词版本列表 |
+| `POST /api/books/:bookId/prompts/switch` | 切换版本 |
+| `GET /api/books/:bookId/prompts/diff` | 版本对比 |
+
+---
+
+## 13. SSE 实时推送(`/api/books/:bookId/sse`)
+
+### 13.1 连接
 
 ```
 GET /api/books/:bookId/sse
+Accept: text/event-stream
 ```
 
-**事件类型：**
+### 13.2 SSE 事件类型
 
-| 事件 | 数据格式 | 触发时机 |
-|------|----------|----------|
-| `pipeline_progress` | `{ "pipelineId": "...", "stage": "writing", "progress": 0.6 }` | 流水线阶段更新 |
-| `memory_extracted` | `{ "fragments": 18, "rules": 3, "categories": { "characters": ["林晨", "苏小雨"], "locations": ["教室"], "items": ["竞赛试卷"], "hooks": ["#1"] } }` | 记忆抽取完成，正文生成前 |
-| `chapter_complete` | `{ "chapterNumber": 46, "wordCount": 3200, "qualityScore": 85 }` | 章节创作完成 |
-| `daemon_event` | `{ "type": "chapter_done", "chapter": 46 }` | 守护进程事件 |
-| `hook_wake` | `{ "hookId": "...", "description": "...", "fromStatus": "dormant", "toStatus": "open" }` | 伏笔自动唤醒 |
-| `thundering_herd` | `{ "chapter": 47, "wakeCount": 5, "maxAllowed": 3, "schedule": [...] }` | 惊群平滑触发 |
-| `quality_drift` | `{ "aiTraceScore": 0.38, "driftPercentage": 153, "alert": true }` | 质量漂移告警 |
-| `context_changed` | `{ "fileName": "current_state", "oldVersionToken": 12, "newVersionToken": 13 }` | 真相文件变更 |
+| 事件 | 说明 |
+|---|---|
+| `pipeline_progress` | 章节正文流水线进度 |
+| `memory_extracted` | 记忆抽取完成 |
+| `chapter_complete` | 章节落盘完成 |
+| `hook_wake` | 伏笔唤醒 |
+| `thundering_herd` | 惊群事件 |
+| `quality_drift` | 质量漂移告警 |
+| `context_changed` | 上下文变更 |
 
-### 13.2 SSE 事件示例
-
+事件示例:
 ```
-event: pipeline_progress
-data: {"pipelineId":"pipeline-20260418-143000","stage":"auditing","progress":0.6,"elapsedMs":16800}
-
 event: chapter_complete
-data: {"chapterNumber":46,"wordCount":3200,"qualityScore":85,"aiTraceScore":0.12,"elapsedMs":45000}
+data: {"chapterNumber":12,"wordCount":3520,"auditPassed":true}
 ```
 
 ---
 
-## 14. 上下文查询 (`/api/books/:bookId/context`)
+## 14. 上下文查询(`/api/books/:bookId/context`)
 
 ### 14.1 按实体名查询上下文
 
 ```
-GET /api/books/:bookId/context/:entityName
+GET /api/books/:bookId/context?entity=林晨
 ```
 
-`:entityName` 为角色名/地点名/道具名等
-
-**响应：**
-
-```json
-{
-  "data": {
-    "name": "林晨",
-    "type": "character",
-    "currentLocation": "教室",
-    "emotion": "专注",
-    "inventory": ["竞赛试卷", "笔"],
-    "relationships": [
-      { "with": "苏小雨", "type": "同桌", "affinity": "好感" }
-    ],
-    "activeHooks": [
-      { "id": "hook-001", "description": "父亲失踪", "status": "open" }
-    ]
-  }
-}
-```
+返回该实体在当前章节附近的状态 / 关系 / 伏笔关联。
 
 ---
 
 ## 15. 错误码
 
-| 错误码 | HTTP 状态码 | 说明 |
-|--------|------------|------|
-| `BOOK_NOT_FOUND` | 404 | 书籍不存在 |
-| `CHAPTER_NOT_FOUND` | 404 | 章节不存在 |
-| `PIPELINE_BUSY` | 409 | 流水线正在运行 |
-| `INVALID_STATE` | 400 | 状态数据格式无效 |
-| `PROJECTION_MISMATCH` | 400 | JSON 与 Markdown 投影不一致 |
-| `HOOK_CONFLICT` | 409 | 伏笔重复/冲突 |
-| `REORG_LOCKED` | 409 | 章节重组锁定中 |
-| `DAEMON_RUNNING` | 409 | 守护进程运行中 |
-| `DAILY_QUOTA_EXCEEDED` | 429 | 每日 Token 配额已用完 |
-| `LLM_PROVIDER_ERROR` | 502 | LLM 提供商请求失败 |
-| `INTERNAL_ERROR` | 500 | 内部服务器错误 |
-| `CONTEXT_STALE` | 400 | 草稿生成后上下文已变化 |
-| `BASELINE_DRIFT` | 422 | 质量漂移超出阈值（建议性，非阻断） |
+| 错误码 | 含义 |
+|---|---|
+| `BOOK_NOT_FOUND` | 书籍不存在 |
+| `INVALID_STATE` | 请求体或状态不合法 |
+| `STAGE_NOT_FOUND` | 阶段尚未创建对应工作流文档 |
+| `STAGE_ALREADY_EXISTS` | 阶段已存在,需用 PATCH 而非 POST |
+| `UPSTREAM_REQUIRED` | 前一阶段尚未完成 |
+| `OUTLINE_VALIDATION_FAILED` | 总纲规则校验失败(R-01..R-05) |
+| `DETAILED_OUTLINE_VALIDATION_FAILED` | 细纲规则校验失败(R-06..R-12) |
+| `LLM_ERROR` | LLM 调用失败 |
+| `LOCK_TIMEOUT` | 文件锁获取超时 |
+| `CHAPTER_NOT_FOUND` | 章节不存在 |
+| `EXPORT_FORBIDDEN_PATH` | 导出路径越界 |
 
 ---
 
 ## 16. 端点总览
 
-| 模块 | 路径 | 方法数 |
-|------|------|--------|
-| 书籍管理 | `/api/books` | 6 |
-| 章节管理 | `/api/books/:bookId/chapters` | 6 |
-| 创作流水线 | `/api/books/:bookId/pipeline` | 7 |
-| 状态管理 | `/api/books/:bookId/state` | 6 |
-| 守护进程 | `/api/books/:bookId/daemon` | 4 |
-| 伏笔管理 | `/api/books/:bookId/hooks` | 6 |
-| 数据分析 | `/api/books/:bookId/analytics` | 7 |
-| 配置 | `/api/config` | 3 |
-| 导出 | `/api/books/:bookId/export` | 3 |
-| 上下文查询 | `/api/books/:bookId/context` | 1 |
-| 系统诊断 | `/api/system` | 4 |
-| 提示词版本 | `/api/books/:bookId/prompts` | 3 |
-| SSE 推送 | `/api/books/:bookId/sse` | 1（事件流） |
+按 7 阶段汇总,共约 60 个端点。
+
+### ① 灵感输入(3)
+- `GET /api/books/:bookId/inspiration`
+- `POST /api/books/:bookId/inspiration`
+- `PATCH /api/books/:bookId/inspiration`
+
+### ② 规划(3)
+- `GET /api/books/:bookId/planning-brief`
+- `POST /api/books/:bookId/planning-brief`
+- `PATCH /api/books/:bookId/planning-brief`
+
+### ③ 总纲规划(4)
+- `GET /api/books/:bookId/story-outline`
+- `POST /api/books/:bookId/story-outline`(支持 `mode: 'manual' | 'generate'`)
+- `PATCH /api/books/:bookId/story-outline`
+- (规则校验响应内嵌)
+
+### ④ 细纲规划(4)
+- `GET /api/books/:bookId/detailed-outline`
+- `POST /api/books/:bookId/detailed-outline`(支持 `mode: 'manual' | 'generate'`)
+- `PATCH /api/books/:bookId/detailed-outline/chapters/:chapterNumber`
+- `GET /api/books/:bookId/detailed-outline/chapters/:chapterNumber/context`
+
+### ⑤ 章节正文(~15)
+- `GET/PATCH /api/books/:bookId/chapters[/...]`
+- `POST /api/books/:bookId/chapters/merge`、`/split`、`/:n/rollback`
+- `POST /api/books/:bookId/pipeline/{write-next,fast-draft,draft,upgrade-draft}`
+- `GET /api/books/:bookId/pipeline/progress`
+- `POST /api/books/:bookId/chapter-plan`
+- `POST /api/books/:bookId/writing/intent`
+
+### ⑥ 质量检查(~15)
+- `POST /api/books/:bookId/quality/audit`
+- `GET /api/books/:bookId/quality/report/:n`
+- `GET /api/books/:bookId/analytics/{word-count,audit-pass-rate,token-usage,ai-signature-trend,quality-baseline,baseline-drift-alert}`
+- `POST /api/books/:bookId/analytics/inspiration-shuffle`
+- `GET/POST /api/books/:bookId/hooks[/...]`
+- `GET/PATCH/POST /api/books/:bookId/state[/...]`
+
+### ⑦ 导出(4)
+- `POST /api/books/:bookId/export/{epub,txt,markdown,platform}`
+
+### 基础设施(~15)
+- `/api/books`
+- `/api/config`
+- `/api/system`
+- `/api/genres`
+- `/api/books/:bookId/prompts/{versions,switch,diff}`
+- `/api/books/:bookId/sse`
+- `/api/books/:bookId/context`
+- `/api/books/:bookId/style/*`(风格管理)

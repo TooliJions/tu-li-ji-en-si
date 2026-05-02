@@ -54,19 +54,6 @@ export async function updateGenre(
   return data.data;
 }
 
-export async function initFanfic(
-  bookId: string,
-  config: { mode: string; description: string; canonReference?: string },
-) {
-  const res = await fetch(`/api/books/${bookId}/fanfic/init`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
-  const data = await res.json();
-  return data.data;
-}
-
 export type ExportFormat = 'markdown' | 'txt' | 'epub';
 
 export async function startExport(

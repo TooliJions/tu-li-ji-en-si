@@ -17,10 +17,10 @@ test.describe('书籍完整生命周期', () => {
 
   test('1. 创建书籍 - 两步表单', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的书籍' })).toBeVisible();
 
     // 点击新建书籍
-    await page.getByRole('link', { name: '新建书籍' }).click();
+    await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
     await expect(page.getByRole('heading', { name: '新建书籍' })).toBeVisible();
 
     // 第一步：填写基本信息（题材使用 select 下拉框）
@@ -33,15 +33,16 @@ test.describe('书籍完整生命周期', () => {
     await page.getByLabel('创作简报').fill('这是 E2E 测试创建的玄幻小说，讲述修仙之路。');
     await page.getByRole('button', { name: '创建书籍' }).click();
 
-    // 验证跳转和书籍详情页
-    await expect(page).toHaveURL(/\/book\/book-/);
-    await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
+    await page.waitForURL(/\/book\/book-|\/writing-plan\?bookId=book-|\/writing\?bookId=book-/, {
+      timeout: 30000,
+    });
 
-    // 提取 bookId
-    bookId = page.url().split('/').pop() as string;
+    const createdUrl = new URL(page.url());
+    bookId = (createdUrl.searchParams.get('bookId') ??
+      createdUrl.pathname.split('/').pop()) as string;
     expect(bookId).toMatch(/^book-/);
 
-    await page.getByRole('link', { name: '开始写作' }).click();
+    await page.goto(`/writing-plan?bookId=${bookId}`);
     await expect(page).toHaveURL(new RegExp(`/writing-plan\\?bookId=${bookId}`));
     await expect(page.getByRole('heading', { name: /创作规划/ })).toBeVisible();
 
@@ -248,40 +249,6 @@ test.describe('数据分析', () => {
 });
 
 /**
- * E2E Test: 守护进程
- */
-test.describe('守护进程', () => {
-  const testBookTitle = `E2E-守护测试-${Date.now()}`;
-  let bookId: string;
-
-  test.beforeAll(async ({ request }) => {
-    const res = await request.post('/api/books', {
-      data: {
-        title: testBookTitle,
-        genre: '游戏',
-        targetChapterCount: 200,
-        targetWordsPerChapter: 3000,
-        targetWords: 600000,
-        brief: 'E2E 守护进程测试',
-      },
-    });
-    const data = await res.json();
-    bookId = data.data.id;
-  });
-
-  test('10. 守护进程控制页面', async ({ page }) => {
-    await page.goto(`/daemon?bookId=${bookId}`);
-    await expect(page.getByRole('heading', { name: /守护进程|Daemon/ })).toBeVisible();
-  });
-
-  test.afterAll('清理测试书籍', async ({ request }) => {
-    if (bookId) {
-      await request.delete(`/api/books/${bookId}`);
-    }
-  });
-});
-
-/**
  * E2E Test: 导出功能
  */
 test.describe('导出功能', () => {
@@ -309,7 +276,7 @@ test.describe('导出功能', () => {
     await expect(page.getByRole('heading', { name: testBookTitle })).toBeVisible();
 
     // 查找导出相关按钮或链接
-    const exportLink = page.getByRole('link', { name: /导出|EPUB|TXT|Markdown/i });
+    const exportLink = page.locator('main').getByRole('link', { name: /导出|EPUB|TXT|Markdown/i });
     if (await exportLink.isVisible()) {
       await exportLink.click();
       await expect(page).not.toHaveURL(/404|error/i);
@@ -366,7 +333,7 @@ test.describe('PRD-001: 创建书籍验证目录结构', () => {
 test.describe('PRD-002: 题材模板库', () => {
   test('题材下拉框包含预置题材', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: '新建书籍' }).click();
+    await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
 
     const genreSelect = page.locator('#book-genre');
     await expect(genreSelect).toBeVisible();
@@ -388,7 +355,7 @@ test.describe('PRD-002: 题材模板库', () => {
 test.describe('PRD-003: 创作简报上传', () => {
   test('创作简报输入框存在', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: '新建书籍' }).click();
+    await page.locator('main').getByRole('link', { name: '新建书籍' }).click();
     await page.getByLabel('书名').fill('E2E-简报测试');
     await page.locator('#book-genre').selectOption('都市');
     await page.getByRole('button', { name: '下一步' }).click();

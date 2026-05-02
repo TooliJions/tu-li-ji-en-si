@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import {
-  BookOpen,
-  FileText,
-  PenTool,
-  GitBranch,
-  Heart,
-  Sparkles,
-  Palette,
-  Archive,
-} from 'lucide-react';
+import { BookOpen, FileText, PenTool, GitBranch, Heart, Palette, Archive } from 'lucide-react';
 import { fetchBooks } from '../lib/api';
 
 interface Book {
@@ -192,11 +183,6 @@ export default function ChaptersPage() {
                     to={`/style-manager?bookId=${book.id}`}
                     icon={Palette}
                     label="文风配置"
-                  />
-                  <ActionLink
-                    to={`/fanfic-init?bookId=${book.id}`}
-                    icon={Sparkles}
-                    label="同人模式"
                   />
                   <ActionLink
                     to={`/book/${book.id}/emotional-arcs`}

@@ -104,41 +104,6 @@ export async function getPipelineStatus(bookId: string, pipelineId: string) {
   return data.data;
 }
 
-export async function fetchDaemonStatus(bookId: string) {
-  const res = await fetch(`/api/books/${bookId}/daemon`);
-  if (!res.ok) throw new Error('获取守护进程状态失败');
-  const data = await res.json();
-  return data.data;
-}
-
-export async function startDaemon(
-  bookId: string,
-  config: { fromChapter: number; toChapter: number; interval: number },
-) {
-  const res = await fetch(`/api/books/${bookId}/daemon/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) throw new Error('启动守护进程失败');
-  const data = await res.json();
-  return data.data;
-}
-
-export async function pauseDaemon(bookId: string) {
-  const res = await fetch(`/api/books/${bookId}/daemon/pause`, { method: 'POST' });
-  if (!res.ok) throw new Error('暂停守护进程失败');
-  const data = await res.json();
-  return data.data;
-}
-
-export async function stopDaemon(bookId: string) {
-  const res = await fetch(`/api/books/${bookId}/daemon/stop`, { method: 'POST' });
-  if (!res.ok) throw new Error('停止守护进程失败');
-  const data = await res.json();
-  return data.data;
-}
-
 export async function fetchEmotionalArcs(bookId: string) {
   const res = await fetch(`/api/books/${bookId}/analytics/emotional-arcs`);
   if (!res.ok) throw new Error('获取情感弧线失败');
