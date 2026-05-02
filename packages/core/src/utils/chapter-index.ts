@@ -16,25 +16,18 @@ export function normalizeChapterEntry(
   title: string | null,
   wordCount: number,
 ): ChapterIndexEntry {
-  const legacyChapter = chapter as ChapterIndexEntry & {
-    chapterNumber?: number;
-    status?: string;
-    writtenAt?: string;
-    plannedAt?: string;
+  const rest = {
+    ...(chapter as ChapterIndexEntry & {
+      chapterNumber?: number;
+      status?: string;
+      writtenAt?: string;
+      plannedAt?: string;
+    }),
   };
-   
-  const {
-    chapterNumber: _cn,
-    status: _s,
-    writtenAt: _w,
-    plannedAt: _p,
-    ...rest
-  } = legacyChapter as ChapterIndexEntry & {
-    chapterNumber?: number;
-    status?: string;
-    writtenAt?: string;
-    plannedAt?: string;
-  };
+  delete rest.chapterNumber;
+  delete rest.status;
+  delete rest.writtenAt;
+  delete rest.plannedAt;
   return {
     ...rest,
     number: chapterNumber,

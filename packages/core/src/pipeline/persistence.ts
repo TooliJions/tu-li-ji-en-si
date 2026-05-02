@@ -89,6 +89,7 @@ export class PipelinePersistence {
     const manifestPath = path.join(stateDir, 'manifest.json');
     const indexTmp = indexPath + '.tmp';
     const manifestTmp = manifestPath + '.tmp';
+    const commitMarkerPath = path.join(stateDir, '.commit-in-progress');
 
     const tempFiles = [chapterTmp, indexTmp, manifestTmp];
 
@@ -138,10 +139,37 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
         }
       }
 
-      // Step 6: 原子替换所有文件
+      // Step 6: 写入 commit marker（rename 阶段失败时由 recovery 回滚）
+      if (snapshotId) {
+        fs.writeFileSync(
+          commitMarkerPath,
+          JSON.stringify(
+            {
+              bookId: input.bookId,
+              chapterNumber: input.chapterNumber,
+              snapshotId,
+              timestamp: Date.now(),
+            },
+            null,
+            2,
+          ),
+          'utf-8',
+        );
+      }
+
+      // Step 7: 原子替换所有文件
       fs.renameSync(chapterTmp, targetPath);
       fs.renameSync(indexTmp, indexPath);
       fs.renameSync(manifestTmp, manifestPath);
+
+      // Step 8: 删除 commit marker（commit 完成）
+      if (fs.existsSync(commitMarkerPath)) {
+        try {
+          fs.unlinkSync(commitMarkerPath);
+        } catch (err) {
+          console.warn('[PipelinePersistence] Failed to remove commit marker:', err);
+        }
+      }
 
       return {
         success: true,
@@ -149,7 +177,7 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
         snapshotId,
       };
     } catch (error) {
-      // 任意步骤失败时清理所有临时文件
+      // 任意步骤失败时清理所有临时文件 + commit marker
       for (const tmp of tempFiles) {
         if (fs.existsSync(tmp)) {
           try {
@@ -157,6 +185,13 @@ ${warningBlock ? `${warningBlock}\n` : ''}createdAt: ${new Date().toISOString()}
           } catch {
             // Best effort cleanup
           }
+        }
+      }
+      if (fs.existsSync(commitMarkerPath)) {
+        try {
+          fs.unlinkSync(commitMarkerPath);
+        } catch {
+          // Best effort cleanup
         }
       }
 

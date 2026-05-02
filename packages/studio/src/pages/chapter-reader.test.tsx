@@ -23,9 +23,12 @@ const mockChapter = {
   status: 'draft' as const,
   wordCount: 120,
   qualityScore: 85,
+  aiTraceScore: null,
   auditStatus: null,
+  auditReport: null,
   warningCode: undefined,
   warning: undefined,
+  isPolluted: false,
   createdAt: '2026-04-19T00:00:00.000Z',
   updatedAt: '2026-04-19T01:00:00.000Z',
 };
@@ -57,7 +60,7 @@ function renderWithRouter(bookId = 'book-001', chapterNumber = '3') {
       <Routes>
         <Route path="/book/:bookId/chapter/:chapterNumber" element={<ChapterReader />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -86,7 +89,7 @@ describe('ChapterReader Page', () => {
     });
     expect(
       screen.getAllByText((_, node) => node?.textContent?.includes('林晨坐在教室里') ?? false)
-        .length
+        .length,
     ).toBeGreaterThan(0);
     expect(screen.getByText(/竞赛试卷的最后一道题/)).toBeTruthy();
   });
@@ -99,6 +102,31 @@ describe('ChapterReader Page', () => {
     await waitFor(() => {
       expect(screen.getByText(/120 字/)).toBeTruthy();
     });
+    expect(screen.getByText('状态')).toBeTruthy();
+    expect(screen.getByText('审计')).toBeTruthy();
+    expect(screen.getByText('AI痕迹')).toBeTruthy();
+  });
+
+  it('hydrates audit summary from chapter payload without extra fetch', async () => {
+    vi.mocked(api.fetchChapter).mockResolvedValue({
+      ...mockChapter,
+      auditStatus: 'needs_revision',
+      auditReport: mockAuditReport,
+      warningCode: 'accept_with_warnings',
+      warning: '修订次数用尽，已按 accept_with_warnings 降级接受结果',
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('章节状态概览')).toBeTruthy();
+    });
+
+    expect(api.fetchAuditReport).not.toHaveBeenCalled();
+    expect(screen.getByText('审计摘要')).toBeTruthy();
+    expect(screen.getAllByText('强制通过').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('POV_SHIFT')).toBeTruthy();
+    expect(screen.getByText('AI痕迹: 12.0%')).toBeTruthy();
   });
 
   it('shows not-found state when chapter does not exist', async () => {
@@ -187,6 +215,70 @@ describe('ChapterReader Page', () => {
     expect(screen.getAllByText('连贯性').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows core action buttons in read mode', async () => {
+    vi.mocked(api.fetchChapter).mockResolvedValue(mockChapter);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('第三章 暗流涌动')).toBeTruthy();
+    });
+
+    expect(screen.getByTitle('返回书籍详情')).toBeTruthy();
+    expect(screen.getByTitle('编辑')).toBeTruthy();
+    expect(screen.getByTitle('审计报告')).toBeTruthy();
+    expect(screen.getByTitle('重新审计')).toBeTruthy();
+    expect(screen.getByTitle('回滚到此')).toBeTruthy();
+    expect(screen.getByTitle('心流模式')).toBeTruthy();
+  });
+
+  it('runs audit directly from the toolbar', async () => {
+    vi.mocked(api.fetchChapter).mockResolvedValue(mockChapter);
+    vi.mocked(api.runAudit).mockResolvedValue(mockAuditReport);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('第三章 暗流涌动')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('重新审计'));
+    });
+
+    await waitFor(() => {
+      expect(api.runAudit).toHaveBeenCalledWith('book-001', 3);
+      expect(screen.getByText('审计报告', { selector: 'h2' })).toBeTruthy();
+    });
+  });
+
+  it('opens rollback dial from the toolbar', async () => {
+    vi.mocked(api.fetchChapter).mockResolvedValue(mockChapter);
+    vi.mocked(api.fetchChapterSnapshots).mockResolvedValue([
+      {
+        id: 'snapshot-001',
+        chapter: 3,
+        label: '回滚点 1',
+        timestamp: '2026-04-19T01:00:00.000Z',
+      },
+    ]);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getByText('第三章 暗流涌动')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('回滚到此'));
+    });
+
+    await waitFor(() => {
+      expect(api.fetchChapterSnapshots).toHaveBeenCalledWith('book-001', 3);
+      expect(screen.getByText('时间回溯')).toBeTruthy();
+    });
+  });
+
   it('toggles flow mode when clicking flow mode button', async () => {
     vi.mocked(api.fetchChapter).mockResolvedValue(mockChapter);
     vi.mocked(api.fetchEntityContext).mockResolvedValue({
@@ -213,7 +305,7 @@ describe('ChapterReader Page', () => {
     expect(
       screen
         .getAllByText((_, node) => node?.tagName === 'P')
-        .some((node) => node.textContent?.includes('林晨坐在教室里'))
+        .some((node) => node.textContent?.includes('林晨坐在教室里')),
     ).toBe(true);
 
     const highlightedEntity = screen

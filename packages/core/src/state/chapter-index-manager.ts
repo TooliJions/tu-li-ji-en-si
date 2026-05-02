@@ -62,19 +62,18 @@ export class ChapterIndexManager {
     wordCount: number,
   ): ChapterIndex['chapters'][number] {
     const legacyEntry = entry as Record<string, unknown>;
-     
-    const {
-      chapterNumber: _cn,
-      status: _s,
-      writtenAt: _w,
-      plannedAt: _p,
-      ...rest
-    } = legacyEntry as ChapterIndex['chapters'][number] & {
-      chapterNumber?: unknown;
-      status?: unknown;
-      writtenAt?: unknown;
-      plannedAt?: unknown;
+    const rest = {
+      ...(legacyEntry as ChapterIndex['chapters'][number] & {
+        chapterNumber?: unknown;
+        status?: unknown;
+        writtenAt?: unknown;
+        plannedAt?: unknown;
+      }),
     };
+    delete rest.chapterNumber;
+    delete rest.status;
+    delete rest.writtenAt;
+    delete rest.plannedAt;
     return {
       ...rest,
       number: chapterNumber,

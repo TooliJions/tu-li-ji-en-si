@@ -42,14 +42,34 @@ export async function createDriver(config: DriverConfig): Promise<DatabaseDriver
 
 // ─── BetterSqlite3Driver ─────────────────────────────────────────
 
+interface BSqlPreparedStatement {
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
+  get(...params: unknown[]): unknown;
+  all(...params: unknown[]): unknown[];
+}
+
+interface BSqlDatabase {
+  readonly name: string;
+  pragma(sql: string, opts?: { simple?: boolean }): unknown;
+  prepare(sql: string): BSqlPreparedStatement;
+  exec(sql: string): void;
+  transaction<T>(fn: () => T): () => T;
+  close(): void;
+}
+
+interface BSqlConstructor {
+  new (path: string): BSqlDatabase;
+}
+
 function tryCreateBetterSqlite3Driver(config: DriverConfig): DatabaseDriver | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Database = require('better-sqlite3') as typeof import('better-sqlite3');
+    const Database = require('better-sqlite3') as BSqlConstructor;
     const db = new Database(config.path);
 
     if (config.wal !== false) {
       db.pragma('journal_mode = WAL');
+      db.pragma('synchronous = NORMAL');
     }
     db.pragma('foreign_keys = ON');
 
@@ -62,7 +82,7 @@ function tryCreateBetterSqlite3Driver(config: DriverConfig): DatabaseDriver | nu
 class BetterSqlite3Driver implements DatabaseDriver {
   readonly mode: 'file' | 'memory';
 
-  constructor(private db: InstanceType<typeof import('better-sqlite3')>) {
+  constructor(private db: BSqlDatabase) {
     this.mode = db.name === ':memory:' ? 'memory' : 'file';
   }
 
@@ -91,6 +111,14 @@ class BetterSqlite3Driver implements DatabaseDriver {
   }
 
   close(): void {
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch (err) {
+      console.warn(
+        '[db-driver] WAL checkpoint failed before close:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
     this.db.close();
   }
 }
@@ -223,7 +251,9 @@ class SqlJsDriver implements DatabaseDriver {
     if (this.dbPath !== ':memory:') {
       const data = this.db.export();
       const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
+      const tmpPath = this.dbPath + '.tmp';
+      fs.writeFileSync(tmpPath, buffer);
+      fs.renameSync(tmpPath, this.dbPath);
     }
   }
 }

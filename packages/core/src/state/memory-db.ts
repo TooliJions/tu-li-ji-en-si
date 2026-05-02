@@ -107,7 +107,9 @@ export class MemoryDB {
   #saveToDisk(path: string): void {
     const data = this.db.export();
     const buffer = Buffer.from(data);
-    fs.writeFileSync(path, buffer);
+    const tmpPath = path + '.tmp';
+    fs.writeFileSync(tmpPath, buffer);
+    fs.renameSync(tmpPath, path);
   }
 
   #persist(): void {

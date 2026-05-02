@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
-import { StyleRefiner, type StyleFingerprint } from '@cybernovelist/core';
+import { type StyleFingerprint } from '@cybernovelist/core';
 import {
   hasStudioBookRuntime,
   readStudioBookRuntime,
@@ -92,7 +92,7 @@ function readChapterContent(bookId: string, chapterNumber: number): string {
     bookId,
     'story',
     'chapters',
-    `chapter-${padded}.md`
+    `chapter-${padded}.md`,
   );
   if (!fs.existsSync(filePath)) return '';
   const raw = fs.readFileSync(filePath, 'utf-8');
@@ -133,7 +133,7 @@ export function createStyleRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
@@ -160,7 +160,7 @@ export function createStyleRouter(): Hono {
     if (!result.success) {
       return c.json(
         { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
-        400
+        400,
       );
     }
 
@@ -175,24 +175,17 @@ export function createStyleRouter(): Hono {
         ? readChapterContent(bookId, result.data.chapterNumber - 1)
         : undefined;
 
-    const { provider } = getRequestContext(c);
-    const refiner = new StyleRefiner(provider);
-
-    const refinerResult = await refiner.execute({
-      promptContext: {
-        input: {
-          draftContent: chapterContent,
-          chapterNumber: result.data.chapterNumber,
-          genre: book?.genre ?? 'urban',
-          previousChapterContent: previousContent,
-        },
-      },
+    const refinerResult = await getRequestContext(c).runner.refineStyle({
+      draftContent: chapterContent,
+      chapterNumber: result.data.chapterNumber,
+      genre: book?.genre ?? 'urban',
+      previousChapterContent: previousContent,
     });
 
     if (!refinerResult.success) {
       return c.json(
         { error: { code: 'STYLE_REFINE_FAILED', message: refinerResult.error ?? '文风精炼失败' } },
-        500
+        500,
       );
     }
 

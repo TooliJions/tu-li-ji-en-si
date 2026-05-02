@@ -1,11 +1,7 @@
 {
-  "compilerOptions": {
-    "composite": true,
-    "types": ["node"],
-    "references": [
-      { "path": "packages/core" },
-      { "path": "packages/studio" }
-    ]
-  },
-  "files": []
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/studio" }
+  ]
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Plus, AlertCircle, Trash2, X } from 'lucide-react';
 import { fetchBooks, deleteBook } from '../lib/api';
+import { DashboardPageSkeleton } from '../components/page-loading-skeletons';
 
 interface Book {
   id: string;
@@ -62,11 +63,7 @@ export default function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">加载中…</p>
-      </div>
-    );
+    return <DashboardPageSkeleton />;
   }
 
   if (error) {

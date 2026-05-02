@@ -23,12 +23,12 @@ describe('Hono Server', () => {
   });
 
   describe('CORS middleware', () => {
-    it('adds CORS headers to responses', async () => {
+    it('adds CORS headers for whitelisted origin', async () => {
       const res = await app.request('/api/health', {
         method: 'GET',
         headers: { Origin: 'http://localhost:5173' },
       });
-      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+      expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
     });
   });
 
@@ -63,6 +63,29 @@ describe('Hono Server', () => {
       expect(res.status).toBe(404);
       const data = (await res.json()) as { error: { code: string } };
       expect(data.error.code).toBe('BOOK_NOT_FOUND');
+    });
+  });
+
+  describe('Path traversal protection on books routes', () => {
+    it('rejects GET on bookId with path traversal sequence', async () => {
+      const res = await app.request('/api/books/' + encodeURIComponent('..'));
+      expect([400, 404]).toContain(res.status);
+    });
+
+    it('rejects DELETE on bookId with path traversal sequence', async () => {
+      const res = await app.request('/api/books/' + encodeURIComponent('../etc'), {
+        method: 'DELETE',
+      });
+      expect([400, 404]).toContain(res.status);
+    });
+
+    it('rejects PATCH on bookId with path traversal sequence', async () => {
+      const res = await app.request('/api/books/' + encodeURIComponent('../../tmp'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'evil' }),
+      });
+      expect([400, 404]).toContain(res.status);
     });
   });
 

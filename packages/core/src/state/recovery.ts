@@ -13,7 +13,9 @@ export type RecoveryIssueType =
   | 'orphan_chapter'
   | 'missing_chapter_file'
   | 'orphan_summary'
-  | 'hook_mismatch';
+  | 'hook_mismatch'
+  | 'orphan_tmp_file'
+  | 'incomplete_commit';
 
 export type RecoverySeverity = 'warning' | 'error' | 'critical';
 
@@ -76,15 +78,27 @@ export class SessionRecovery {
     // 1. 检查书籍锁
     this.#checkBookLock(bookId, report, options.fixLocks ?? false);
 
-    // 2. 检查 WAL 状态
+    const hasActiveLock = report.issues.some((issue) => issue.type === 'active_lock');
+
+    // 2. 检查未完成的 commit marker（rename 阶段崩溃时回滚）
+    if (!hasActiveLock) {
+      this.#checkCommitMarker(bookId, report, options.autoRepair ?? false);
+    }
+
+    // 3. 清理崩溃残留的 .tmp / .pending（仅在无活跃锁时执行）
+    if (!hasActiveLock) {
+      this.#cleanupOrphanTmpFiles(bookId, report, options.autoRepair ?? false);
+    }
+
+    // 4. 检查 WAL 状态
     report.walStatus = this.#checkWal(bookId);
 
-    // 3. 一致性校验
+    // 5. 一致性校验
     this.#checkChapterConsistency(bookId, report, options.autoRepair ?? false);
     this.#checkSummaryConsistency(bookId, report, options.autoRepair ?? false);
     this.#checkHookConsistency(bookId, report);
 
-    // 4. 计算整体状态
+    // 6. 计算整体状态
     report.isClean = report.issues.length === 0;
 
     return report;
@@ -162,6 +176,176 @@ export class SessionRecovery {
         err instanceof Error ? err.message : String(err),
       );
       return false;
+    }
+  }
+
+  // ── Commit Marker Check ────────────────────────────────────
+
+  #checkCommitMarker(bookId: string, report: RecoveryReport, autoRepair: boolean): void {
+    const stateDir = this.manager.getBookPath(bookId, 'story', 'state');
+    const markerPath = path.join(stateDir, '.commit-in-progress');
+    if (!fs.existsSync(markerPath)) return;
+
+    let marker: { snapshotId?: string; chapterNumber?: number };
+    try {
+      marker = JSON.parse(fs.readFileSync(markerPath, 'utf-8')) as {
+        snapshotId?: string;
+        chapterNumber?: number;
+      };
+    } catch (err) {
+      console.warn(
+        `[recovery] Corrupted commit marker for ${bookId}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      if (autoRepair) {
+        try {
+          fs.unlinkSync(markerPath);
+        } catch {
+          // best effort
+        }
+      }
+      report.issues.push({
+        type: 'incomplete_commit',
+        severity: 'error',
+        description: `commit marker 损坏${autoRepair ? '，已清理' : '，建议自动修复'}`,
+        resolved: autoRepair,
+      });
+      return;
+    }
+
+    const snapshotId = marker.snapshotId;
+    const chapterDescriptor =
+      typeof marker.chapterNumber === 'number' ? `第 ${marker.chapterNumber} 章` : '未知章节';
+
+    if (!snapshotId) {
+      if (autoRepair) {
+        try {
+          fs.unlinkSync(markerPath);
+        } catch {
+          // best effort
+        }
+      }
+      report.issues.push({
+        type: 'incomplete_commit',
+        severity: 'error',
+        description: `${chapterDescriptor} 的 commit marker 缺少 snapshotId${autoRepair ? '，已清理' : ''}`,
+        resolved: autoRepair,
+      });
+      return;
+    }
+
+    const snapDir = path.join(stateDir, 'snapshots', snapshotId);
+    const snapManifestPath = path.join(snapDir, 'manifest.json');
+    const snapIndexPath = path.join(snapDir, 'index.json');
+    const destManifestPath = path.join(stateDir, 'manifest.json');
+    const destIndexPath = path.join(stateDir, 'index.json');
+
+    if (!fs.existsSync(snapDir)) {
+      report.issues.push({
+        type: 'incomplete_commit',
+        severity: 'critical',
+        description: `${chapterDescriptor} 检测到未完成的 commit，但快照「${snapshotId}」缺失，无法回滚`,
+        resolved: false,
+      });
+      return;
+    }
+
+    if (autoRepair) {
+      try {
+        if (fs.existsSync(snapManifestPath)) {
+          fs.copyFileSync(snapManifestPath, destManifestPath);
+        }
+        if (fs.existsSync(snapIndexPath)) {
+          fs.copyFileSync(snapIndexPath, destIndexPath);
+        }
+        fs.unlinkSync(markerPath);
+        report.issues.push({
+          type: 'incomplete_commit',
+          severity: 'error',
+          description: `${chapterDescriptor} 检测到未完成的 commit，已从快照「${snapshotId}」回滚`,
+          resolved: true,
+        });
+      } catch (err) {
+        report.issues.push({
+          type: 'incomplete_commit',
+          severity: 'critical',
+          description: `${chapterDescriptor} 回滚失败: ${err instanceof Error ? err.message : String(err)}`,
+          resolved: false,
+        });
+      }
+    } else {
+      report.issues.push({
+        type: 'incomplete_commit',
+        severity: 'error',
+        description: `${chapterDescriptor} 检测到未完成的 commit（快照「${snapshotId}」），使用 --auto-repair 可回滚`,
+        resolved: false,
+      });
+    }
+  }
+
+  // ── Orphan Tmp Cleanup ────────────────────────────────────
+
+  #cleanupOrphanTmpFiles(bookId: string, report: RecoveryReport, autoRepair: boolean): void {
+    const bookDir = this.manager.getBookPath(bookId);
+    if (!fs.existsSync(bookDir)) return;
+
+    const STALE_THRESHOLD_MS = 60 * 60 * 1000;
+    const now = Date.now();
+    const candidates: string[] = [];
+
+    const walk = (dir: string): void => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === 'snapshots') continue;
+          walk(full);
+        } else if (entry.isFile()) {
+          if (!entry.name.endsWith('.tmp') && !entry.name.endsWith('.pending')) continue;
+          try {
+            const stat = fs.statSync(full);
+            if (now - stat.mtimeMs >= STALE_THRESHOLD_MS) {
+              candidates.push(full);
+            }
+          } catch {
+            // 无法 stat，跳过
+          }
+        }
+      }
+    };
+
+    walk(bookDir);
+
+    for (const file of candidates) {
+      const relName = path.relative(bookDir, file);
+      if (autoRepair) {
+        try {
+          fs.unlinkSync(file);
+          report.issues.push({
+            type: 'orphan_tmp_file',
+            severity: 'warning',
+            description: `已清理崩溃残留的临时文件: ${relName}`,
+            resolved: true,
+          });
+        } catch (err) {
+          console.warn(
+            `[recovery] Failed to remove orphan tmp file ${file}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      } else {
+        report.issues.push({
+          type: 'orphan_tmp_file',
+          severity: 'warning',
+          description: `检测到崩溃残留的临时文件: ${relName}（使用 --auto-repair 可清理）`,
+          resolved: false,
+        });
+      }
     }
   }
 

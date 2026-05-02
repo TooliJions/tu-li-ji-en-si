@@ -50,6 +50,13 @@ import { DefaultPlanOrchestrator, type PlanOrchestrator } from './orchestrators/
 import { DefaultChapterComposer, type ChapterComposer } from './orchestrators/chapter-composer';
 import { DefaultChapterPersister, type ChapterPersister } from './orchestrators/chapter-persister';
 import { UsageTracker } from './telemetry';
+import { IntentDirector, type IntentInput, type IntentOutput } from '../agents/intent-director';
+import {
+  StyleRefiner,
+  type StyleRefineInput,
+  type StyleRefineOutput,
+} from '../agents/style-refiner';
+import { AIGCDetector, type AIDetectionReport } from '../quality/ai-detector';
 import '../agents/auto-register';
 
 // ─── PipelineRunner ─────────────────────────────────────────────
@@ -139,6 +146,43 @@ export class PipelineRunner {
     return this.planOrchestrator.planChapter(input);
   }
 
+  /**
+   * 解析自然语言意图：通过 IntentDirector 输出结构化叙事指令。
+   */
+  async analyzeIntent(
+    input: IntentInput,
+  ): Promise<{ success: boolean; data?: IntentOutput; error?: string }> {
+    const director = new IntentDirector(this.provider);
+    const result = await director.execute({ promptContext: { input } });
+    return {
+      success: result.success,
+      data: result.data as IntentOutput | undefined,
+      error: result.error,
+    };
+  }
+
+  /**
+   * 文风精炼：通过 StyleRefiner 对已有章节正文做风格优化。
+   */
+  async refineStyle(
+    input: StyleRefineInput,
+  ): Promise<{ success: boolean; data?: StyleRefineOutput; error?: string }> {
+    const refiner = new StyleRefiner(this.provider);
+    const result = await refiner.execute({ promptContext: { input } });
+    return {
+      success: result.success,
+      data: result.data as StyleRefineOutput | undefined,
+      error: result.error,
+    };
+  }
+
+  /**
+   * AI 痕迹检测：对正文执行启发式检测并返回分类评分。
+   */
+  detectAITrace(content: string): AIDetectionReport {
+    return new AIGCDetector().detect(content);
+  }
+
   // ── composeChapter ────────────────────────────────────────────
 
   /**
@@ -175,7 +219,7 @@ export class PipelineRunner {
             input.bookId,
             input.chapterNumber,
             channel as import('../telemetry/logger').TelemetryChannel,
-            usage
+            usage,
           );
         }
       }

@@ -205,14 +205,19 @@ export function createWriterRouter(): Hono {
       );
     }
 
-    const snapshotDir = path.join(
+    const snapshotsRoot = path.join(
       getStudioRuntimeRootDir(),
       bookId,
       'story',
       'state',
       'snapshots',
-      result.data.toSnapshot,
     );
+    const snapshotDir = path.join(snapshotsRoot, result.data.toSnapshot);
+    const normalizedSnapshotDir = path.resolve(snapshotDir);
+    const normalizedSnapshotsRoot = path.resolve(snapshotsRoot);
+    if (!normalizedSnapshotDir.startsWith(normalizedSnapshotsRoot + path.sep)) {
+      return c.json({ error: { code: 'INVALID_STATE', message: 'toSnapshot 路径非法' } }, 400);
+    }
     const chapterFileName = path.basename(
       getStateManager().getChapterFilePath(bookId, chapterNumber),
     );

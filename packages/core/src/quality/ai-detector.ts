@@ -559,3 +559,7 @@ export class AIGCDetector {
     return Math.round(Math.min(100, Math.max(0, total)));
   }
 }
+
+export function detectAIGCText(text: string, options?: DetectorOptions): AIDetectionReport {
+  return new AIGCDetector(options).detect(text);
+}

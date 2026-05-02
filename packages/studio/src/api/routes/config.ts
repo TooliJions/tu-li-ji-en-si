@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { z } from 'zod';
 import { OpenAICompatibleProvider } from '@cybernovelist/core';
 
 interface ProviderEntry {
@@ -45,8 +46,6 @@ interface ConfigState {
   retryPolicy: RetryPolicyConfig;
   cloudMode: boolean;
 }
-
-const DEFAULT_CONFIG_PATH = 'config.local.json';
 
 const defaultConfig: ConfigState = {
   defaultProvider: 'DashScope',
@@ -107,7 +106,7 @@ function loadConfig(): ConfigState {
   try {
     const cfgPath = process.env.CONFIG_PATH
       ? path.resolve(process.env.CONFIG_PATH)
-      : path.join(process.cwd(), DEFAULT_CONFIG_PATH);
+      : path.join(__dirname, '../../../config.local.json');
     if (fs.existsSync(cfgPath)) {
       const raw = fs.readFileSync(cfgPath, 'utf-8');
       const parsed = JSON.parse(raw);
@@ -122,7 +121,7 @@ function loadConfig(): ConfigState {
 function saveConfig(cfg: ConfigState) {
   const cfgPath = process.env.CONFIG_PATH
     ? path.resolve(process.env.CONFIG_PATH)
-    : path.join(process.cwd(), DEFAULT_CONFIG_PATH);
+    : path.join(__dirname, '../../../config.local.json');
   fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf-8');
 }
 
@@ -147,6 +146,95 @@ function maskConfigForResponse(cfg: ConfigState): Record<string, unknown> {
   };
 }
 
+function isMaskedSecret(value: string): boolean {
+  return value === '***' || /^.{4}\*\*\*.{4}$/.test(value);
+}
+
+const providerEntrySchema = z
+  .object({
+    name: z.string().min(1).max(64),
+    status: z.string().max(32),
+    apiKey: z.string().max(512),
+    baseUrl: z.string().url().max(512),
+    model: z.string().max(128).optional(),
+  })
+  .strict();
+
+const agentRouteSchema = z
+  .object({
+    agent: z.string().min(1).max(64),
+    model: z.string().min(1).max(128),
+    provider: z.string().min(1).max(64),
+    temperature: z.number().min(0).max(2),
+    maxTokens: z.number().int().positive().optional(),
+  })
+  .strict();
+
+const configUpdateSchema = z
+  .object({
+    defaultProvider: z.string().min(1).max(64).optional(),
+    defaultModel: z.string().min(1).max(128).optional(),
+    agentRouting: z.array(agentRouteSchema).max(32).optional(),
+    providers: z.array(providerEntrySchema).max(32).optional(),
+    notifications: z
+      .object({
+        telegramToken: z.string().max(512),
+        chatId: z.string().max(128),
+      })
+      .strict()
+      .optional(),
+    quotas: z
+      .object({
+        dailyTokenQuota: z.number().int().nonnegative(),
+        quotaAlertThreshold: z.number().min(0).max(1),
+      })
+      .strict()
+      .optional(),
+    rateLimits: z
+      .object({
+        rpmLimit: z.number().int().nonnegative(),
+        tpmLimit: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
+    retryPolicy: z
+      .object({
+        maxAttempts: z.number().int().min(1).max(10),
+        delayMs: z.number().int().min(0).max(60_000),
+      })
+      .strict()
+      .optional(),
+    cloudMode: z.boolean().optional(),
+  })
+  .strict();
+
+function mergeProviders(
+  oldProviders: ProviderEntry[],
+  newProviders: ProviderEntry[],
+): ProviderEntry[] {
+  return newProviders.map((np) => {
+    if (isMaskedSecret(np.apiKey)) {
+      const old = oldProviders.find((op) => op.name === np.name);
+      if (old) {
+        return { ...np, apiKey: old.apiKey };
+      }
+    }
+    return np;
+  });
+}
+
+function mergeNotifications(
+  oldNotif: ConfigState['notifications'],
+  newNotif: ConfigState['notifications'],
+): ConfigState['notifications'] {
+  return {
+    telegramToken: isMaskedSecret(newNotif.telegramToken)
+      ? oldNotif.telegramToken
+      : newNotif.telegramToken,
+    chatId: newNotif.chatId,
+  };
+}
+
 export function createConfigRouter(): Hono {
   let config = loadConfig();
   const router = new Hono();
@@ -155,7 +243,25 @@ export function createConfigRouter(): Hono {
 
   router.put('/', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    config = { ...config, ...body };
+    const result = configUpdateSchema.safeParse(body);
+    if (!result.success) {
+      return c.json(
+        { error: { code: 'INVALID_STATE', message: result.error.errors[0].message } },
+        400,
+      );
+    }
+
+    const update = result.data;
+    config = {
+      ...config,
+      ...update,
+      providers: update.providers
+        ? mergeProviders(config.providers, update.providers)
+        : config.providers,
+      notifications: update.notifications
+        ? mergeNotifications(config.notifications, update.notifications)
+        : config.notifications,
+    };
     saveConfig(config);
     return c.json({ data: maskConfigForResponse(config) });
   });

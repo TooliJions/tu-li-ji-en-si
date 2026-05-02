@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from 'hono/types';
 import { PipelineRunner, type LLMProvider } from '@cybernovelist/core';
 import { getStudioRuntimeRootDir } from '../runtime/runtime-config';
 import { readStudioBookRuntime } from '../runtime/book-repository';
+import { validateBookId } from '../runtime/validation';
 import { buildLLMProvider } from '../llm/provider-factory';
 import { DeterministicProvider } from '../llm/deterministic-provider';
 
@@ -19,12 +20,7 @@ declare module 'hono' {
   }
 }
 
-const SAFE_BOOK_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
-const PATH_TRAVERSAL_RE = /\.\./;
-
-export function validateBookId(bookId: string): boolean {
-  return SAFE_BOOK_ID_RE.test(bookId) && !PATH_TRAVERSAL_RE.test(bookId);
-}
+export { validateBookId };
 
 export function createBookContextMiddleware(): MiddlewareHandler {
   return async (c, next) => {
@@ -67,5 +63,6 @@ export function getRequestContext(c: Context): RequestContext {
 }
 
 export function registerRequestContext(app: Hono): void {
+  app.use('/api/books/:bookId', createBookContextMiddleware());
   app.use('/api/books/:bookId/*', createBookContextMiddleware());
 }

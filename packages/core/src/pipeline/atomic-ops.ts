@@ -243,19 +243,18 @@ createdAt: ${new Date().toISOString()}
     title: string,
     content: string,
   ): ChapterIndexEntry {
-     
-    const {
-      chapterNumber: _cn,
-      status: _s,
-      writtenAt: _w,
-      plannedAt: _p,
-      ...rest
-    } = chapter as ChapterIndexEntry & {
-      chapterNumber?: number;
-      status?: string;
-      writtenAt?: string;
-      plannedAt?: string;
+    const rest = {
+      ...(chapter as ChapterIndexEntry & {
+        chapterNumber?: number;
+        status?: string;
+        writtenAt?: string;
+        plannedAt?: string;
+      }),
     };
+    delete rest.chapterNumber;
+    delete rest.status;
+    delete rest.writtenAt;
+    delete rest.plannedAt;
     return {
       ...rest,
       number: chapterNumber,

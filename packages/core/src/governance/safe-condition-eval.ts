@@ -18,7 +18,7 @@ export function evalCondition(condition: string, item: Item): boolean {
 
   const tokens = tokenize(trimmed);
   const result = parseOr(tokens, { pos: 0 }, item);
-  return !!result;
+  return Boolean(result);
 }
 
 // ─── Tokenizer ──────────────────────────────────────────────────
@@ -189,12 +189,10 @@ function parseComparison(tokens: Token[], ctx: { pos: number }, item: Item): boo
       case '===':
         return actual === strVal;
       case '==':
-         
         return actual == strVal;
       case '!==':
         return actual !== strVal;
       case '!=':
-         
         return actual != strVal;
       default:
         return false;

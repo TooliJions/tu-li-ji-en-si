@@ -9,6 +9,34 @@ import type {
 import { countChineseWords } from '../utils';
 import { SummaryManager } from './summary-manager';
 
+const heldLocks = new Set<string>();
+let exitHandlerRegistered = false;
+
+function cleanupHeldLocks(): void {
+  for (const lockPath of heldLocks) {
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // 进程退出路径，已尽力清理
+    }
+  }
+  heldLocks.clear();
+}
+
+function ensureProcessExitHandler(): void {
+  if (exitHandlerRegistered) return;
+  exitHandlerRegistered = true;
+  process.on('exit', cleanupHeldLocks);
+  process.on('SIGINT', () => {
+    cleanupHeldLocks();
+    process.exit(130);
+  });
+  process.on('SIGTERM', () => {
+    cleanupHeldLocks();
+    process.exit(143);
+  });
+}
+
 // ─── StateManager ─────────────────────────────────────────────────
 // 负责书籍锁、路径计算、章节索引的读写。
 // 锁使用 open("wx") 实现排他创建，保证同一时刻仅一个进程可操作。
@@ -116,6 +144,8 @@ export class StateManager {
       const fd = fs.openSync(lockPath, 'wx');
       fs.writeFileSync(fd, JSON.stringify(lockInfo, null, 2));
       fs.closeSync(fd);
+      heldLocks.add(lockPath);
+      ensureProcessExitHandler();
       return lockInfo;
     };
 
@@ -162,6 +192,7 @@ export class StateManager {
    */
   releaseBookLock(bookId: string): void {
     const lockPath = this.getBookPath(bookId, '.lock');
+    heldLocks.delete(lockPath);
     if (fs.existsSync(lockPath)) {
       fs.unlinkSync(lockPath);
     }
@@ -218,19 +249,18 @@ export class StateManager {
     wordCount: number,
   ): ChapterIndex['chapters'][number] {
     const legacyEntry = entry as Record<string, unknown>;
-     
-    const {
-      chapterNumber: _cn,
-      status: _s,
-      writtenAt: _w,
-      plannedAt: _p,
-      ...rest
-    } = legacyEntry as ChapterIndex['chapters'][number] & {
-      chapterNumber?: unknown;
-      status?: unknown;
-      writtenAt?: unknown;
-      plannedAt?: unknown;
+    const rest = {
+      ...(legacyEntry as ChapterIndex['chapters'][number] & {
+        chapterNumber?: unknown;
+        status?: unknown;
+        writtenAt?: unknown;
+        plannedAt?: unknown;
+      }),
     };
+    delete rest.chapterNumber;
+    delete rest.status;
+    delete rest.writtenAt;
+    delete rest.plannedAt;
     return {
       ...rest,
       number: chapterNumber,

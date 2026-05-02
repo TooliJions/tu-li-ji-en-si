@@ -34,10 +34,12 @@ interface Chapter {
   status: 'draft' | 'published';
   wordCount: number;
   qualityScore: number | null;
+  aiTraceScore?: number | null;
   auditStatus: string | null;
   auditReport?: AuditReport | null;
   warningCode?: string | null;
   warning?: string | null;
+  isPolluted?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +117,89 @@ interface AuditReport {
   radarScores: { dimension: string; label: string; score: number }[];
 }
 
+function getAuditIssueCount(report: AuditReport | null | undefined): number {
+  if (!report || !report.tiers) {
+    return 0;
+  }
+
+  return (
+    (report.tiers.blocker?.failed || 0) +
+    (report.tiers.warning?.failed || 0) +
+    (report.tiers.suggestion?.failed || 0)
+  );
+}
+
+function getAuditIssueItems(report: AuditReport | null | undefined) {
+  if (!report || !report.tiers) {
+    return [];
+  }
+
+  return [
+    ...(report.tiers.blocker?.items || []),
+    ...(report.tiers.warning?.items || []),
+    ...(report.tiers.suggestion?.items || []),
+  ];
+}
+
+function getAiTraceDisplay(chapter: Chapter, report: AuditReport | null | undefined): string {
+  if (typeof chapter.aiTraceScore === 'number') {
+    return `${(chapter.aiTraceScore * 100).toFixed(1)}%`;
+  }
+
+  const radarAiTrace = report?.radarScores.find((item) => item.dimension === 'ai_trace');
+  if (radarAiTrace) {
+    return `${(radarAiTrace.score * 100).toFixed(1)}%`;
+  }
+
+  return '待审计';
+}
+
+function getChapterStatusLabel(chapter: Chapter): string {
+  if (chapter.warningCode === 'accept_with_warnings') {
+    return '强制通过';
+  }
+
+  if (chapter.status === 'draft') {
+    return '草稿';
+  }
+
+  if (chapter.auditStatus === 'passed') {
+    return '审计通过';
+  }
+
+  if (chapter.auditStatus === 'needs_revision') {
+    return '待修订';
+  }
+
+  return '已完成';
+}
+
+function getAuditStatusSummary(chapter: Chapter, report: AuditReport | null | undefined): string {
+  const issueCount = getAuditIssueCount(report);
+  if (issueCount > 0) {
+    return `${issueCount} 个问题`;
+  }
+
+  if (chapter.auditStatus === 'passed') {
+    return '通过';
+  }
+
+  if (report) {
+    return report.overallStatus === 'passed' ? '通过' : '需改进';
+  }
+
+  return '未审计';
+}
+
+function SidebarMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
 export default function ChapterReader() {
   const { bookId, chapterNumber } = useParams<{ bookId: string; chapterNumber: string }>();
   const navigate = useNavigate();
@@ -141,6 +226,7 @@ export default function ChapterReader() {
       .then((data) => {
         setChapter(data);
         setEditContent(data.content);
+        setAuditReport(data.auditReport ?? null);
       })
       .catch(() => setChapter(null))
       .finally(() => setLoading(false));
@@ -153,6 +239,7 @@ export default function ChapterReader() {
     try {
       const updated = await updateChapter(bookId, chNum, editContent);
       setChapter(updated);
+      setAuditReport(updated.auditReport ?? null);
       setEditMode(false);
       setSaveError(null);
     } catch (err) {
@@ -167,11 +254,12 @@ export default function ChapterReader() {
     try {
       const report = await fetchAuditReport(bookId, chNum);
       setAuditReport(report);
+      setChapter((current) => (current ? { ...current, auditReport: report } : current));
       setSaveError(null);
     } catch (err) {
       console.error(
         '[chapter-reader] load audit failed:',
-        err instanceof Error ? err.message : 'unknown'
+        err instanceof Error ? err.message : 'unknown',
       );
     }
   }
@@ -181,6 +269,15 @@ export default function ChapterReader() {
     try {
       const report = await runAudit(bookId, chNum);
       setAuditReport(report);
+      setChapter((current) =>
+        current
+          ? {
+              ...current,
+              auditStatus: report.overallStatus,
+              auditReport: report,
+            }
+          : current,
+      );
       setSaveError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '审计失败，请重试';
@@ -340,6 +437,12 @@ export default function ChapterReader() {
   const pollution = getChapterPollutionState(chapter);
   const prevChapter = chNum > 1 ? { number: chNum - 1 } : null;
   const nextChapter = chapter.number < 1000 ? { number: chNum + 1 } : null;
+  const effectiveAuditReport = auditReport ?? chapter.auditReport ?? null;
+  const auditIssueCount = getAuditIssueCount(effectiveAuditReport);
+  const auditIssueItems = getAuditIssueItems(effectiveAuditReport);
+  const aiTraceDisplay = getAiTraceDisplay(chapter, effectiveAuditReport);
+  const chapterStatusLabel = getChapterStatusLabel(chapter);
+  const auditStatusSummary = getAuditStatusSummary(chapter, effectiveAuditReport);
 
   return (
     <div className="space-y-4">
@@ -370,35 +473,66 @@ export default function ChapterReader() {
         {/* Left sidebar */}
         <aside className="w-64 border-r pr-4 space-y-4 flex-shrink-0">
           <h2 className="font-semibold">第{chapter.number}章</h2>
-          <div className="text-sm text-gray-500">字数：{chapter.wordCount.toLocaleString()} 字</div>
-          <div className="text-sm text-gray-500">
-            状态：
-            {chapter.status === 'draft'
-              ? '草稿'
-              : chapter.status === 'published'
-                ? '完成'
-                : chapter.status}
+          <div className="rounded-lg border bg-card p-4 space-y-3">
+            <SidebarMetric label="字数" value={`${chapter.wordCount.toLocaleString()} 字`} />
+            <SidebarMetric label="状态" value={chapterStatusLabel} />
+            <SidebarMetric label="审计" value={auditStatusSummary} />
+            <SidebarMetric label="AI痕迹" value={aiTraceDisplay} />
+            {chapter.qualityScore !== null && (
+              <SidebarMetric label="质量分" value={String(chapter.qualityScore)} />
+            )}
+            <SidebarMetric
+              label="更新于"
+              value={new Date(chapter.updatedAt).toLocaleString('zh-CN')}
+            />
           </div>
-          {chapter.qualityScore !== null && (
-            <div className="text-sm text-gray-500">质量分：{chapter.qualityScore}</div>
+
+          {effectiveAuditReport && (
+            <div className="rounded-lg border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium">审计摘要</h3>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    effectiveAuditReport.overallStatus === 'passed'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {effectiveAuditReport.overallStatus === 'passed' ? '通过' : '需改进'}
+                </span>
+              </div>
+              <SidebarMetric
+                label="阻断/警告"
+                value={`${effectiveAuditReport?.tiers?.blocker?.failed || 0}/${effectiveAuditReport?.tiers?.warning?.failed || 0}`}
+              />
+              <SidebarMetric
+                label="建议"
+                value={`${effectiveAuditReport?.tiers?.suggestion?.failed || 0}`}
+              />
+            </div>
           )}
-          <div className="text-sm text-gray-500">
-            更新于 {new Date(chapter.updatedAt).toLocaleString('zh-CN')}
-          </div>
         </aside>
 
         {/* Right content */}
         <div className="flex-1 min-w-0">
           {/* Action toolbar */}
           {!editMode && (
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Link
+                to={`/book/${bookId}`}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="返回书籍详情"
+              >
+                <ArrowLeft size={14} />
+                返回书籍详情
+              </Link>
               <button
                 onClick={() => setEditMode(true)}
                 className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
                 title="编辑"
               >
                 <Pencil size={14} />
-                编辑
+                编辑本章
               </button>
               <button
                 onClick={() => {
@@ -410,6 +544,27 @@ export default function ChapterReader() {
               >
                 <FileSearch size={14} />
                 审计报告
+              </button>
+              <button
+                onClick={() => {
+                  setShowAudit(true);
+                  void handleRunAudit();
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="重新审计"
+              >
+                <FileSearch size={14} />
+                重新审计
+              </button>
+              <button
+                onClick={() => {
+                  void openRollbackDial();
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-sm hover:bg-accent"
+                title="回滚到此"
+              >
+                <RotateCcw size={14} />
+                回滚到此
               </button>
               <button
                 onClick={() => setFlowMode(true)}
@@ -433,6 +588,63 @@ export default function ChapterReader() {
                 <X size={14} />
               </button>
             </div>
+          )}
+
+          {(effectiveAuditReport || pollution.isPolluted) && !editMode && (
+            <section className="mb-3 rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold">章节状态概览</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {pollution.isPolluted
+                      ? '当前章节已进入污染隔离或降级接受状态。'
+                      : '当前章节已生成审计摘要，可直接复核关键问题。'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">
+                    状态: {chapterStatusLabel}
+                  </span>
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">
+                    审计: {auditStatusSummary}
+                  </span>
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">
+                    AI痕迹: {aiTraceDisplay}
+                  </span>
+                </div>
+              </div>
+
+              {auditIssueItems.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {auditIssueItems.slice(0, 3).map((item, index) => (
+                    <div
+                      key={`${item.rule}-${index}`}
+                      className="rounded-md border bg-muted/30 p-3"
+                    >
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs ${
+                            item.severity === 'blocker'
+                              ? 'bg-red-100 text-red-700'
+                              : item.severity === 'warning'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700'
+                          }`}
+                        >
+                          {item.severity === 'blocker'
+                            ? '阻断'
+                            : item.severity === 'warning'
+                              ? '警告'
+                              : '建议'}
+                        </span>
+                        <span>{item.rule}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{item.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
           {/* Edit controls */}
@@ -560,7 +772,7 @@ export default function ChapterReader() {
                   </div>
 
                   {/* Failed items */}
-                  {auditReport.tiers.warning.failed > 0 && (
+                  {auditReport?.tiers?.warning?.failed > 0 && (
                     <div className="space-y-2">
                       <h3 className="text-sm font-medium text-amber-700">警告项</h3>
                       {auditReport.tiers.warning.items.map((item, i) => (
@@ -576,7 +788,7 @@ export default function ChapterReader() {
                   )}
 
                   {/* Radar scores */}
-                  {auditReport.radarScores.length > 0 && (
+                  {auditReport?.radarScores?.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center border-t pt-6 mt-6">
                       <div>
                         <h3 className="text-sm font-medium mb-4">质量雷达图</h3>
@@ -652,7 +864,7 @@ function TierSummary({
   color,
 }: {
   label: string;
-  data: { total: number; passed: number; failed: number };
+  data?: { total: number; passed: number; failed: number } | null;
   color: string;
 }) {
   const bgClass =
@@ -663,6 +875,15 @@ function TierSummary({
         : 'bg-green-50 border-green-200';
   const textClass =
     color === 'red' ? 'text-red-700' : color === 'amber' ? 'text-amber-700' : 'text-green-700';
+
+  if (!data) {
+    return (
+      <div className={`rounded border p-3 ${bgClass}`}>
+        <p className={`text-sm font-medium ${textClass}`}>{label}</p>
+        <p className="text-2xl font-bold mt-1">0/0</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded border p-3 ${bgClass}`}>

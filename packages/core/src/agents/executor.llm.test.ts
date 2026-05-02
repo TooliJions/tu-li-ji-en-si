@@ -33,7 +33,7 @@ const LLM_API_KEY = process.env.LLM_API_KEY ?? '';
 const LLM_MODEL = process.env.LLM_MODEL ?? '';
 const PROVIDER_TYPE = (process.env.LLM_PROVIDER ?? 'openai').toLowerCase();
 
-const llmAvailable = !!(LLM_BASE_URL && LLM_API_KEY && LLM_MODEL);
+const llmAvailable = Boolean(LLM_BASE_URL && LLM_API_KEY && LLM_MODEL);
 
 function createProvider() {
   const config: LLMConfig = {
@@ -57,7 +57,7 @@ function createProvider() {
 /** 检查正文中是否包含关键实体（角色名、事件关键词） */
 function checkEntityCoverage(
   content: string,
-  entities: string[]
+  entities: string[],
 ): { covered: string[]; missed: string[] } {
   const covered: string[] = [];
   const missed: string[] = [];
@@ -74,7 +74,7 @@ function checkEntityCoverage(
 /** 检查关键事件覆盖率：提取事件中的核心名词/动词片段 */
 function checkKeyEventCoverage(
   content: string,
-  keyEvents: string[]
+  keyEvents: string[],
 ): { covered: string[]; missed: string[] } {
   const covered: string[] = [];
   const missed: string[] = [];
@@ -112,7 +112,7 @@ function extractKeyFragments(event: string): string[] {
 /** 检查情感节拍关键词出现情况 */
 function checkEmotionalBeatKeywords(
   content: string,
-  beat: string
+  beat: string,
 ): { found: string[]; missing: string[] } {
   const emotions = beat
     .split(/[→-]>?/)
@@ -154,7 +154,7 @@ function countChineseWords(text: string): number {
 /** 执行 LLM 生成并返回正文内容 */
 async function generateAndGetContent(
   executor: ChapterExecutor,
-  input: ChapterExecutionInput
+  input: ChapterExecutionInput,
 ): Promise<string> {
   const result = await executor.execute({ promptContext: { input } });
   expect(result.success).toBe(true);
@@ -170,7 +170,7 @@ async function generateAndGetContent(
 function runGenreAlignmentTests(
   getExecutor: () => ChapterExecutor,
   config: GenreTestPlan,
-  thresholds: ValidationThresholds = DEFAULT_THRESHOLDS
+  thresholds: ValidationThresholds = DEFAULT_THRESHOLDS,
 ) {
   const input = buildInput(config);
   const plan = config.plan;
@@ -184,10 +184,10 @@ function runGenreAlignmentTests(
       // eslint-disable-next-line no-console
       console.log(`[角色覆盖] 命中: ${covered.join(', ')} | 缺失: ${missed.join(', ') || '无'}`);
       expect(covered.length).toBeGreaterThanOrEqual(
-        Math.ceil(plan.characters.length * thresholds.characterCoverageMin)
+        Math.ceil(plan.characters.length * thresholds.characterCoverageMin),
       );
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -198,13 +198,13 @@ function runGenreAlignmentTests(
 
       // eslint-disable-next-line no-console
       console.log(
-        `[事件覆盖] 命中: ${covered.join(' | ')}\n          缺失: ${missed.join(' | ') || '无'}`
+        `[事件覆盖] 命中: ${covered.join(' | ')}\n          缺失: ${missed.join(' | ') || '无'}`,
       );
       expect(covered.length).toBeGreaterThanOrEqual(
-        Math.ceil(plan.keyEvents.length * thresholds.keyEventCoverageMin)
+        Math.ceil(plan.keyEvents.length * thresholds.keyEventCoverageMin),
       );
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -216,12 +216,12 @@ function runGenreAlignmentTests(
 
       // eslint-disable-next-line no-console
       console.log(
-        `[字数] 实际: ${wordCount} | 目标: ${plan.wordCountTarget} | 比率: ${(ratio * 100).toFixed(1)}%`
+        `[字数] 实际: ${wordCount} | 目标: ${plan.wordCountTarget} | 比率: ${(ratio * 100).toFixed(1)}%`,
       );
       expect(ratio).toBeGreaterThanOrEqual(thresholds.wordCountRatioMin);
       expect(ratio).toBeLessThanOrEqual(thresholds.wordCountRatioMax);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -234,7 +234,7 @@ function runGenreAlignmentTests(
       console.log(`[情感节拍] 直接命中: ${found.join(', ')} | 未直接出现: ${missing.join(', ')}`);
       expect(content.length).toBeGreaterThan(100);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -247,11 +247,11 @@ function runGenreAlignmentTests(
 
       // eslint-disable-next-line no-console
       console.log(
-        `[世界观] 关键词匹配率: ${(ratio * 100).toFixed(1)}% (${matchedKeywords.length}/${uniqueKeywords.length})`
+        `[世界观] 关键词匹配率: ${(ratio * 100).toFixed(1)}% (${matchedKeywords.length}/${uniqueKeywords.length})`,
       );
       expect(ratio).toBeGreaterThanOrEqual(thresholds.worldRuleKeywordMatchMin);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -265,7 +265,7 @@ function runGenreAlignmentTests(
       console.log(`[伏笔] 覆盖: ${covered.join(' | ')} | 总计: ${hookDescriptions.length}`);
       expect(covered.length).toBeGreaterThanOrEqual(thresholds.hookCoverageMin);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -276,11 +276,11 @@ function runGenreAlignmentTests(
 
       // eslint-disable-next-line no-console
       console.log(
-        `[文风一致性] ${config.genre}文中出现违禁词: ${foundForbidden.join(', ') || '无'}`
+        `[文风一致性] ${config.genre}文中出现违禁词: ${foundForbidden.join(', ') || '无'}`,
       );
       expect(foundForbidden.length).toBe(0);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -295,7 +295,7 @@ function runGenreAlignmentTests(
       expect(paragraphs.length).toBeGreaterThanOrEqual(thresholds.minParagraphCount);
       expect(hasDialogue).toBe(true);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 
   it.skipIf(!llmAvailable)(
@@ -321,11 +321,11 @@ function runGenreAlignmentTests(
 
       // eslint-disable-next-line no-console
       console.log(
-        `[事件顺序] 位置: ${positions.map((p) => (p === -1 ? '未找到' : p)).join(' → ')}`
+        `[事件顺序] 位置: ${positions.map((p) => (p === -1 ? '未找到' : p)).join(' → ')}`,
       );
       expect(validPositions).toEqual(sortedPositions);
     },
-    thresholds.llmTestTimeout
+    thresholds.llmTestTimeout,
   );
 }
 

@@ -32,6 +32,7 @@ import ContextPopup from '../components/context-popup';
 import EntityHighlight from '../components/entity-highlight';
 import MemoryWordcloud from '../components/memory-wordcloud';
 import LogPanel, { type LogEntry } from '../components/log-panel';
+import { WritingPageSkeleton } from '../components/page-loading-skeletons';
 import { extractFlowEntities } from '../lib/entity-context';
 
 interface Book {
@@ -135,7 +136,7 @@ function buildPlanningIntent(
   requestedIntent: string,
   requestedTitle: string,
   requestedCharacters: string,
-  requestedHooks: string
+  requestedHooks: string,
 ) {
   if (requestedIntent) {
     return requestedIntent;
@@ -249,7 +250,7 @@ export default function Writing() {
     requestedIntent,
     requestedTitle,
     requestedCharacters,
-    requestedHooks
+    requestedHooks,
   );
 
   useEffect(() => {
@@ -417,7 +418,7 @@ export default function Writing() {
   async function handleEntityEnter(
     entity: string,
     event: React.MouseEvent<HTMLElement>,
-    chapterNumber?: number
+    chapterNumber?: number,
   ) {
     if (!bookId) return;
 
@@ -610,12 +611,7 @@ export default function Writing() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <Activity className="mr-2 h-4 w-4 animate-spin" />
-        加载中…
-      </div>
-    );
+    return <WritingPageSkeleton />;
   }
 
   if (!book && !loading && bookId) {

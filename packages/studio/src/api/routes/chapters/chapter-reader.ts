@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import { PipelinePersistence, StateManager } from '@cybernovelist/core';
-import { getStudioRuntimeRootDir, hasStudioBookRuntime } from '../../core-bridge';
+import { getStudioRuntimeRootDir } from '../../core-bridge';
 
 export interface ChapterRecord {
   number: number;
@@ -72,7 +72,11 @@ export const splitSchema = z.object({
 });
 
 export const rollbackSchema = z.object({
-  toSnapshot: z.string().min(1),
+  toSnapshot: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_-]+$/, 'toSnapshot 只允许字母、数字、下划线、连字符'),
 });
 
 export function getStateManager(): StateManager {

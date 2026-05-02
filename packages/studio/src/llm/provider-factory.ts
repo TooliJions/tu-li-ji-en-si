@@ -38,7 +38,7 @@ type StudioConfigState = {
 function loadStudioConfig(): StudioConfigState | null {
   const cfgPath = process.env.CONFIG_PATH
     ? path.resolve(process.env.CONFIG_PATH)
-    : path.join(process.cwd(), 'config.local.json');
+    : path.join(__dirname, '../../config.local.json');
 
   try {
     if (!fs.existsSync(cfgPath)) {

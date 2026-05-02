@@ -6,16 +6,23 @@ import {
   readStudioBookRuntime,
   updateStudioBookRuntime,
 } from '../core-bridge';
+import { validateBookId } from '../../runtime/validation';
 
 const WORKFLOW_DIR = ['story', 'workflow'] as const;
 
 export function ensureWorkflowDocumentDir(bookId: string): string {
+  if (!validateBookId(bookId)) {
+    throw new Error('invalid bookId');
+  }
   const workflowDir = path.join(getStudioRuntimeRootDir(), bookId, ...WORKFLOW_DIR);
   fs.mkdirSync(workflowDir, { recursive: true });
   return workflowDir;
 }
 
 export function getWorkflowDocumentPath(bookId: string, fileName: string): string {
+  if (path.basename(fileName) !== fileName || fileName.includes('\0')) {
+    throw new Error('invalid fileName');
+  }
   return path.join(ensureWorkflowDocumentDir(bookId), fileName);
 }
 

@@ -1,4 +1,4 @@
-import { AIGCDetector } from '@cybernovelist/core';
+import { detectAIGCText } from '@cybernovelist/core';
 import {
   type ChapterAuditReport,
   type AuditCheck,
@@ -7,8 +7,6 @@ import {
   writeAuditReport,
   isLegacyAuditReport,
 } from './chapter-reader';
-
-const detector = new AIGCDetector();
 
 const CATEGORY_LABELS: Record<string, string> = {
   'cliche-phrase': '套话堆积',
@@ -68,7 +66,7 @@ export function buildChapterAuditReport(
     .split(/[。！？.!?]+/)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0);
-  const detection = detector.detect(normalizedContent);
+  const detection = detectAIGCText(normalizedContent);
   const highRiskCategories = detection.categories.filter(
     (category) => category.severity === 'high',
   );

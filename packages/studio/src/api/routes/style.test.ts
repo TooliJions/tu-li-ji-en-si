@@ -2,9 +2,11 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createStyleRouter } from './style';
 import { resetStudioCoreBridgeForTests, initializeStudioBookRuntime } from '../core-bridge';
+import { createBookContextMiddleware } from '../context';
 
 function createTestApp() {
   const app = new Hono();
+  app.use('/api/books/:bookId/*', createBookContextMiddleware());
   app.route('/api/books/:bookId/style', createStyleRouter());
   return app;
 }
